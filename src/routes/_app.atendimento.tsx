@@ -1,0 +1,1710 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  Search, Paperclip, Send, Smile, Mic, MoreVertical, Phone, Video,
+  Check, CheckCheck, AlertCircle, FileText, Download, Play, Tag, X,
+  UserPlus, ArrowRightLeft, CheckCircle, RotateCcw, StickyNote, History,
+  Filter, PanelRightClose, PanelRightOpen, Image as ImageIcon, FileVideo, FileAudio,
+  Wifi, WifiOff, FlaskConical,
+} from "lucide-react";
+import {
+  getContact, getChannel, getUser, getTenant,
+  channels, contacts, users,
+  formatTime, formatBytes,
+  type Conversation, type Message, type ConversationStatus, type MessageType,
+  type MessageStatus, type Channel, type Provider,
+} from "@/lib/mocks";
+import { subscribeToConversation } from "@/lib/realtime";
+import { useSession } from "@/lib/session";
+import { canViewConversation, canSeeAllConversations, inTenantScope } from "@/lib/permissions";
+import { pushAudit } from "@/lib/audit-log";
+import { sendMedia as evoSendMedia, type EvolutionMediaType } from "@/lib/evolution";
+import { apiGet, apiPost } from "@/lib/api";
+import { ensureNotificationPermission, showBrowserNotification, playNotificationSound, isTabHidden } from "@/lib/notifications";
+import { setUnread } from "@/lib/unread-store";
+
+// ───────── Transformadores API → tipos locais ─────────
+const PALETTE = ["#00a884", "#06cf9c", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#ef4444", "#14b8a6"];
+const colorFor = (seed: string) => {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+};
+
+/** Flags auxiliares vindas da API (não alteram o tipo Contact original). */
+const groupContactIds = new Set<string>();
+/** Mapeia conversationId → channel_name (instance name) recebido da API. */
+const conversationInstanceName = new Map<string, string>();
+/** Mapeia conversationId → telefone/JID a usar no envio (pode vir do contact). */
+const conversationPhone = new Map<string, string>();
+/** Debug temporário: por conversationId, último pushName/remoteJid observado. */
+const conversationDebug = new Map<string, { pushName?: string; remoteJid?: string }>();
+
+function mapApiStatus(s: unknown): ConversationStatus {
+  if (s === "waiting" || s === "pending") return "waiting";
+  if (s === "closed" || s === "finished" || s === "resolved") return "finished";
+  return "open";
+}
+function mapApiProvider(t: unknown): Provider {
+  if (t === "META") return "META";
+  if (t === "INTERNAL") return "INTERNAL";
+  return "EVOLUTION";
+}
+/** Insere contato/canal sintéticos nos mocks se ainda não existem (para getContact/getChannel). */
+function upsertContactFromApi(c: any, tenantId: string) {
+  const isGroup = c?.contact_type === "group";
+  if (isGroup && c.contact_id) groupContactIds.add(c.contact_id);
+  if (c?.id && c?.phone && !isGroup) conversationPhone.set(c.id, c.phone);
+  if (c?.id && isGroup && (c.external_jid || c.phone)) {
+    conversationPhone.set(c.id, c.external_jid || c.phone);
+  }
+  // Captura debug de nomes vindos da conversa
+  if (c?.id) {
+    const prev = conversationDebug.get(c.id) ?? {};
+    conversationDebug.set(c.id, {
+      pushName: c.push_name ?? c.pushName ?? prev.pushName,
+      remoteJid: c.external_jid ?? c.remote_jid ?? c.remoteJid ?? prev.remoteJid,
+    });
+  }
+  if (!c?.contact_id) return;
+  // Prioridade de nome — nunca substituir nome válido por telefone.
+  const phoneFmt = c.phone || c.external_jid || "";
+  const displayName = isGroup
+    ? (c.group_name || c.contact_name || c.external_jid || "Grupo")
+    : (c.contact_name || c.push_name || c.notify_name || c.pushName || phoneFmt || "Contato");
+  const existing = contacts.find((x) => x.id === c.contact_id);
+  if (existing) {
+    // Só atualiza se o atual estiver vazio ou for igual ao telefone (placeholder).
+    const placeholder = !existing.name || existing.name === existing.phone;
+    if (placeholder && displayName && displayName !== phoneFmt) {
+      existing.name = displayName;
+    }
+    return;
+  }
+  contacts.push({
+    id: c.contact_id,
+    tenantId,
+    name: displayName,
+    phone: isGroup ? "" : phoneFmt,
+    tags: [],
+    avatarColor: colorFor(c.contact_id),
+  });
+}
+
+function upsertChannelFromApi(c: any, tenantId: string) {
+  if (c?.id && c?.channel_name) conversationInstanceName.set(c.id, c.channel_name);
+  if (!c?.whatsapp_channel_id || channels.some((x) => x.id === c.whatsapp_channel_id)) return;
+  channels.push({
+    id: c.whatsapp_channel_id,
+    tenantId,
+    name: c.channel_name || "Canal",
+    phone: "",
+    provider: mapApiProvider(c.channel_type),
+    status: "connected",
+  });
+}
+function transformApiConversation(c: any, tenantId: string): Conversation {
+  return {
+    id: c.id,
+    tenantId,
+    channelId: c.whatsapp_channel_id,
+    contactId: c.contact_id,
+    status: mapApiStatus(c.status),
+    unreadCount: typeof c.unread_count === "number" ? c.unread_count : 0,
+    assignedTo: c.assigned_user_id ?? undefined,
+    lastMessageAt: c.last_message_at ?? new Date().toISOString(),
+    tags: [],
+  };
+}
+function transformApiMessage(m: any, conversationId: string): Message {
+  const mediaType = m.media_type ?? m.mediaType ?? undefined;
+  const rawType = mediaType || m.message_type || m.type || "text";
+  const type: MessageType =
+    rawType === "image" || rawType === "audio" || rawType === "video" || rawType === "document" || rawType === "internal"
+      ? rawType
+      : "text";
+
+  const fromMe = m.from_me === true;
+  const rawDir = (m.direction || "").toString().toLowerCase();
+  const direction: "in" | "out" =
+    fromMe || rawDir === "outbound" || rawDir === "out" || m.sender === "agent" ? "out" : "in";
+
+  const status: MessageStatus =
+    m.status === "read" || m.status === "delivered" || m.status === "sent" || m.status === "error"
+      ? m.status
+      : "delivered";
+
+  const text = m.message_text ?? m.text ?? m.body ?? m.content ?? m.message ?? undefined;
+  const caption = m.media_caption ?? undefined;
+  const placeholder =
+    type === "image" ? "[imagem]" :
+    type === "audio" ? "[áudio]" :
+    type === "video" ? "[vídeo]" :
+    type === "document" ? "[documento]" : undefined;
+  const finalText =
+    (text && String(text).trim().length > 0) ? text :
+    (caption && String(caption).trim().length > 0) ? caption :
+    placeholder;
+
+  const mimeType = m.media_mimetype ?? m.mime_type ?? m.mimeType ?? undefined;
+  const mediaUrl: string | undefined = m.media_url ?? m.mediaUrl ?? undefined;
+  const mediaError: string | undefined = m.media_error ?? m.mediaError ?? undefined;
+
+  const rp = m.raw_payload ?? m.rawPayload;
+
+  // Mantido apenas para compatibilidade com mensagens antigas; não é usado para visualizar mídia.
+  const rpObj = typeof rp === "object" && rp ? (rp as any) : {};
+  const dataObj = rpObj.data ?? {};
+  const keyObj = dataObj.key ?? {};
+  const mediaParams = {
+    serverUrl: rpObj.server_url ?? rpObj.serverUrl,
+    apikey: rpObj.apikey ?? rpObj.apiKey,
+    instance: rpObj.instance ?? dataObj.instance,
+    keyId: keyObj.id ?? m.external_message_id ?? m.externalMessageId,
+    remoteJid: keyObj.remoteJid,
+    fromMe: keyObj.fromMe === true,
+    mimetype: mimeType,
+  };
+
+  // Miniatura base64 (jpegThumbnail) quando presente no payload.
+  const thumbB64 =
+    dataObj?.message?.imageMessage?.jpegThumbnail ??
+    dataObj?.message?.videoMessage?.jpegThumbnail;
+  const thumbnailUrl = typeof thumbB64 === "string" && thumbB64.length > 50
+    ? `data:image/jpeg;base64,${thumbB64}`
+    : undefined;
+
+  return {
+    id: m.id ?? m.external_message_id ?? m.externalMessageId ?? `${conversationId}-${Math.random()}`,
+    conversationId,
+    direction,
+    type,
+    text: finalText,
+    mediaUrl,
+    fileName: m.media_filename ?? m.file_name ?? m.fileName ?? undefined,
+    mimeType,
+    fileSize: m.media_size ?? m.file_size ?? m.fileSize ?? undefined,
+    durationSeconds: m.media_duration ?? m.duration_seconds ?? m.durationSeconds ?? undefined,
+    status,
+    createdAt: m.created_at ?? m.createdAt ?? new Date().toISOString(),
+    authorName: m.author_name ?? m.authorName,
+    thumbnailUrl,
+    mediaError,
+    mediaParams,
+  };
+}
+
+export const Route = createFileRoute("/_app/atendimento")({
+  component: AtendimentoPage,
+  head: () => ({ meta: [{ title: "Atendimento — NexaBoot" }] }),
+});
+
+// ───────── Tipos auxiliares ─────────
+type Status = "all" | ConversationStatus;
+interface LogEntry {
+  id: string;
+  conversationId: string;
+  at: string;
+  text: string;
+  author: string;
+}
+
+const statusFilters: { value: Status; label: string }[] = [
+  { value: "all", label: "Todas" },
+  { value: "open", label: "Abertas" },
+  { value: "waiting", label: "Aguardando" },
+  { value: "finished", label: "Finalizadas" },
+];
+
+// ───────── Página ─────────
+function AtendimentoPage() {
+  const { session, user, tenant, isSuperAdmin } = useSession();
+  const actor = { id: session.userId, role: session.role, tenantId: session.tenantId };
+
+  const [convs, setConvs] = useState<Conversation[]>([]);
+  const [msgs, setMsgs] = useState<Record<string, Message[]>>({});
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  const [loadingConvs, setLoadingConvs] = useState(true);
+  const [convsError, setConvsError] = useState<string | null>(null);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [msgsError, setMsgsError] = useState<string | null>(null);
+
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<Status>("all");
+  const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "groups" | "individuals">("individuals");
+  const [search, setSearch] = useState("");
+  const [showDetails, setShowDetails] = useState(true);
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [draft, setDraft] = useState("");
+  const [noteOpen, setNoteOpen] = useState(false);
+
+  // Snapshot anterior para detectar mensagens novas no polling.
+  const prevConvsRef = useRef<Map<string, string>>(new Map());
+  const selectedIdRef = useRef<string>("");
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  // Scroll automático para o fim do chat ao chegar/enviar mensagem.
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Conversas com destaque temporário (após receber nova mensagem).
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
+
+  // Solicita permissão de notificação ao abrir a tela.
+  useEffect(() => { ensureNotificationPermission(); }, []);
+
+  // Carrega conversas via REST.
+  const reloadConversations = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoadingConvs(true);
+      setConvsError(null);
+    }
+    try {
+      const data = await apiGet("/conversations");
+      const list: any[] = Array.isArray(data?.conversations)
+        ? data.conversations
+        : Array.isArray(data)
+        ? data
+        : [];
+      list.forEach((c) => {
+        upsertContactFromApi(c, session.tenantId);
+        upsertChannelFromApi(c, session.tenantId);
+      });
+      const mapped = list
+        .filter((c) => c && c.id && c.contact_id && c.whatsapp_channel_id)
+        .map((c) => transformApiConversation(c, session.tenantId));
+
+      // Detecta novas mensagens comparando lastMessageAt.
+      const prev = prevConvsRef.current;
+      const nextMap = new Map<string, string>();
+      const newlyActive: Conversation[] = [];
+      mapped.forEach((c) => {
+        nextMap.set(c.id, c.lastMessageAt);
+        const before = prev.get(c.id);
+        if (before && c.lastMessageAt > before) newlyActive.push(c);
+      });
+      prevConvsRef.current = nextMap;
+
+      if (prev.size > 0 && newlyActive.length > 0) {
+        playNotificationSound();
+        newlyActive.forEach((c) => {
+          const ct = getContact(c.contactId);
+          const isOpen = c.id === selectedIdRef.current && !isTabHidden();
+          if (!isOpen) {
+            showBrowserNotification(`Nova mensagem · ${ct?.name ?? "Contato"}`, "Toque para abrir a conversa", { tag: `wa-${c.id}` });
+            setHighlighted((h) => new Set(h).add(c.id));
+            setTimeout(() => {
+              setHighlighted((h) => { const n = new Set(h); n.delete(c.id); return n; });
+            }, 4000);
+          }
+        });
+      }
+
+      setConvs(mapped);
+    } catch (e) {
+      if (!opts?.silent) {
+        setConvsError(e instanceof Error ? e.message : "Falha ao carregar conversas");
+        setConvs([]);
+      }
+    } finally {
+      if (!opts?.silent) setLoadingConvs(false);
+    }
+  };
+  useEffect(() => {
+    reloadConversations();
+    // Polling de conversas a cada 5s.
+    const id = setInterval(() => reloadConversations({ silent: true }), 5000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.tenantId]);
+
+  /** Carrega mensagens, mesclando por id para não duplicar nem perder otimistas. */
+  const reloadMessages = async (convId: string, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoadingMsgs(true);
+      setMsgsError(null);
+    }
+    try {
+      const data = await apiGet(`/messages?conversation_id=${encodeURIComponent(convId)}`);
+      if (!opts?.silent) console.log("mensagens retornadas", data);
+      const list: any[] = Array.isArray(data?.messages)
+        ? data.messages
+        : Array.isArray(data)
+        ? data
+        : [];
+      const incoming = list.map((m) => transformApiMessage(m, convId));
+      setMsgs((prev) => {
+        const existing = prev[convId] ?? [];
+        const incomingIds = new Set(incoming.map((m) => m.id));
+        // Mantém otimistas locais ainda não retornados pela API; remove os já
+        // confirmados (mesma direção + mesmo texto numa janela de 2 min).
+        const isLikelyConfirmed = (opt: Message) =>
+          incoming.some(
+            (m) =>
+              m.direction === opt.direction &&
+              m.type === opt.type &&
+              (m.text ?? "") === (opt.text ?? "") &&
+              Math.abs(new Date(m.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 120_000,
+          );
+        const keptOptimistic = existing.filter(
+          (m) => m.id.startsWith("m-") && !incomingIds.has(m.id) && !isLikelyConfirmed(m),
+        );
+        // Dedupe final por id (último vence).
+        const byId = new Map<string, Message>();
+        [...incoming, ...keptOptimistic].forEach((m) => byId.set(m.id, m));
+        const merged = Array.from(byId.values()).sort((a, b) =>
+          a.createdAt.localeCompare(b.createdAt),
+        );
+        return { ...prev, [convId]: merged };
+      });
+    } catch (e) {
+      if (!opts?.silent) {
+        setMsgsError(e instanceof Error ? e.message : "Falha ao carregar mensagens");
+        setMsgs((prev) => ({ ...prev, [convId]: prev[convId] ?? [] }));
+      }
+    } finally {
+      if (!opts?.silent) setLoadingMsgs(false);
+    }
+  };
+
+  // Carrega mensagens da conversa selecionada via REST + polling 3s.
+  useEffect(() => {
+    if (!selectedId) return;
+    console.log("conversation selecionada", selectedId);
+    reloadMessages(selectedId);
+    const id = setInterval(() => reloadMessages(selectedId, { silent: true }), 3000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  // Assumir atendimento via REST: POST /conversations/{id}/assume
+  const assumeSelf = async () => {
+    if (!selected) return;
+    try {
+      await apiPost(`/conversations/${encodeURIComponent(selected.id)}/assume`, {
+        user_id: actor.id,
+      });
+      patchConv(selected.id, { assignedTo: actor.id, status: "open" });
+      pushAudit({
+        tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+        targetType: "conversation", targetId: selected.id,
+        action: "conversation.assign", result: "success", reason: "assume (api)",
+      });
+      log(selected.id, `${user.name} assumiu o atendimento`);
+      toast.success("Atendimento assumido");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao assumir atendimento");
+    }
+  };
+
+  // Preparação para Realtime (stub) — apenas demonstra ciclo de vida.
+  useEffect(() => {
+    if (!selectedId) return;
+    return subscribeToConversation(selectedId, () => {});
+  }, [selectedId]);
+
+  // Apenas os canais e atendentes do tenant ativo aparecem nos filtros.
+  const tenantChannels = useMemo(
+    () => (isSuperAdmin ? channels : channels.filter((c) => c.tenantId === session.tenantId)),
+    [isSuperAdmin, session.tenantId],
+  );
+  const tenantUsers = useMemo(
+    () => (isSuperAdmin ? users : users.filter((u) => u.tenantId === session.tenantId)),
+    [isSuperAdmin, session.tenantId],
+  );
+
+  const filtered = useMemo(() => {
+    return convs
+      // 1) Isolamento multitenant + regras por perfil (centralizado em permissions.ts).
+      .filter((c) => {
+        const t = getTenant(c.tenantId);
+        if (!t) return false;
+        return canViewConversation(actor, c, t);
+      })
+      // 2) ADMIN_GERAL respeita o tenant selecionado no switcher (a menos que seja o próprio).
+      .filter((c) => (isSuperAdmin ? c.tenantId === session.tenantId : true))
+      .filter((c) => statusFilter === "all" || c.status === statusFilter)
+      .filter((c) => channelFilter === "all" || c.channelId === channelFilter)
+      .filter((c) => {
+        if (typeFilter === "all") return true;
+        const isGroup = groupContactIds.has(c.contactId);
+        return typeFilter === "groups" ? isGroup : !isGroup;
+      })
+      .filter((c) =>
+        assigneeFilter === "all"
+          ? true
+          : assigneeFilter === "unassigned"
+          ? !c.assignedTo
+          : c.assignedTo === assigneeFilter,
+      )
+      .filter((c) => {
+        // Mostrar apenas números brasileiros (DDI 55).
+        const ct = getContact(c.contactId);
+        const phone = (ct?.phone || "").replace(/\D/g, "");
+        if (!phone) return false;
+        return phone.startsWith("55");
+      })
+      .filter((c) => {
+        if (!search) return true;
+        const ct = getContact(c.contactId);
+        if (!ct) return false;
+        const s = search.toLowerCase();
+        if (ct.name.toLowerCase().includes(s) || ct.phone.includes(s)) return true;
+        return (msgs[c.id] ?? []).some((m) => m.text?.toLowerCase().includes(s));
+      })
+      .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
+
+  }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search, actor, isSuperAdmin, session.tenantId]);
+
+  // Garante que a conversa selecionada seja sempre uma que o usuário pode ver.
+  useEffect(() => {
+    if (filtered.length === 0) return;
+    if (!filtered.some((c) => c.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId]);
+
+  // Zera unread da conversa selecionada (local + servidor, best-effort).
+  useEffect(() => {
+    if (!selectedId) return;
+    setConvs((prev) => prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c)));
+    apiPost(`/conversations/${encodeURIComponent(selectedId)}/read`, {}).catch(() => {
+      // endpoint pode não existir em todos os backends; ignorar silenciosamente
+    });
+  }, [selectedId]);
+
+
+  // Atualiza badge global (sidebar) com total de não-lidas do tenant ativo.
+  useEffect(() => {
+    const total = filtered.reduce((acc, c) => acc + (c.id === selectedId ? 0 : c.unreadCount || 0), 0);
+    setUnread("atendimento", total);
+  }, [filtered, selectedId]);
+
+  const selected = convs.find((c) => c.id === selectedId) ?? filtered[0];
+  const messages = selected ? msgs[selected.id] ?? [] : [];
+  const convLogs = useMemo(
+    () => logs.filter((l) => l.conversationId === selected?.id).slice().reverse(),
+    [logs, selected],
+  );
+
+  // Auto-scroll para o fim ao chegar/enviar mensagem na conversa aberta.
+  useEffect(() => {
+    if (!selected) return;
+    const el = messagesScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [selected?.id, messages.length]);
+
+  // ───────── Mutadores ─────────
+  function log(conversationId: string, text: string) {
+    setLogs((prev) => [
+      ...prev,
+      { id: `lg-${Date.now()}-${Math.random()}`, conversationId, at: new Date().toISOString(), text, author: user.name },
+    ]);
+  }
+  function patchConv(id: string, patch: Partial<Conversation>) {
+    setConvs((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }
+  function appendMsg(conversationId: string, m: Message) {
+    setMsgs((prev) => ({ ...prev, [conversationId]: [...(prev[conversationId] ?? []), m] }));
+    patchConv(conversationId, { lastMessageAt: m.createdAt, unreadCount: 0 });
+  }
+  function patchMsg(conversationId: string, id: string, patch: Partial<Message>) {
+    setMsgs((prev) => ({
+      ...prev,
+      [conversationId]: (prev[conversationId] ?? []).map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    }));
+  }
+
+  /** Garante que canal/tenant da conversa selecionada são válidos antes de qualquer envio. */
+  function guardSend(conv: Conversation): { ok: boolean; channel?: Channel } {
+    if (!inTenantScope(actor, conv.tenantId)) {
+      pushAudit({
+        tenantId: conv.tenantId, actorId: actor.id, actorName: user.name,
+        targetType: "conversation", targetId: conv.id, action: "access.denied", result: "denied",
+        reason: "cross-tenant send blocked",
+      });
+      toast.error("Envio bloqueado: conversa pertence a outra empresa.");
+      return { ok: false };
+    }
+    const ch = channels.find((c) => c.id === conv.channelId);
+    if (!ch || ch.tenantId !== conv.tenantId) {
+      toast.error("Canal inválido para esta conversa.");
+      return { ok: false };
+    }
+    return { ok: true, channel: ch };
+  }
+
+  async function sendText(text: string) {
+    if (!selected || !text.trim()) return;
+    const guard = guardSend(selected);
+    if (!guard.ok || !guard.channel) return;
+    const channel = guard.channel;
+    const contact = getContact(selected.contactId);
+
+    const msgId = `m-${Date.now()}`;
+    const optimistic: Message = {
+      id: msgId,
+      conversationId: selected.id,
+      direction: "out",
+      type: "text",
+      text,
+      status: "sent",
+      createdAt: new Date().toISOString(),
+      authorName: user.name,
+    };
+    appendMsg(selected.id, optimistic);
+
+    if (!selected.assignedTo) {
+      patchConv(selected.id, { assignedTo: actor.id, status: "open" });
+      log(selected.id, `${user.name} assumiu a conversa ao responder`);
+    }
+    setDraft("");
+
+    // Envio via REST: POST /messages/send/evolution
+    const instance = conversationInstanceName.get(selected.id) || channel.name || "Principal";
+    const number = conversationPhone.get(selected.id) || contact.phone;
+    const payload = { instance, number, text };
+    console.log("send evolution payload", payload);
+    try {
+      const result = await apiPost("/messages/send/evolution", payload);
+      console.log("send evolution result", result);
+      patchMsg(selected.id, msgId, { status: "delivered" });
+      pushAudit({
+        tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+        targetType: "message", targetId: msgId, targetName: contact.name,
+        action: "message.sent", result: "success", reason: "evolution rest",
+      });
+      // Recarrega mensagens e conversas para refletir o estado oficial da API.
+      reloadMessages(selected.id, { silent: true });
+      reloadConversations({ silent: true });
+    } catch (e) {
+      patchMsg(selected.id, msgId, { status: "error" });
+      toast.error("Falha ao enviar mensagem. Verifique a conexão e tente novamente.");
+      pushAudit({
+        tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+        targetType: "message", targetId: msgId, action: "message.send_error", result: "error",
+        reason: e instanceof Error ? e.message : "send error",
+      });
+    }
+  }
+
+  async function sendAttachment(type: Exclude<MessageType, "internal" | "text">) {
+    if (!selected) return;
+    if (type === "image") {
+      // Abre seletor real de arquivo, mas avisa que upload ainda não está disponível.
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = () => {
+        toast.info("Envio de mídia será habilitado em breve");
+      };
+      input.click();
+      return;
+    }
+    const guard = guardSend(selected);
+    if (!guard.ok || !guard.channel) return;
+    const channel = guard.channel;
+    const contact = getContact(selected.contactId);
+
+    const mocks: Record<"video" | "audio" | "document", Partial<Message>> = {
+      video: { type: "video", mediaUrl: "https://www.w3schools.com/html/mov_bbb.mp4", mimeType: "video/mp4" },
+      audio: { type: "audio", mediaUrl: "https://www.w3schools.com/html/horse.ogg", durationSeconds: 12, mimeType: "audio/ogg" },
+      document: { type: "document", mediaUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", fileName: "Documento.pdf", mimeType: "application/pdf", fileSize: 124_500 },
+    };
+    const base = mocks[type as "video" | "audio" | "document"] as Message;
+    const msgId = `m-${Date.now()}`;
+    appendMsg(selected.id, {
+      ...base,
+      id: msgId,
+      conversationId: selected.id,
+      direction: "out",
+      status: "sent",
+      createdAt: new Date().toISOString(),
+      authorName: user.name,
+    } as Message);
+    log(selected.id, `Enviou ${type === "video" ? "vídeo" : type === "audio" ? "áudio" : "documento"}`);
+
+    if (channel.provider === "EVOLUTION") {
+      const cfg = channel.evolution;
+      if (!cfg || !base.mediaUrl) {
+        patchMsg(selected.id, msgId, { status: "error" });
+        toast.error("Canal Evolution sem configuração ou mídia inválida.");
+        pushAudit({
+          tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+          targetType: "message", targetId: msgId, action: "message.send_error", result: "error",
+          reason: "missing evolution config or media",
+        });
+        return;
+      }
+      const result = await evoSendMedia(cfg, contact.phone, base.mediaUrl, type as EvolutionMediaType, base.fileName);
+      if (result.ok) {
+        patchMsg(selected.id, msgId, { status: "delivered" });
+        pushAudit({
+          tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+          targetType: "message", targetId: msgId, targetName: contact.name,
+          action: "message.sent", result: "success",
+          reason: `${type} via evolution${result.providerMessageId?.startsWith("mock-") ? " (mock)" : ""}`,
+        });
+      } else {
+        patchMsg(selected.id, msgId, { status: "error" });
+        toast.error("Falha ao enviar mídia via Evolution.");
+        pushAudit({
+          tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+          targetType: "message", targetId: msgId, action: "message.send_error", result: "error",
+          reason: result.error,
+        });
+      }
+    } else {
+      patchMsg(selected.id, msgId, { status: "delivered" });
+    }
+  }
+  function addInternalNote(text: string) {
+    if (!selected || !text.trim()) return;
+    appendMsg(selected.id, {
+      id: `m-${Date.now()}`,
+      conversationId: selected.id,
+      direction: "out",
+      type: "internal",
+      text,
+      status: "read",
+      createdAt: new Date().toISOString(),
+      authorName: user.name,
+      isInternalNote: true,
+    });
+    log(selected.id, `Adicionou nota interna: "${text}"`);
+  }
+  function assignTo(userId: string) {
+    if (!selected) return;
+    const u = getUser(userId);
+    // Validação de tenant — não permitir atribuir a um usuário de outra empresa.
+    if (u && u.tenantId !== selected.tenantId) {
+      pushAudit({
+        tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+        targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
+        action: "conversation.assign", result: "denied", reason: "cross-tenant assignment",
+      });
+      return;
+    }
+    patchConv(selected.id, { assignedTo: userId, status: selected.status === "waiting" ? "open" : selected.status });
+    pushAudit({
+      tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+      targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
+      action: "conversation.assign", result: "success", reason: u?.name,
+    });
+    log(selected.id, `Conversa atribuída a ${u?.name ?? "—"}`);
+  }
+  function transferTo(userId: string) {
+    if (!selected) return;
+    const u = getUser(userId);
+    if (u && u.tenantId !== selected.tenantId) {
+      pushAudit({
+        tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+        targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
+        action: "conversation.transfer", result: "denied", reason: "cross-tenant transfer",
+      });
+      return;
+    }
+    const from = getUser(selected.assignedTo)?.name ?? "não atribuída";
+    patchConv(selected.id, { assignedTo: userId });
+    pushAudit({
+      tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+      targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
+      action: "conversation.transfer", result: "success", reason: `${from} → ${u?.name ?? "—"}`,
+    });
+    log(selected.id, `Transferida de ${from} para ${u?.name ?? "—"}`);
+  }
+  function finish() {
+    if (!selected) return;
+    patchConv(selected.id, { status: "finished" });
+    log(selected.id, "Atendimento finalizado");
+  }
+  function reopen() {
+    if (!selected) return;
+    patchConv(selected.id, { status: "open" });
+    log(selected.id, "Atendimento reaberto");
+  }
+  function addTag(tag: string) {
+    if (!selected || !tag.trim()) return;
+    if (selected.tags.includes(tag)) return;
+    patchConv(selected.id, { tags: [...selected.tags, tag] });
+    log(selected.id, `Tag adicionada: ${tag}`);
+  }
+  function removeTag(tag: string) {
+    if (!selected) return;
+    patchConv(selected.id, { tags: selected.tags.filter((t) => t !== tag) });
+    log(selected.id, `Tag removida: ${tag}`);
+  }
+
+  return (
+    <div className="flex h-full w-full">
+      {/* Coluna esquerda — lista de conversas */}
+      <section
+        className={`${mobileView === "chat" ? "hidden" : "flex"} w-full shrink-0 flex-col border-r border-border bg-card lg:flex lg:w-80`}
+      >
+        <header className="border-b border-border p-3 pl-12 lg:pl-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar nome, telefone ou mensagem"
+              className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 ring-ring"
+            />
+          </div>
+
+          <div className="mt-3 flex gap-1">
+            {statusFilters.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  statusFilter === f.value
+                    ? "bg-whatsapp text-whatsapp-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <FilterSelect
+              icon={Filter}
+              value={channelFilter}
+              onChange={setChannelFilter}
+              options={[{ v: "all", l: "Todos canais" }, ...tenantChannels.map((c) => ({ v: c.id, l: c.name }))]}
+            />
+            <FilterSelect
+              icon={UserPlus}
+              value={assigneeFilter}
+              onChange={setAssigneeFilter}
+              options={[
+                { v: "all", l: "Todos atendentes" },
+                { v: "unassigned", l: "Não atribuídas" },
+                ...tenantUsers.map((u) => ({ v: u.id, l: u.name })),
+              ]}
+            />
+          </div>
+          <div className="mt-2">
+            <FilterSelect
+              icon={Filter}
+              value={typeFilter}
+              onChange={(v) => setTypeFilter(v as "all" | "groups" | "individuals")}
+              options={[
+                { v: "all", l: "Todos os tipos" },
+                { v: "groups", l: "Apenas grupos" },
+                { v: "individuals", l: "Apenas individuais" },
+              ]}
+            />
+          </div>
+          {!canSeeAllConversations(actor) && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {tenant.sharedAttendance
+                ? "Atendimento compartilhado: você vê a fila completa do tenant."
+                : "Você vê apenas as conversas atribuídas a você + fila sem dono."}
+            </p>
+          )}
+        </header>
+
+        <ul className="flex-1 overflow-y-auto">
+          {loadingConvs && (
+            <li className="p-6 text-center text-sm text-muted-foreground">Carregando conversas…</li>
+          )}
+          {!loadingConvs && convsError && (
+            <li className="p-6 text-center text-sm">
+              <div className="mb-2 text-destructive">Não foi possível carregar conversas.</div>
+              <div className="mb-3 text-xs text-muted-foreground">{convsError}</div>
+              <button
+                onClick={() => reloadConversations()}
+                className="rounded-md bg-muted px-3 py-1.5 text-xs hover:bg-accent"
+              >
+                Tentar novamente
+              </button>
+            </li>
+          )}
+          {!loadingConvs && !convsError && filtered.map((c) => (
+            <ConversationRow
+              key={c.id}
+              conv={c}
+              msgs={msgs[c.id] ?? []}
+              active={c.id === selectedId}
+              highlight={highlighted.has(c.id)}
+              onClick={() => { setSelectedId(c.id); setMobileView("chat"); }}
+            />
+          ))}
+          {!loadingConvs && !convsError && filtered.length === 0 && (
+            <li className="p-6 text-center text-sm text-muted-foreground">Nenhuma conversa encontrada.</li>
+          )}
+        </ul>
+      </section>
+
+      {/* Coluna central — chat */}
+      <section
+        className={`${mobileView === "list" ? "hidden" : "flex"} flex-1 flex-col lg:flex`}
+        style={{ backgroundColor: "var(--chat-bg)" }}
+      >
+        {selected ? (
+          <>
+            <ChatHeader
+              conversation={selected}
+              showDetails={showDetails}
+              onToggleDetails={() => setShowDetails((v) => !v)}
+              onBack={() => setMobileView("list")}
+            />
+            <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
+              <div className="mx-auto max-w-3xl space-y-2">
+                {loadingMsgs && (
+                  <div className="py-10 text-center text-xs text-muted-foreground">Carregando mensagens…</div>
+                )}
+                {!loadingMsgs && msgsError && (
+                  <div className="py-10 text-center text-xs">
+                    <div className="mb-1 text-destructive">Não foi possível carregar as mensagens.</div>
+                    <div className="text-muted-foreground">{msgsError}</div>
+                  </div>
+                )}
+                {!loadingMsgs && !msgsError && messages.map((m) => <Bubble key={m.id} m={m} />)}
+                {!loadingMsgs && !msgsError && messages.length === 0 && (
+                  <div className="py-10 text-center text-xs text-muted-foreground">Sem mensagens.</div>
+                )}
+              </div>
+            </div>
+
+            {noteOpen && (
+              <NoteComposer
+                onClose={() => setNoteOpen(false)}
+                onSave={(t) => { addInternalNote(t); setNoteOpen(false); }}
+              />
+            )}
+
+            <ChatComposer
+              value={draft}
+              onChange={setDraft}
+              onSend={() => sendText(draft)}
+              onAttach={sendAttachment}
+              onInternalNote={() => setNoteOpen(true)}
+              disabled={selected.status === "finished"}
+              onReopen={reopen}
+            />
+          </>
+        ) : (
+          <div className="grid h-full place-items-center text-sm text-muted-foreground">
+            {loadingConvs ? "Carregando…" : "Selecione uma conversa"}
+          </div>
+        )}
+      </section>
+
+      {/* Coluna direita — só desktop */}
+      {showDetails && selected && (
+        <div className="hidden md:flex">
+          <DetailsPanel
+            conversation={selected}
+            logs={convLogs}
+            onAssume={assumeSelf}
+            onAssign={assignTo}
+            onTransfer={transferTo}
+            onFinish={finish}
+            onReopen={reopen}
+            onAddTag={addTag}
+            onRemoveTag={removeTag}
+            onAddNote={() => setNoteOpen(true)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────── Lista lateral ─────────
+function ConversationRow({
+  conv, msgs, active, highlight, onClick,
+}: { conv: Conversation; msgs: Message[]; active: boolean; highlight?: boolean; onClick: () => void }) {
+  const ct = getContact(conv.contactId);
+  const ch = getChannel(conv.channelId);
+  const last = msgs[msgs.length - 1];
+  const preview =
+    last?.type === "text" || last?.type === "internal" ? last?.text :
+    last?.type === "image" ? "📷 Imagem" :
+    last?.type === "audio" ? "🎤 Áudio" :
+    last?.type === "video" ? "🎬 Vídeo" :
+    last?.type === "document" ? `📄 ${last.fileName ?? "Documento"}` : "";
+
+  return (
+    <li>
+      <button
+        onClick={onClick}
+        className={`flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors ${
+          active ? "bg-accent/60" : highlight ? "bg-whatsapp/10 animate-pulse" : "hover:bg-muted/60"
+        }`}
+      >
+        <div
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+          style={{ backgroundColor: ct.avatarColor }}
+        >
+          {(ct.name || ct.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("")}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-sm font-medium">{ct.name || ct.phone}</span>
+
+            <span className="shrink-0 text-[11px] text-muted-foreground">{formatTime(conv.lastMessageAt)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs text-muted-foreground">{preview}</span>
+            {conv.unreadCount > 0 && (
+              <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-whatsapp px-1.5 text-[11px] font-semibold text-whatsapp-foreground">
+                {conv.unreadCount}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{ch.name}</span>
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              ch.provider === "META" ? "bg-primary/10 text-primary" : "bg-whatsapp/10 text-whatsapp"
+            }`}>{ch.provider}</span>
+            {groupContactIds.has(conv.contactId) && (
+              <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">Grupo</span>
+            )}
+            <StatusChip status={conv.status} />
+          </div>
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function StatusChip({ status }: { status: ConversationStatus }) {
+  if (status === "waiting") return <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">Aguardando</span>;
+  if (status === "finished") return <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Finalizada</span>;
+  return <span className="rounded bg-whatsapp/10 px-1.5 py-0.5 text-[10px] font-medium text-whatsapp">Aberta</span>;
+}
+
+function FilterSelect({
+  icon: Icon, value, onChange, options,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value: string;
+  onChange: (v: string) => void;
+  options: { v: string; l: string }[];
+}) {
+  return (
+    <div className="relative">
+      <Icon className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full appearance-none rounded-md border border-input bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-2 ring-ring"
+      >
+        {options.map((o) => (<option key={o.v} value={o.v}>{o.l}</option>))}
+      </select>
+    </div>
+  );
+}
+
+// ───────── Header do chat ─────────
+function ChatHeader({
+  conversation, showDetails, onToggleDetails, onBack,
+}: { conversation: Conversation; showDetails: boolean; onToggleDetails: () => void; onBack?: () => void }) {
+  const ct = getContact(conversation.contactId);
+  const ch = getChannel(conversation.channelId);
+  const assignee = getUser(conversation.assignedTo);
+  const isGroup = groupContactIds.has(conversation.contactId);
+  return (
+    <header className="flex items-center justify-between border-b border-border bg-card px-4 py-2.5">
+      <div className="flex min-w-0 items-center gap-3">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted lg:hidden"
+            title="Voltar"
+            aria-label="Voltar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+        )}
+        <div
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+          style={{ backgroundColor: ct.avatarColor }}
+        >
+          {ct.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-medium">{ct.name || ct.phone}</span>
+            {isGroup && (
+              <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">Grupo</span>
+            )}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {!isGroup && ct.phone ? `${ct.phone} · ` : ""}{ch.name} · {assignee ? `Atendente: ${assignee.name}` : "Não atribuída"}
+          </div>
+          {(() => {
+            const dbg = conversationDebug.get(conversation.id);
+            if (!dbg || (!dbg.pushName && !dbg.remoteJid)) return null;
+            return (
+              <div className="truncate text-[10px] text-amber-600">
+                debug · pushName: {dbg.pushName ?? "—"} · remoteJid: {dbg.remoteJid ?? "—"}
+              </div>
+            );
+          })()}
+        </div>
+
+      </div>
+      <div className="flex items-center gap-1 text-muted-foreground sm:gap-2">
+        <ChannelModeBadge channel={ch} />
+        <button className="hidden rounded-md p-2 hover:bg-muted sm:inline-flex" title="Ligar"><Phone className="h-4 w-4" /></button>
+        <button className="hidden rounded-md p-2 hover:bg-muted sm:inline-flex" title="Vídeo"><Video className="h-4 w-4" /></button>
+        <button onClick={onToggleDetails} className="hidden rounded-md p-2 hover:bg-muted lg:inline-flex" title={showDetails ? "Ocultar painel" : "Exibir painel"}>
+          {showDetails ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+        </button>
+        <button className="rounded-md p-2 hover:bg-muted" title="Mais"><MoreVertical className="h-4 w-4" /></button>
+      </div>
+    </header>
+  );
+}
+
+function ChannelModeBadge({ channel }: { channel: Channel }) {
+  const isEvo = channel.provider === "EVOLUTION";
+  const cfg = channel.evolution;
+  const isMock = isEvo && (!cfg?.apiKey || !cfg?.apiUrl || cfg.apiUrl.includes(".local"));
+  const connected = channel.status === "connected";
+  if (isEvo && isMock) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-600" title="Evolution sem credenciais — operando em modo MOCK">
+        <FlaskConical className="h-3 w-3" /> MOCK
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+        connected ? "bg-whatsapp/10 text-whatsapp" : "bg-destructive/10 text-destructive"
+      }`}
+      title={`${channel.provider} ${connected ? "conectado" : "desconectado"}`}
+    >
+      {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+      {channel.provider}
+    </span>
+  );
+}
+
+// ───────── Balão ─────────
+function Bubble({ m }: { m: Message }) {
+  try {
+    return <BubbleInner m={m} />;
+  } catch (err) {
+    console.error("[BUBBLE_RENDER_ERROR]", err);
+    return (
+      <div className="mx-auto max-w-xl rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-center text-xs text-destructive">
+        Mensagem não pôde ser exibida.
+      </div>
+    );
+  }
+}
+
+function BubbleInner({ m }: { m: Message }) {
+  if (m.type === "internal" || m.isInternalNote) {
+    return (
+      <div className="mx-auto max-w-xl rounded-md border border-internal/30 bg-internal/10 px-3 py-2 text-center text-xs text-internal">
+        <StickyNote className="mr-1 inline h-3.5 w-3.5" /> Nota interna · {m.authorName}: {m.text}
+      </div>
+    );
+  }
+  const isMedia = m.type === "image" || m.type === "audio" || m.type === "video" || m.type === "document";
+  // Estratégia definitiva: media_url já vem salvo pelo webhook (storage público).
+  // Não tentamos mais resolver via proxy/base64 sob demanda.
+  const resolvedUrl: string | undefined = m.mediaUrl;
+  const loadingMedia = false;
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isMedia) return;
+    console.log("[MESSAGE_MEDIA_RENDER]", {
+      id: m.id,
+      media_type: m.type,
+      mime_type: m.mimeType,
+      has_media_url: !!resolvedUrl,
+      media_url_start: resolvedUrl?.slice(0, 60),
+    });
+  }, [m.id, isMedia, resolvedUrl, m.type, m.mimeType]);
+
+  const out = m.direction === "out";
+  const isImagePlaceholder = m.type === "image" && (m.text === "[imagem]" || !m.text);
+  const captionText = isImagePlaceholder ? undefined : m.text;
+
+  const viewUrl = resolvedUrl;
+  const downloadUrl = resolvedUrl;
+
+  const openInNewTab = (url?: string, mode: "open" | "download" = "open") => {
+    if (!url) return;
+    if (typeof window === "undefined") return;
+    console.log(mode === "download" ? "[MEDIA_CLICK_DOWNLOAD]" : "[MEDIA_CLICK_OPEN]", {
+      messageId: m.id,
+      type: m.type,
+    });
+    try {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      console.error("[MEDIA_CLICK_ERROR]", err);
+    }
+  };
+
+  const onPreviewClick = () => {
+    if (resolvedUrl) setPreviewOpen(true);
+    else openInNewTab(viewUrl, "open");
+  };
+
+  return (
+    <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[78%] rounded-lg px-3 py-2 text-sm shadow-sm ${out ? "rounded-tr-none" : "rounded-tl-none"}`}
+        style={{ backgroundColor: out ? "var(--bubble-out)" : "var(--bubble-in)" }}
+      >
+        {isMedia && loadingMedia && !resolvedUrl && (
+          <div className="mb-1 rounded-md bg-black/5 px-3 py-2 text-[11px] text-muted-foreground">Carregando mídia…</div>
+        )}
+        {m.type === "image" && (
+          resolvedUrl ? (
+            <>
+              <img
+                src={resolvedUrl}
+                alt={m.fileName || captionText || "imagem"}
+                onClick={() => setPreviewOpen(true)}
+                className="mb-1 w-full max-w-full cursor-zoom-in rounded-md object-cover sm:max-w-[280px]"
+              />
+              {previewOpen && (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+                  onClick={() => setPreviewOpen(false)}
+                >
+                  <img
+                    src={resolvedUrl}
+                    alt={m.fileName || captionText || "imagem"}
+                    className="max-h-[90vh] max-w-[90vw] rounded-md object-contain"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <button
+                    onClick={() => setPreviewOpen(false)}
+                    className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+                    aria-label="Fechar"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              )}
+              {downloadUrl && (
+                <div className="mt-1">
+                  <button
+                    type="button"
+                    onClick={() => openInNewTab(downloadUrl, "download")}
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:underline"
+                  >
+                    <Download className="h-3 w-3" /> Baixar
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (!loadingMedia && (
+            <div className="mb-1 flex w-full max-w-full flex-col gap-2 rounded-md border border-black/10 bg-black/5 p-2 sm:max-w-[280px]">
+              {m.thumbnailUrl ? (
+                <img
+                  src={m.thumbnailUrl}
+                  alt={captionText || "miniatura"}
+                  onClick={onPreviewClick}
+                  className="cursor-pointer rounded-md object-cover"
+                />
+              ) : (
+                <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-muted-foreground">
+                  <ImageIcon className="h-5 w-5" />
+                  <span>Imagem</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                {viewUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => openInNewTab(viewUrl, "open")}
+                    className="flex-1 rounded-md bg-whatsapp px-2 py-1 text-center text-[11px] font-medium text-white hover:bg-whatsapp/90"
+                  >
+                    Visualizar
+                  </button>
+                ) : (
+                  <TechnicalMediaError error={m.mediaError} />
+                )}
+                {downloadUrl && (
+                  <button
+                    type="button"
+                    onClick={() => openInNewTab(downloadUrl, "download")}
+                    className="rounded-md border border-black/10 px-2 py-1 text-[11px] hover:bg-black/5"
+                  >
+                    <Download className="inline h-3 w-3" /> Baixar
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+        {m.type === "video" && (
+          resolvedUrl ? (
+            <video src={resolvedUrl} controls className="mb-1 max-h-72 rounded-md" />
+          ) : (!loadingMedia && (
+            <MediaActionCard kind="video" mime={m.mimeType} caption={m.fileName} viewUrl={viewUrl} downloadUrl={downloadUrl} mediaError={m.mediaError} />
+          ))
+        )}
+        {m.type === "audio" && (
+          resolvedUrl ? (
+            <audio src={resolvedUrl} controls className="mb-1 w-64 max-w-full" />
+          ) : (!loadingMedia && (
+            <MediaActionCard kind="audio" mime={m.mimeType} viewUrl={viewUrl} downloadUrl={downloadUrl} mediaError={m.mediaError} />
+          ))
+        )}
+        {m.type === "document" && (
+          <div className="mb-1 flex items-center gap-2 rounded-md bg-black/5 px-2 py-2">
+            <FileText className="h-6 w-6 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">{m.fileName || "Documento"}</div>
+              <div className="text-[11px] text-muted-foreground">{formatBytes(m.fileSize)} · {m.mimeType}</div>
+            </div>
+            {resolvedUrl ? (
+              <button
+                type="button"
+                onClick={() => openInNewTab(resolvedUrl, "download")}
+                className="rounded-md p-1.5 hover:bg-black/10"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            ) : (
+              <TechnicalMediaError error={m.mediaError} compact />
+            )}
+          </div>
+        )}
+        {m.type === "image" ? (
+          captionText && <div className="whitespace-pre-wrap">{captionText}</div>
+        ) : (
+          m.text && <div className="whitespace-pre-wrap">{m.text}</div>
+        )}
+        <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+          <span>{formatTime(m.createdAt)}</span>
+          {out && <StatusIcon status={m.status} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TechnicalMediaError({ error, compact = false }: { error?: string; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={compact ? "min-w-0" : "flex-1"}>
+      <div className="rounded-md bg-destructive/10 px-2 py-1 text-center text-[11px] text-destructive">
+        Mídia não disponível para visualização
+      </div>
+      {error && (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="mt-1 text-[11px] font-medium text-destructive hover:underline"
+          >
+            Ver erro técnico
+          </button>
+          {open && (
+            <pre className="mt-1 max-h-48 max-w-[280px] overflow-auto whitespace-pre-wrap rounded-md border border-destructive/20 bg-background p-2 text-[10px] text-foreground">
+              {error}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function MediaActionCard({
+  kind, mime, caption, viewUrl, downloadUrl, mediaError,
+}: {
+  kind: "image" | "audio" | "video" | "document";
+  mime?: string; caption?: string; viewUrl?: string; downloadUrl?: string; mediaError?: string;
+}) {
+  const meta = {
+    image:    { Icon: ImageIcon, label: "Imagem" },
+    audio:    { Icon: FileAudio, label: "Áudio" },
+    video:    { Icon: FileVideo, label: "Vídeo" },
+    document: { Icon: FileText,  label: "Documento" },
+  }[kind];
+  const Icon = meta.Icon;
+  return (
+    <div className="mb-1 flex w-full max-w-full flex-col gap-2 rounded-md border border-black/10 bg-black/5 p-2 sm:max-w-[280px]">
+      <div className="flex items-center gap-2 px-1 py-1">
+        <Icon className="h-5 w-5 text-whatsapp" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{meta.label}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{mime || "—"}</div>
+          {caption && <div className="truncate text-[11px] text-muted-foreground">{caption}</div>}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {viewUrl ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              console.log("[MEDIA_CLICK_OPEN]", { kind });
+              try { window.open(viewUrl, "_blank", "noopener,noreferrer"); }
+              catch (err) { console.error("[MEDIA_CLICK_ERROR]", err); }
+            }}
+            className="flex-1 rounded-md bg-whatsapp px-2 py-1 text-center text-[11px] font-medium text-white hover:bg-whatsapp/90">
+            {kind === "audio" ? "Ouvir áudio" : "Visualizar"}
+          </button>
+        ) : (
+          <TechnicalMediaError error={mediaError} />
+        )}
+        {downloadUrl && (
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              console.log("[MEDIA_CLICK_DOWNLOAD]", { kind });
+              try { window.open(downloadUrl, "_blank", "noopener,noreferrer"); }
+              catch (err) { console.error("[MEDIA_CLICK_ERROR]", err); }
+            }}
+            className="rounded-md border border-black/10 px-2 py-1 text-[11px] hover:bg-black/5">
+            <Download className="inline h-3 w-3" /> {kind === "audio" ? "Baixar áudio" : "Baixar"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MediaPlaceholder({
+  kind, mime, caption,
+}: { kind: "image" | "audio" | "video" | "document"; mime?: string; caption?: string }) {
+  const meta = {
+    image:    { Icon: ImageIcon, label: "Imagem recebida" },
+    audio:    { Icon: FileAudio, label: "Áudio recebido" },
+    video:    { Icon: FileVideo, label: "Vídeo recebido" },
+    document: { Icon: FileText,  label: "Documento recebido" },
+  }[kind];
+  const Icon = meta.Icon;
+  return (
+    <div className="mb-1 flex items-center gap-3 rounded-md border border-black/10 bg-black/5 px-3 py-2">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-whatsapp/15 text-whatsapp">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{meta.label}</div>
+        <div className="truncate text-[11px] text-muted-foreground">{mime || "tipo desconhecido"}</div>
+        {caption && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{caption}</div>}
+      </div>
+    </div>
+  );
+}
+
+function StatusIcon({ status }: { status: Message["status"] }) {
+  if (status === "error") return <AlertCircle className="h-3 w-3 text-destructive" />;
+  if (status === "read") return <CheckCheck className="h-3 w-3 text-primary" />;
+  if (status === "delivered") return <CheckCheck className="h-3 w-3" />;
+  return <Check className="h-3 w-3" />;
+}
+
+// ───────── Composer ─────────
+function ChatComposer({
+  value, onChange, onSend, onAttach, onInternalNote, disabled, onReopen,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSend: () => void;
+  onAttach: (type: "image" | "video" | "audio" | "document") => void;
+  onInternalNote: () => void;
+  disabled?: boolean;
+  onReopen: () => void;
+}) {
+  const [attachOpen, setAttachOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAttachOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  if (disabled) {
+    return (
+      <div className="border-t border-border bg-card px-4 py-3">
+        <div className="rounded-md bg-muted px-3 py-2 text-center text-xs text-muted-foreground">
+          Atendimento finalizado ·{" "}
+          <button onClick={onReopen} className="font-medium text-primary hover:underline">Reabrir</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-border bg-card px-4 py-3">
+      <div className="flex items-center gap-2">
+        <button onClick={onInternalNote} className="rounded-md p-2 text-internal hover:bg-internal/10" title="Nota interna">
+          <StickyNote className="h-5 w-5" />
+        </button>
+        <button className="rounded-md p-2 text-muted-foreground hover:bg-muted" title="Emojis"><Smile className="h-5 w-5" /></button>
+
+        <div ref={ref} className="relative">
+          <button
+            onClick={() => setAttachOpen((v) => !v)}
+            className="rounded-md p-2 text-muted-foreground hover:bg-muted"
+            title="Anexar"
+          >
+            <Paperclip className="h-5 w-5" />
+          </button>
+          {attachOpen && (
+            <div className="absolute bottom-12 left-0 z-10 w-44 rounded-md border border-border bg-popover p-1 text-sm shadow-md">
+              {[
+                { t: "image" as const, l: "Imagem", I: ImageIcon },
+                { t: "video" as const, l: "Vídeo", I: FileVideo },
+                { t: "audio" as const, l: "Áudio", I: FileAudio },
+                { t: "document" as const, l: "Documento", I: FileText },
+              ].map(({ t, l, I }) => (
+                <button
+                  key={t}
+                  onClick={() => { onAttach(t); setAttachOpen(false); }}
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-accent"
+                >
+                  <I className="h-4 w-4 text-muted-foreground" /> {l}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
+          placeholder="Digite uma mensagem"
+          className="flex-1 rounded-full border border-input bg-background px-4 py-2 text-sm outline-none focus:ring-2 ring-ring"
+        />
+        {value.trim() ? (
+          <button
+            onClick={onSend}
+            className="grid h-10 w-10 place-items-center rounded-full bg-whatsapp text-whatsapp-foreground hover:opacity-90"
+            title="Enviar"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        ) : (
+          <button className="grid h-10 w-10 place-items-center rounded-full bg-muted text-muted-foreground hover:bg-accent" title="Gravar áudio">
+            <Mic className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NoteComposer({ onClose, onSave }: { onClose: () => void; onSave: (text: string) => void }) {
+  const [text, setText] = useState("");
+  return (
+    <div className="border-t border-internal/30 bg-internal/5 px-4 py-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-internal">
+        <StickyNote className="h-4 w-4" /> Nota interna (não enviada ao cliente)
+        <button onClick={onClose} className="ml-auto rounded p-1 hover:bg-internal/10"><X className="h-3.5 w-3.5" /></button>
+      </div>
+      <div className="flex items-end gap-2">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={2}
+          placeholder="Escreva uma observação visível só para a equipe…"
+          className="flex-1 resize-none rounded-md border border-internal/30 bg-background px-3 py-2 text-sm outline-none focus:ring-2 ring-internal"
+        />
+        <button
+          onClick={() => onSave(text)}
+          disabled={!text.trim()}
+          className="rounded-md bg-internal px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          Salvar nota
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ───────── Painel direito ─────────
+function DetailsPanel({
+  conversation, logs,
+  onAssume, onAssign, onTransfer, onFinish, onReopen, onAddTag, onRemoveTag, onAddNote,
+}: {
+  conversation: Conversation;
+  logs: LogEntry[];
+  onAssume: () => void;
+  onAssign: (userId: string) => void;
+  onTransfer: (userId: string) => void;
+  onFinish: () => void;
+  onReopen: () => void;
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+  onAddNote: () => void;
+}) {
+  const ct = getContact(conversation.contactId);
+  const ch = getChannel(conversation.channelId);
+  const assignee = getUser(conversation.assignedTo);
+  const [newTag, setNewTag] = useState("");
+  const [picker, setPicker] = useState<"assign" | "transfer" | null>(null);
+
+  return (
+    <aside className="hidden w-80 shrink-0 flex-col border-l border-border bg-card lg:flex">
+      <div className="flex flex-col items-center border-b border-border p-6">
+        <div
+          className="grid h-20 w-20 place-items-center rounded-full text-2xl font-semibold text-white"
+          style={{ backgroundColor: ct.avatarColor }}
+        >
+          {ct.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+        </div>
+        <div className="mt-3 text-base font-medium">{ct.name}</div>
+        <div className="text-xs text-muted-foreground">{ct.phone}</div>
+        {ct.email && <div className="text-xs text-muted-foreground">{ct.email}</div>}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <Section title="Ações">
+          {picker ? (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">
+                {picker === "assign" ? "Atribuir para:" : "Transferir para:"}
+              </div>
+              <div className="grid grid-cols-1 gap-1">
+                {users.filter((u) => u.tenantId === conversation.tenantId && (u.role === "ATENDENTE" || u.role === "ATENDENTE_GERAL" || u.role === "SUPERVISOR" || u.role === "ADMIN_EMPRESA")).map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      picker === "assign" ? onAssign(u.id) : onTransfer(u.id);
+                      setPicker(null);
+                    }}
+                    className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left text-sm hover:bg-muted"
+                  >
+                    <div
+                      className="grid h-6 w-6 place-items-center rounded-full text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: u.avatarColor }}
+                    >
+                      {u.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+                    </div>
+                    <span className="flex-1 truncate">{u.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{u.role}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setPicker(null)} className="w-full rounded-md px-2 py-1 text-xs hover:bg-muted">Cancelar</button>
+            </div>
+          ) : (
+            <>
+              <ActionButton icon={CheckCircle} label="Assumir atendimento" tone="primary" onClick={onAssume} />
+              <ActionButton icon={UserPlus} label="Atribuir" onClick={() => setPicker("assign")} />
+              <ActionButton icon={ArrowRightLeft} label="Transferir" onClick={() => setPicker("transfer")} />
+              <ActionButton icon={StickyNote} label="Nota interna" onClick={onAddNote} />
+              {conversation.status === "finished"
+                ? <ActionButton icon={RotateCcw} label="Reabrir conversa" tone="primary" onClick={onReopen} />
+                : <ActionButton icon={CheckCircle} label="Finalizar conversa" onClick={onFinish} />}
+            </>
+          )}
+        </Section>
+
+        <Section title="Canal">
+          <Row label="Nome" value={ch.name} />
+          <Row label="Número" value={ch.phone} />
+          <Row label="Provedor" value={ch.provider} />
+        </Section>
+
+        <Section title="Atendimento">
+          <Row label="Status" value={conversation.status} />
+          <Row label="Atribuída a" value={assignee?.name ?? "—"} />
+        </Section>
+
+        <Section title="Tags da conversa">
+          <div className="flex flex-wrap gap-1.5">
+            {conversation.tags.length === 0 && <span className="text-xs text-muted-foreground">Nenhuma tag.</span>}
+            {conversation.tags.map((t) => (
+              <span key={t} className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
+                {t}
+                <button onClick={() => onRemoveTag(t)} className="rounded-full p-0.5 hover:bg-black/10" title="Remover">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            <input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { onAddTag(newTag); setNewTag(""); } }}
+              placeholder="Nova tag"
+              className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 ring-ring"
+            />
+            <button
+              onClick={() => { onAddTag(newTag); setNewTag(""); }}
+              className="rounded-md bg-muted px-2 py-1 text-xs hover:bg-accent"
+            >
+              <Tag className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </Section>
+
+        <Section title="Histórico de atendimento">
+          {logs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Ainda sem registros.</p>
+          ) : (
+            <ul className="space-y-2">
+              {logs.map((l) => (
+                <li key={l.id} className="flex gap-2 rounded-md bg-muted/40 p-2 text-xs">
+                  <History className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate">{l.text}</div>
+                    <div className="text-[10px] text-muted-foreground">{l.author} · {formatTime(l.at)}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
+    </aside>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-b border-border p-4">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  );
+}
+
+function ActionButton({
+  icon: Icon, label, tone, onClick,
+}: { icon: React.ComponentType<{ className?: string }>; label: string; tone?: "primary"; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-muted ${
+        tone === "primary" ? "bg-whatsapp text-whatsapp-foreground border-transparent hover:opacity-90" : ""
+      }`}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}

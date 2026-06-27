@@ -1,0 +1,171 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * NexaBoot — paleta inspirada no WhatsApp Web (light).
+ * Verde teal #008069, balão de envio #d9fdd3, fundos cinza #f0f2f5.
+ * Todos os valores em oklch.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-whatsapp: var(--whatsapp);
+  --color-whatsapp-foreground: var(--whatsapp-foreground);
+  --color-bubble-out: var(--bubble-out);
+  --color-bubble-in: var(--bubble-in);
+  --color-chat-bg: var(--chat-bg);
+  --color-internal: var(--internal);
+  --color-internal-foreground: var(--internal-foreground);
+  --color-automation: var(--automation);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  /* Base cinza WhatsApp */
+  --background: oklch(0.96 0.005 240);             /* #f0f2f5 */
+  --foreground: oklch(0.25 0.02 240);              /* #111b21 */
+
+  --card: oklch(1 0 0);                            /* #ffffff */
+  --card-foreground: oklch(0.25 0.02 240);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.25 0.02 240);
+
+  /* Verde WhatsApp teal #008069 */
+  --primary: oklch(0.55 0.105 175);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.94 0.005 240);
+  --secondary-foreground: oklch(0.25 0.02 240);
+
+  --muted: oklch(0.94 0.005 240);
+  --muted-foreground: oklch(0.5 0.015 240);        /* #667781 */
+
+  --accent: oklch(0.92 0.02 175);
+  --accent-foreground: oklch(0.3 0.07 175);
+
+  --destructive: oklch(0.6 0.22 27);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.9 0.005 240);                  /* #e9edef */
+  --input: oklch(0.9 0.005 240);
+  --ring: oklch(0.55 0.105 175);
+
+  --chart-1: oklch(0.55 0.105 175);
+  --chart-2: oklch(0.7 0.15 145);
+  --chart-3: oklch(0.65 0.18 50);
+  --chart-4: oklch(0.6 0.2 280);
+  --chart-5: oklch(0.65 0.2 15);
+
+  /* Sidebar verde escuro (header do WhatsApp Web) */
+  --sidebar: oklch(0.99 0.002 240);
+  --sidebar-foreground: oklch(0.25 0.02 240);
+  --sidebar-primary: oklch(0.55 0.105 175);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.005 240);
+  --sidebar-accent-foreground: oklch(0.25 0.02 240);
+  --sidebar-border: oklch(0.9 0.005 240);
+  --sidebar-ring: oklch(0.55 0.105 175);
+
+  /* Tokens WhatsApp específicos */
+  --whatsapp: oklch(0.55 0.105 175);               /* #008069 */
+  --whatsapp-foreground: oklch(0.99 0 0);
+  --bubble-out: oklch(0.95 0.06 145);              /* #d9fdd3 */
+  --bubble-in: oklch(1 0 0);                       /* #ffffff */
+  --chat-bg: oklch(0.93 0.012 90);                 /* #efeae2 */
+  --internal: oklch(0.55 0.16 260);                /* roxo p/ chat interno */
+  --internal-foreground: oklch(0.99 0 0);
+  --automation: oklch(0.65 0.18 50);               /* laranja p/ N8N */
+}
+
+.dark {
+  --background: oklch(0.18 0.015 240);
+  --foreground: oklch(0.96 0.005 240);
+  --card: oklch(0.22 0.015 240);
+  --card-foreground: oklch(0.96 0.005 240);
+  --popover: oklch(0.22 0.015 240);
+  --popover-foreground: oklch(0.96 0.005 240);
+  --primary: oklch(0.7 0.12 165);
+  --primary-foreground: oklch(0.15 0.02 240);
+  --secondary: oklch(0.26 0.015 240);
+  --secondary-foreground: oklch(0.96 0.005 240);
+  --muted: oklch(0.26 0.015 240);
+  --muted-foreground: oklch(0.65 0.015 240);
+  --accent: oklch(0.3 0.04 175);
+  --accent-foreground: oklch(0.96 0.005 240);
+  --destructive: oklch(0.65 0.2 22);
+  --destructive-foreground: oklch(0.96 0.005 240);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.7 0.12 165);
+  --sidebar: oklch(0.22 0.015 240);
+  --sidebar-foreground: oklch(0.96 0.005 240);
+  --sidebar-primary: oklch(0.7 0.12 165);
+  --sidebar-primary-foreground: oklch(0.15 0.02 240);
+  --sidebar-accent: oklch(0.26 0.015 240);
+  --sidebar-accent-foreground: oklch(0.96 0.005 240);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.7 0.12 165);
+  --whatsapp: oklch(0.7 0.12 165);
+  --whatsapp-foreground: oklch(0.15 0.02 240);
+  --bubble-out: oklch(0.4 0.06 165);
+  --bubble-in: oklch(0.26 0.015 240);
+  --chat-bg: oklch(0.16 0.012 240);
+  --internal: oklch(0.7 0.16 270);
+  --internal-foreground: oklch(0.15 0.02 240);
+  --automation: oklch(0.72 0.16 55);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}

@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Public read whatsapp-media" ON storage.objects;
