@@ -2,7 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { sql, ensureSchema } from "@/lib/pg.server";
-import { getSessionUserId, setSessionCookie } from "@/lib/session.server";
+import {
+  getSessionUserId,
+  buildSessionSetCookie,
+  describeSessionCookie,
+  hasSessionSecret,
+} from "@/lib/session.server";
 
 const Body = z.object({
   email: z.string().email().max(255),
@@ -138,7 +143,21 @@ export const Route = createFileRoute("/api/auth/register")({
           }
           console.log("[REGISTER_INSERT_OK]", { id: u.id, email: u.email, tenant_id: u.tenant_id });
 
-          if (isBootstrap) setSessionCookie(u.id);
+          // No bootstrap (primeiro usuário) já criamos a sessão, igual ao login:
+          // Set-Cookie EXPLÍCITO no header da Response (não depende do framework).
+          let setCookieHeader: string | null = null;
+          if (isBootstrap) {
+            console.log("[REGISTER_SESSION_ENV]", {
+              hasSessionSecret: hasSessionSecret(),
+              nodeEnv: process.env.NODE_ENV,
+            });
+            setCookieHeader = buildSessionSetCookie(u.id);
+            console.log("[REGISTER_SET_COOKIE]", {
+              userId: u.id,
+              setCookieReturned: true,
+              cookieAttrs: describeSessionCookie(), // name, httpOnly, sameSite, secure, path, maxAge, nodeEnv
+            });
+          }
 
           const [dbInfo] = await s`
             SELECT current_database() AS database,
@@ -147,17 +166,28 @@ export const Route = createFileRoute("/api/auth/register")({
           `;
           const [{ c: usersCount }] = await s`SELECT COUNT(*)::int AS c FROM public.users`;
 
-          return Response.json({
-            success: true,
-            user: u,
+          console.log("[REGISTER_SUCCESS]", {
+            userId: u.id,
+            email: u.email,
+            tenant_id: u.tenant_id,
             bootstrap: isBootstrap,
-            db: {
-              database: dbInfo?.database ?? null,
-              user: dbInfo?.user ?? null,
-              schema: dbInfo?.schema ?? null,
-              usersCount,
-            },
+            sessionCreated: isBootstrap,
           });
+
+          return Response.json(
+            {
+              success: true,
+              user: u,
+              bootstrap: isBootstrap,
+              db: {
+                database: dbInfo?.database ?? null,
+                user: dbInfo?.user ?? null,
+                schema: dbInfo?.schema ?? null,
+                usersCount,
+              },
+            },
+            setCookieHeader ? { headers: { "Set-Cookie": setCookieHeader } } : undefined,
+          );
         } catch (e) {
           const err = e as { message?: string; code?: string; detail?: string };
           console.error("[REGISTER_INSERT_FAIL]", {

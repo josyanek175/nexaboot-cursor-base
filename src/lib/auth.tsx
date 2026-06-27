@@ -105,9 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
         });
 
+        const data = (await res.json().catch(() => ({}))) as {
+          user?: DbUser;
+          error?: string;
+          reason?: string;
+        };
+
         if (!res.ok) {
-          const next = attempts + 1;
-          setAttempts(next);
+          const code = data?.error ?? "unknown_error";
+          // Erros de infraestrutura não devem contar como tentativa nem bloquear.
+          const isInfra = code === "db_connection_error" || code === "session_not_created";
+
           pushAudit({
             tenantId: null,
             actorId: "anonymous",
@@ -116,8 +124,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             targetType: "auth",
             targetId: email,
             result: "denied",
-            reason: `Login inválido (${next}/${MAX_ATTEMPTS})`,
+            reason: `Login falhou: ${code}${data?.reason ? ` (${data.reason})` : ""}`,
           });
+
+          // Mensagens diferenciadas para diagnóstico.
+          const DIAG_MESSAGES: Record<string, string> = {
+            user_not_found: "Usuário não encontrado.",
+            invalid_password: "Senha inválida.",
+            user_inactive: "Usuário inativo. Procure o administrador.",
+            tenant_invalid: "Tenant inválido para este usuário.",
+            db_connection_error: "Erro de conexão com o banco de dados.",
+            session_not_created: "Falha ao criar a sessão. Verifique SESSION_SECRET.",
+            invalid_input: "Dados de login inválidos.",
+          };
+          const message = DIAG_MESSAGES[code] ?? "E-mail ou senha inválidos.";
+
+          if (isInfra) {
+            return { ok: false, reason: "invalid", message };
+          }
+
+          const next = attempts + 1;
+          setAttempts(next);
           if (next >= MAX_ATTEMPTS) {
             const until = Date.now() + LOCK_SECONDS * 1000;
             setLockedUntil(until);
@@ -128,14 +155,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               waitSeconds: LOCK_SECONDS,
             };
           }
+
           return {
             ok: false,
-            reason: "invalid",
-            message: "E-mail ou senha inválidos.",
+            reason: code === "user_inactive" ? "blocked" : "invalid",
+            message,
           };
         }
 
-        const data = (await res.json()) as { user: DbUser };
+        if (!data.user) {
+          return {
+            ok: false,
+            reason: "invalid",
+            message: "Resposta de login inválida do servidor.",
+          };
+        }
         const u = toUser(data.user);
         setUser(u);
         setAttempts(0);

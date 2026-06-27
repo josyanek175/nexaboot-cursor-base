@@ -1,13 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureSchema } from "@/lib/pg.server";
 
+/** Decompõe a DATABASE_URL para comparação, sem expor a senha. */
+function describeDbUrl(raw: string | undefined) {
+  if (!raw) return { present: false as const };
+  try {
+    const u = new URL(raw);
+    return {
+      present: true as const,
+      protocol: u.protocol.replace(":", ""),
+      user: u.username || null,
+      host: u.hostname,
+      port: u.port || null,
+      database: u.pathname.replace(/^\//, "") || null,
+      masked: `${u.protocol}//${u.username ? `${u.username}:***@` : ""}${u.host}${u.pathname}`,
+    };
+  } catch {
+    return { present: true as const, error: "invalid_url_format" as const };
+  }
+}
+
 export const Route = createFileRoute("/api/debug/db")({
   server: {
     handlers: {
       GET: async () => {
         const hasDatabaseUrl = !!process.env.DATABASE_URL;
+        const databaseUrl = describeDbUrl(process.env.DATABASE_URL);
         if (!hasDatabaseUrl) {
-          return Response.json({ hasDatabaseUrl: false }, { status: 500 });
+          return Response.json({ hasDatabaseUrl: false, databaseUrl }, { status: 500 });
         }
         try {
           await ensureSchema();
@@ -45,6 +65,7 @@ export const Route = createFileRoute("/api/debug/db")({
           const sp = await s`SHOW search_path`;
           return Response.json({
             hasDatabaseUrl: true,
+            databaseUrl,
             connection: conn[0],
             tables,
             userCols,
@@ -54,7 +75,7 @@ export const Route = createFileRoute("/api/debug/db")({
           });
         } catch (e: any) {
           return Response.json(
-            { hasDatabaseUrl: true, error: "db_error", message: e?.message ?? String(e) },
+            { hasDatabaseUrl: true, databaseUrl, error: "db_error", message: e?.message ?? String(e) },
             { status: 500 },
           );
         }

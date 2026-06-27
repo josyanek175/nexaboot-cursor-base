@@ -1,0 +1,29 @@
+# Dependências e artefatos — reinstalados/gerados dentro do build.
+node_modules
+.output
+dist
+dist-ssr
+
+# Caches de ferramentas
+.nitro
+.tanstack
+.wrangler
+.vinxi
+
+# Git e editores
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Segredos — NUNCA vão para a imagem
+.env
+.env.*
+.dev.vars
