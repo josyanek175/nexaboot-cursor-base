@@ -33,6 +33,28 @@ export async function apiPost(path: string, body?: any) {
   return response.json();
 }
 
+export async function apiPut(path: string, body?: any) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body || {}),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.error ? ` (${data.error})` : "";
+    } catch {
+      // resposta sem corpo JSON
+    }
+    throw new Error(`Erro API: ${response.status}${detail}`);
+  }
+  return response.json();
+}
+
 export async function apiDelete(path: string) {
   const response = await fetch(`${API_URL}${path}`, {
     method: "DELETE",

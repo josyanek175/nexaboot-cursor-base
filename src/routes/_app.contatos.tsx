@@ -1,19 +1,37 @@
-// Página de Contatos com CRUD básico + importação em massa via CSV/XLSX.
-// Bibliotecas: xlsx (SheetJS) — lê .csv (vírgula/ponto-e-vírgula) e .xlsx.
-// Regras: duplicidade por telefone normalizado dentro do tenant atual.
+// Página de Contatos — dados 100% reais (PostgreSQL via /api/contacts).
+// Os contatos recebidos pelo webhook da Evolution aparecem aqui automaticamente.
+// CRUD manual (criar/editar/excluir) e importação CSV/XLSX persistem na API.
+// Regra de duplicidade: telefone normalizado dentro da empresa (company_id).
 
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Contact2, Plus, Upload, Search, X, FileSpreadsheet, AlertTriangle, CheckCircle2, Loader2, Trash2, Pencil } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Contact2, Plus, Upload, Search, X, FileSpreadsheet, AlertTriangle, CheckCircle2, Loader2, Ban, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { contacts as seed, type Contact, type ContactStatus } from "@/lib/mocks";
 import { useSession } from "@/lib/session";
-import { pushAudit } from "@/lib/audit-log";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
 
 export const Route = createFileRoute("/_app/contatos")({
   component: ContatosPage,
 });
+
+// ----------------------------------------------------------------------------
+// Tipos locais (espelham as colunas reais de public.contacts)
+// ----------------------------------------------------------------------------
+type ContactStatus = "ativo" | "inativo" | "lead";
+
+interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  reference?: string;
+  status?: ContactStatus;
+  tags: string[];
+  avatarColor: string;
+  contactType?: string;
+  createdAt?: string;
+}
 
 // ----------------------------------------------------------------------------
 // Helpers
@@ -71,6 +89,23 @@ function colorFor(seedStr: string) {
   return PALETTE[h % PALETTE.length];
 }
 
+/** Mapeia a linha vinda da API (snake_case) para o tipo local. */
+function mapApiContact(r: any): Contact {
+  const phone = r.phone ?? "";
+  return {
+    id: r.id,
+    name: r.name ?? "",
+    phone,
+    email: r.email ?? undefined,
+    reference: r.reference ?? undefined,
+    status: (r.status as ContactStatus) ?? undefined,
+    tags: Array.isArray(r.tags) ? r.tags : [],
+    avatarColor: r.avatar_color ?? colorFor(String(phone || r.id)),
+    contactType: r.contact_type ?? undefined,
+    createdAt: r.created_at ?? undefined,
+  };
+}
+
 /** Lê arquivo CSV/XLSX e retorna linhas como objeto. */
 async function readSpreadsheet(file: File): Promise<Record<string, unknown>[]> {
   const buf = await file.arrayBuffer();
@@ -100,30 +135,48 @@ async function readSpreadsheet(file: File): Promise<Record<string, unknown>[]> {
 // ----------------------------------------------------------------------------
 
 function ContatosPage() {
-  const { session, user, isSuperAdmin } = useSession();
-  const [items, setItems] = useState<Contact[]>(seed);
+  const { session } = useSession();
+  const [items, setItems] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Tenant ativo: ADMIN_GERAL pode ver tudo conforme tenant selecionado no switcher.
-  const tenantId = session.tenantId;
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet("/contacts");
+      const list: any[] = Array.isArray(data?.contacts) ? data.contacts : [];
+      setItems(list.map(mapApiContact));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha ao carregar contatos");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  // Busca por nome, telefone (dígitos) e e-mail — instantânea sobre a lista real.
   const visible = useMemo(() => {
-    const base = isSuperAdmin ? items : items.filter((c) => c.tenantId === user.tenantId);
-    if (!search.trim()) return base;
+    if (!search.trim()) return items;
     const q = search.trim().toLowerCase();
-    return base.filter(
+    const qDigits = q.replace(/\D+/g, "");
+    return items.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
-        c.phone.includes(q.replace(/\D+/g, "")) ||
+        (qDigits.length > 0 && c.phone.includes(qDigits)) ||
         (c.email ?? "").toLowerCase().includes(q),
     );
-  }, [items, isSuperAdmin, user.tenantId, search]);
+  }, [items, search]);
 
   function openNew() {
     setEditing({
-      id: `ct-${Date.now()}`,
-      tenantId,
+      id: "",
       name: "",
       phone: "",
       tags: [],
@@ -132,67 +185,100 @@ function ContatosPage() {
     });
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editing) return;
     const phone = normalizePhone(editing.phone);
     if (!editing.name.trim()) return toast.error("Informe o nome");
     if (!isValidPhone(phone)) return toast.error("Telefone inválido");
-    const exists = items.some((c) => c.id === editing.id);
-    const dup = items.some(
-      (c) => c.tenantId === editing.tenantId && c.phone === phone && c.id !== editing.id,
-    );
-    if (dup) return toast.error("Já existe um contato com este telefone nesta empresa");
-    const next = { ...editing, phone };
-    setItems((prev) => (exists ? prev.map((c) => (c.id === next.id ? next : c)) : [...prev, next]));
-    pushAudit({
-      tenantId: editing.tenantId,
-      actorId: user.id,
-      actorName: user.name,
-      targetType: "contact",
-      targetId: editing.id,
-      targetName: editing.name,
-      action: exists ? "contact.update" : "contact.create",
-      result: "success",
-    });
-    toast.success(exists ? "Contato atualizado" : "Contato criado");
-    setEditing(null);
+
+    const payload = {
+      name: editing.name.trim(),
+      phone,
+      email: editing.email?.trim() || null,
+      reference: editing.reference?.trim() || null,
+      status: editing.status ?? "ativo",
+      tags: editing.tags,
+      avatar_color: editing.avatarColor,
+    };
+
+    setSaving(true);
+    try {
+      if (editing.id) {
+        await apiPut(`/contacts/${encodeURIComponent(editing.id)}`, payload);
+        toast.success("Contato atualizado");
+      } else {
+        await apiPost("/contacts", payload);
+        toast.success("Contato criado");
+      }
+      setEditing(null);
+      await reload();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Falha ao salvar";
+      toast.error(
+        msg.includes("phone_already_exists")
+          ? "Já existe um contato com este telefone nesta empresa"
+          : `Falha ao salvar contato${msg ? `: ${msg}` : ""}`,
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function removeContact(c: Contact) {
-    if (!confirm(`Excluir contato "${c.name}"?`)) return;
-    setItems((prev) => prev.filter((x) => x.id !== c.id));
-    pushAudit({
-      tenantId: c.tenantId,
-      actorId: user.id,
-      actorName: user.name,
-      targetType: "contact",
-      targetId: c.id,
-      targetName: c.name,
-      action: "contact.delete",
-      result: "success",
-    });
-    toast.success("Contato excluído");
+  // Regra de segurança NexaBoot: não há exclusão física. "Inativar" apenas
+  // marca status = 'inativo'. O contato e todo o histórico são preservados.
+  async function inactivateContact(c: Contact) {
+    if (c.status === "inativo") {
+      toast.message("Este contato já está inativo.");
+      return;
+    }
+    if (!confirm("Este contato será inativado. O histórico de atendimento será preservado.")) return;
+    try {
+      await apiPut(`/contacts/${encodeURIComponent(c.id)}`, { status: "inativo" });
+      toast.success("Contato inativado");
+      await reload();
+    } catch (e) {
+      toast.error(`Falha ao inativar: ${e instanceof Error ? e.message : "erro"}`);
+    }
   }
 
-  function applyImport(created: Contact[], updatedIds: Set<string>, fileName: string, totals: ImportTotals) {
-    setItems((prev) => {
-      const map = new Map(prev.map((c) => [c.id, c]));
-      for (const c of created) map.set(c.id, c);
-      return Array.from(map.values());
-    });
-    pushAudit({
-      tenantId,
-      actorId: user.id,
-      actorName: user.name,
-      targetType: "contact.import",
-      targetId: `import-${Date.now()}`,
-      targetName: fileName,
-      action: "contact.import",
-      result: "success",
-      reason: `arquivo=${fileName} total=${totals.total} novos=${totals.created} atualizados=${updatedIds.size} duplicados=${totals.duplicates} inválidos=${totals.invalid}`,
-    });
+  /** Persiste a importação na API (cria novos, atualiza existentes) e recarrega. */
+  async function applyImport(rows: ImportRow[], strategy: "ignore" | "update", fileName: string, totals: ImportTotals) {
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+    const seenPhones = new Set<string>();
+
+    for (const r of rows) {
+      if (r.rowStatus === "inválido") continue;
+      if (seenPhones.has(r.phone)) continue; // dedup dentro do próprio arquivo
+      seenPhones.add(r.phone);
+
+      const payload = {
+        name: r.name,
+        phone: r.phone,
+        email: r.email ?? null,
+        reference: r.reference ?? null,
+        status: r.status ?? "ativo",
+        tags: r.tags,
+      };
+
+      try {
+        if (r.rowStatus === "duplicado" && r.existingId) {
+          if (strategy === "ignore") continue;
+          await apiPut(`/contacts/${encodeURIComponent(r.existingId)}`, payload);
+          updated++;
+        } else {
+          await apiPost("/contacts", payload);
+          created++;
+        }
+      } catch {
+        failed++;
+      }
+    }
+
+    await reload();
     toast.success(
-      `Importação concluída: ${totals.created} novos, ${updatedIds.size} atualizados, ${totals.duplicates} duplicados, ${totals.invalid} inválidos`,
+      `Importação concluída: ${created} novos, ${updated} atualizados, ${totals.duplicates} duplicados, ${totals.invalid} inválidos${failed ? `, ${failed} com erro` : ""}`,
     );
   }
 
@@ -234,6 +320,23 @@ function ContatosPage() {
       </header>
 
       <main className="flex-1 overflow-auto p-6">
+        {loading ? (
+          <div className="grid place-items-center py-20 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="mx-auto max-w-md rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
+            <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-destructive" />
+            <p className="text-sm text-destructive">Não foi possível carregar os contatos.</p>
+            <p className="mt-1 text-xs text-muted-foreground">{error}</p>
+            <button
+              onClick={() => void reload()}
+              className="mt-3 rounded-md bg-muted px-3 py-1.5 text-xs hover:bg-accent"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
@@ -256,9 +359,9 @@ function ContatosPage() {
                         className="grid h-8 w-8 place-items-center rounded-full text-xs font-semibold text-white"
                         style={{ backgroundColor: c.avatarColor }}
                       >
-                        {c.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+                        {(c.name || c.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
                       </div>
-                      <div className="font-medium">{c.name}</div>
+                      <div className="font-medium">{c.name || c.phone}</div>
                     </div>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">{c.phone}</td>
@@ -287,11 +390,12 @@ function ContatosPage() {
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => removeContact(c)}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        title="Excluir"
+                        onClick={() => inactivateContact(c)}
+                        disabled={c.status === "inativo"}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 disabled:opacity-40 disabled:hover:bg-transparent"
+                        title={c.status === "inativo" ? "Contato já inativo" : "Inativar"}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Ban className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -307,16 +411,17 @@ function ContatosPage() {
             </tbody>
           </table>
         </div>
+        )}
       </main>
 
       {importOpen && (
         <ImportModal
-          tenantId={tenantId}
+          tenantLabel={session.tenantId}
           existing={items}
           onClose={() => setImportOpen(false)}
-          onConfirm={(created, updatedIds, fileName, totals) => {
-            applyImport(created, updatedIds, fileName, totals);
+          onConfirm={async (rows, strategy, fileName, totals) => {
             setImportOpen(false);
+            await applyImport(rows, strategy, fileName, totals);
           }}
         />
       )}
@@ -324,6 +429,7 @@ function ContatosPage() {
       {editing && (
         <EditModal
           value={editing}
+          saving={saving}
           onChange={setEditing}
           onSave={saveEdit}
           onClose={() => setEditing(null)}
@@ -348,9 +454,10 @@ function StatusBadge({ status }: { status?: ContactStatus }) {
 // ----------------------------------------------------------------------------
 
 function EditModal({
-  value, onChange, onSave, onClose,
+  value, saving, onChange, onSave, onClose,
 }: {
   value: Contact;
+  saving: boolean;
   onChange: (c: Contact) => void;
   onSave: () => void;
   onClose: () => void;
@@ -359,7 +466,7 @@ function EditModal({
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onClose}>
       <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
-          <h3 className="text-base font-semibold">Contato</h3>
+          <h3 className="text-base font-semibold">{value.id ? "Editar contato" : "Novo contato"}</h3>
           <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-accent">
             <X className="h-4 w-4" />
           </button>
@@ -398,7 +505,13 @@ function EditModal({
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent">Cancelar</button>
-          <button onClick={onSave} className="rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90">Salvar</button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar
+          </button>
         </div>
         <style>{`.input{width:100%;border:1px solid hsl(var(--input));background:hsl(var(--background));border-radius:.375rem;padding:.5rem .75rem;font-size:.875rem;outline:none}.input:focus{box-shadow:0 0 0 2px hsl(var(--ring))}`}</style>
       </div>
@@ -444,12 +557,12 @@ interface ImportTotals {
 }
 
 function ImportModal({
-  tenantId, existing, onClose, onConfirm,
+  tenantLabel, existing, onClose, onConfirm,
 }: {
-  tenantId: string;
+  tenantLabel: string;
   existing: Contact[];
   onClose: () => void;
-  onConfirm: (created: Contact[], updatedIds: Set<string>, fileName: string, totals: ImportTotals) => void;
+  onConfirm: (rows: ImportRow[], strategy: "ignore" | "update", fileName: string, totals: ImportTotals) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
@@ -459,9 +572,9 @@ function ImportModal({
 
   const existingByPhone = useMemo(() => {
     const m = new Map<string, Contact>();
-    for (const c of existing) if (c.tenantId === tenantId) m.set(c.phone, c);
+    for (const c of existing) m.set(c.phone, c);
     return m;
-  }, [existing, tenantId]);
+  }, [existing]);
 
   async function onPick(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -518,46 +631,7 @@ function ImportModal({
 
   function confirm() {
     if (!rows.length) return;
-    // Processa em lotes para não travar a UI em arquivos grandes.
-    const created: Contact[] = [];
-    const updatedIds = new Set<string>();
-    const seenPhones = new Set<string>();
-
-    for (const r of rows) {
-      if (r.rowStatus === "inválido") continue;
-      if (seenPhones.has(r.phone)) continue; // dedup dentro do próprio arquivo
-      seenPhones.add(r.phone);
-
-      if (r.rowStatus === "duplicado" && r.existingId) {
-        if (strategy === "ignore") continue;
-        const existingC = existing.find((c) => c.id === r.existingId)!;
-        // Atualiza apenas campos vazios do existente.
-        const merged: Contact = {
-          ...existingC,
-          name: existingC.name || r.name,
-          email: existingC.email || r.email,
-          reference: existingC.reference || r.reference,
-          status: existingC.status || r.status,
-          tags: existingC.tags.length ? existingC.tags : r.tags,
-        };
-        created.push(merged);
-        updatedIds.add(existingC.id);
-      } else {
-        created.push({
-          id: `ct-${Date.now()}-${r.index}`,
-          tenantId,
-          name: r.name,
-          phone: r.phone,
-          email: r.email,
-          reference: r.reference,
-          status: r.status ?? "ativo",
-          tags: r.tags,
-          avatarColor: colorFor(r.phone),
-        });
-      }
-    }
-
-    onConfirm(created, updatedIds, fileName, totals);
+    onConfirm(rows, strategy, fileName, totals);
   }
 
   return (
@@ -629,7 +703,7 @@ function ImportModal({
                       checked={strategy === "update"}
                       onChange={() => setStrategy("update")}
                     />
-                    Atualizar campos vazios do contato existente
+                    Atualizar contato existente
                   </label>
                 </div>
               </div>
@@ -670,7 +744,7 @@ function ImportModal({
 
         <div className="flex items-center justify-between border-t border-border p-4">
           <div className="text-xs text-muted-foreground">
-            Empresa ativa: <strong>{tenantId}</strong> · isolamento garantido por tenant.
+            Empresa ativa: <strong>{tenantLabel}</strong> · isolamento garantido por empresa.
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent">Cancelar</button>
