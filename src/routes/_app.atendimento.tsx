@@ -6,23 +6,128 @@ import {
   Check, CheckCheck, AlertCircle, FileText, Download, Play, Tag, X,
   UserPlus, ArrowRightLeft, CheckCircle, RotateCcw, StickyNote, History,
   Filter, PanelRightClose, PanelRightOpen, Image as ImageIcon, FileVideo, FileAudio,
-  Wifi, WifiOff, FlaskConical,
+  Wifi, WifiOff,
 } from "lucide-react";
-import {
-  getContact, getChannel, getUser,
-  channels, contacts, users,
-  formatTime, formatBytes,
-  type Conversation, type Message, type ConversationStatus, type MessageType,
-  type MessageStatus, type Channel, type Provider,
-} from "@/lib/mocks";
 import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { canSeeAllConversations, inTenantScope } from "@/lib/permissions";
 import { pushAudit } from "@/lib/audit-log";
-import { sendMedia as evoSendMedia, type EvolutionMediaType } from "@/lib/evolution";
 import { apiGet, apiPost } from "@/lib/api";
 import { ensureNotificationPermission, showBrowserNotification, playNotificationSound, isTabHidden } from "@/lib/notifications";
 import { setUnread } from "@/lib/unread-store";
+
+// ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
+type Provider = "META" | "EVOLUTION" | "INTERNAL";
+type ConversationStatus = "open" | "waiting" | "finished";
+type MessageType = "text" | "image" | "audio" | "document" | "video" | "internal";
+type MessageDirection = "in" | "out";
+type MessageStatus = "sent" | "delivered" | "read" | "error";
+type ChannelStatus = "connected" | "connecting" | "qrcode" | "disconnected" | "error";
+
+interface Channel {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string;
+  provider: Provider;
+  status: ChannelStatus;
+}
+interface Contact {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string;
+  email?: string;
+  avatarColor: string;
+}
+interface AttUser {
+  id: string;
+  tenantId: string;
+  name: string;
+  email?: string;
+  role: string;
+  avatarColor: string;
+}
+interface Conversation {
+  id: string;
+  tenantId: string;
+  channelId: string;
+  contactId: string;
+  status: ConversationStatus;
+  unreadCount: number;
+  assignedTo?: string;
+  lastMessageAt: string;
+  tags: string[];
+}
+interface Message {
+  id: string;
+  conversationId: string;
+  direction: MessageDirection;
+  type: MessageType;
+  text?: string;
+  mediaUrl?: string;
+  mediaError?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  durationSeconds?: number;
+  status: MessageStatus;
+  createdAt: string;
+  authorName?: string;
+  isInternalNote?: boolean;
+  thumbnailUrl?: string;
+}
+
+// ───────── Utilitários de formatação ─────────
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  if (sameDay) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const diff = (today.getTime() - d.getTime()) / 86_400_000;
+  if (diff < 7) return d.toLocaleDateString("pt-BR", { weekday: "short" });
+  return d.toLocaleDateString("pt-BR");
+}
+function formatBytes(b?: number): string {
+  if (!b) return "";
+  if (b < 1024) return `${b} B`;
+  if (b < 1_048_576) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1_048_576).toFixed(1)} MB`;
+}
+
+// ───────── Registros reais (preenchidos a partir das APIs) ─────────
+// Começam vazios: nenhum dado fake. São populados por reloadConversations,
+// reloadChannels e reloadUsers com dados do banco/Evolution.
+const contacts: Contact[] = [];
+const channels: Channel[] = [];
+const users: AttUser[] = [];
+
+function getContact(id: string): Contact {
+  return (
+    contacts.find((c) => c.id === id) ?? {
+      id,
+      tenantId: "",
+      name: "",
+      phone: "",
+      avatarColor: "#64748b",
+    }
+  );
+}
+function getChannel(id: string): Channel {
+  return (
+    channels.find((c) => c.id === id) ?? {
+      id,
+      tenantId: "",
+      name: "—",
+      phone: "",
+      provider: "EVOLUTION",
+      status: "disconnected",
+    }
+  );
+}
+function getUser(id?: string): AttUser | undefined {
+  return id ? users.find((u) => u.id === id) : undefined;
+}
 
 // ───────── Transformadores API → tipos locais ─────────
 const PALETTE = ["#00a884", "#06cf9c", "#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#ef4444", "#14b8a6"];
@@ -87,7 +192,6 @@ function upsertContactFromApi(c: any, tenantId: string) {
     tenantId,
     name: displayName,
     phone: isGroup ? "" : phoneFmt,
-    tags: [],
     avatarColor: colorFor(c.contact_id),
   });
 }
@@ -103,6 +207,50 @@ function upsertChannelFromApi(c: any, tenantId: string) {
     provider: mapApiProvider(c.channel_type),
     status: "connected",
   });
+}
+
+/** Mapeia o status textual da Evolution/DB para o ChannelStatus da UI. */
+function mapChannelStatus(s: unknown): ChannelStatus {
+  const v = String(s ?? "").toLowerCase();
+  if (v === "connected" || v === "open") return "connected";
+  if (v === "connecting") return "connecting";
+  if (v.includes("qr")) return "qrcode";
+  if (v === "error") return "error";
+  return "disconnected";
+}
+
+/** Upsert de um canal real vindo de /api/evolution/channels (autoritativo). */
+function upsertRealChannel(c: any, tenantId: string): Channel {
+  const provider: Provider =
+    String(c?.channel_type).toLowerCase() === "meta" ? "META" : "EVOLUTION";
+  const channel: Channel = {
+    id: c.id,
+    tenantId,
+    name: c.display_name || c.name || c.evolution_instance_name || "Canal",
+    phone: c.phone_number || "",
+    provider,
+    status: mapChannelStatus(c.status),
+  };
+  const idx = channels.findIndex((x) => x.id === channel.id);
+  if (idx >= 0) channels[idx] = { ...channels[idx], ...channel };
+  else channels.push(channel);
+  return channel;
+}
+
+/** Upsert de um atendente real vindo de /api/attendants. */
+function upsertRealUser(u: any, tenantId: string): AttUser {
+  const user: AttUser = {
+    id: u.id,
+    tenantId,
+    name: u.name || u.email || "Usuário",
+    email: u.email ?? undefined,
+    role: String(u.role ?? "ATENDENTE"),
+    avatarColor: colorFor(u.id),
+  };
+  const idx = users.findIndex((x) => x.id === user.id);
+  if (idx >= 0) users[idx] = { ...users[idx], ...user };
+  else users.push(user);
+  return user;
 }
 function transformApiConversation(c: any, tenantId: string): Conversation {
   return {
@@ -152,20 +300,8 @@ function transformApiMessage(m: any, conversationId: string): Message {
   const mediaError: string | undefined = m.media_error ?? m.mediaError ?? undefined;
 
   const rp = m.raw_payload ?? m.rawPayload;
-
-  // Mantido apenas para compatibilidade com mensagens antigas; não é usado para visualizar mídia.
   const rpObj = typeof rp === "object" && rp ? (rp as any) : {};
   const dataObj = rpObj.data ?? {};
-  const keyObj = dataObj.key ?? {};
-  const mediaParams = {
-    serverUrl: rpObj.server_url ?? rpObj.serverUrl,
-    apikey: rpObj.apikey ?? rpObj.apiKey,
-    instance: rpObj.instance ?? dataObj.instance,
-    keyId: keyObj.id ?? m.external_message_id ?? m.externalMessageId,
-    remoteJid: keyObj.remoteJid,
-    fromMe: keyObj.fromMe === true,
-    mimetype: mimeType,
-  };
 
   // Miniatura base64 (jpegThumbnail) quando presente no payload.
   const thumbB64 =
@@ -191,7 +327,6 @@ function transformApiMessage(m: any, conversationId: string): Message {
     authorName: m.author_name ?? m.authorName,
     thumbnailUrl,
     mediaError,
-    mediaParams,
   };
 }
 
@@ -219,12 +354,15 @@ const statusFilters: { value: Status; label: string }[] = [
 
 // ───────── Página ─────────
 function AtendimentoPage() {
-  const { session, user, tenant, isSuperAdmin } = useSession();
+  const { session, user, tenant } = useSession();
   const actor = { id: session.userId, role: session.role, tenantId: session.tenantId };
 
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [msgs, setMsgs] = useState<Record<string, Message[]>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  // Canais e atendentes reais (DB/Evolution) usados nos filtros e ações.
+  const [channelList, setChannelList] = useState<Channel[]>([]);
+  const [userList, setUserList] = useState<AttUser[]>([]);
 
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [convsError, setConvsError] = useState<string | null>(null);
@@ -321,6 +459,35 @@ function AtendimentoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.tenantId]);
 
+  // Carrega canais reais conectados/cadastrados (Evolution) para o filtro.
+  const reloadChannels = async () => {
+    try {
+      const data = await apiGet("/evolution/channels");
+      const list: any[] = Array.isArray(data?.channels) ? data.channels : [];
+      const mapped = list.map((c) => upsertRealChannel(c, session.tenantId));
+      setChannelList(mapped);
+    } catch {
+      // mantém canais já conhecidos (vindos das conversas); silencioso
+    }
+  };
+  // Carrega atendentes reais do tenant para filtro/atribuição/transferência.
+  // Usa /api/attendants (dedicado ao Atendimento), não /api/users (admin-only).
+  const reloadUsers = async () => {
+    try {
+      const data = await apiGet("/attendants");
+      const list: any[] = Array.isArray(data?.attendants) ? data.attendants : [];
+      const mapped = list.map((u) => upsertRealUser(u, session.tenantId));
+      setUserList(mapped);
+    } catch {
+      // sem atendentes carregados; ações de atribuição ficam indisponíveis
+    }
+  };
+  useEffect(() => {
+    reloadChannels();
+    reloadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.tenantId]);
+
   /** Carrega mensagens, mesclando por id para não duplicar nem perder otimistas. */
   const reloadMessages = async (convId: string, opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -406,15 +573,9 @@ function AtendimentoPage() {
     return subscribeToConversation(selectedId, () => {});
   }, [selectedId]);
 
-  // Apenas os canais e atendentes do tenant ativo aparecem nos filtros.
-  const tenantChannels = useMemo(
-    () => (isSuperAdmin ? channels : channels.filter((c) => c.tenantId === session.tenantId)),
-    [isSuperAdmin, session.tenantId],
-  );
-  const tenantUsers = useMemo(
-    () => (isSuperAdmin ? users : users.filter((u) => u.tenantId === session.tenantId)),
-    [isSuperAdmin, session.tenantId],
-  );
+  // Canais e atendentes vêm das APIs reais (estado), não de mocks.
+  const tenantChannels = channelList;
+  const tenantUsers = userList;
 
   const filtered = useMemo(() => {
     // Fase 1 Evolution: dados reais vêm do banco principal (single-company).
@@ -576,75 +737,11 @@ function AtendimentoPage() {
     }
   }
 
-  async function sendAttachment(type: Exclude<MessageType, "internal" | "text">) {
+  function sendAttachment(_type: Exclude<MessageType, "internal" | "text">) {
     if (!selected) return;
-    if (type === "image") {
-      // Abre seletor real de arquivo, mas avisa que upload ainda não está disponível.
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.onchange = () => {
-        toast.info("Envio de mídia será habilitado em breve");
-      };
-      input.click();
-      return;
-    }
-    const guard = guardSend(selected);
-    if (!guard.ok || !guard.channel) return;
-    const channel = guard.channel;
-    const contact = getContact(selected.contactId);
-
-    const mocks: Record<"video" | "audio" | "document", Partial<Message>> = {
-      video: { type: "video", mediaUrl: "https://www.w3schools.com/html/mov_bbb.mp4", mimeType: "video/mp4" },
-      audio: { type: "audio", mediaUrl: "https://www.w3schools.com/html/horse.ogg", durationSeconds: 12, mimeType: "audio/ogg" },
-      document: { type: "document", mediaUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", fileName: "Documento.pdf", mimeType: "application/pdf", fileSize: 124_500 },
-    };
-    const base = mocks[type as "video" | "audio" | "document"] as Message;
-    const msgId = `m-${Date.now()}`;
-    appendMsg(selected.id, {
-      ...base,
-      id: msgId,
-      conversationId: selected.id,
-      direction: "out",
-      status: "sent",
-      createdAt: new Date().toISOString(),
-      authorName: user.name,
-    } as Message);
-    log(selected.id, `Enviou ${type === "video" ? "vídeo" : type === "audio" ? "áudio" : "documento"}`);
-
-    if (channel.provider === "EVOLUTION") {
-      const cfg = channel.evolution;
-      if (!cfg || !base.mediaUrl) {
-        patchMsg(selected.id, msgId, { status: "error" });
-        toast.error("Canal Evolution sem configuração ou mídia inválida.");
-        pushAudit({
-          tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
-          targetType: "message", targetId: msgId, action: "message.send_error", result: "error",
-          reason: "missing evolution config or media",
-        });
-        return;
-      }
-      const result = await evoSendMedia(cfg, contact.phone, base.mediaUrl, type as EvolutionMediaType, base.fileName);
-      if (result.ok) {
-        patchMsg(selected.id, msgId, { status: "delivered" });
-        pushAudit({
-          tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
-          targetType: "message", targetId: msgId, targetName: contact.name,
-          action: "message.sent", result: "success",
-          reason: `${type} via evolution${result.providerMessageId?.startsWith("mock-") ? " (mock)" : ""}`,
-        });
-      } else {
-        patchMsg(selected.id, msgId, { status: "error" });
-        toast.error("Falha ao enviar mídia via Evolution.");
-        pushAudit({
-          tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
-          targetType: "message", targetId: msgId, action: "message.send_error", result: "error",
-          reason: result.error,
-        });
-      }
-    } else {
-      patchMsg(selected.id, msgId, { status: "delivered" });
-    }
+    // Envio de mídia real (upload + Evolution sendMedia) ainda não implementado
+    // no backend. Não injetamos mídia fake — apenas avisamos o usuário.
+    toast.info("Envio de mídia será habilitado em breve.");
   }
   function addInternalNote(text: string) {
     if (!selected || !text.trim()) return;
@@ -888,6 +985,7 @@ function AtendimentoPage() {
           <DetailsPanel
             conversation={selected}
             logs={convLogs}
+            attendants={tenantUsers}
             onAssume={assumeSelf}
             onAssign={assignTo}
             onTransfer={transferTo}
@@ -1052,17 +1150,7 @@ function ChatHeader({
 }
 
 function ChannelModeBadge({ channel }: { channel: Channel }) {
-  const isEvo = channel.provider === "EVOLUTION";
-  const cfg = channel.evolution;
-  const isMock = isEvo && (!cfg?.apiKey || !cfg?.apiUrl || cfg.apiUrl.includes(".local"));
   const connected = channel.status === "connected";
-  if (isEvo && isMock) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-600" title="Evolution sem credenciais — operando em modo MOCK">
-        <FlaskConical className="h-3 w-3" /> MOCK
-      </span>
-    );
-  }
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -1521,11 +1609,12 @@ function NoteComposer({ onClose, onSave }: { onClose: () => void; onSave: (text:
 
 // ───────── Painel direito ─────────
 function DetailsPanel({
-  conversation, logs,
+  conversation, logs, attendants,
   onAssume, onAssign, onTransfer, onFinish, onReopen, onAddTag, onRemoveTag, onAddNote,
 }: {
   conversation: Conversation;
   logs: LogEntry[];
+  attendants: AttUser[];
   onAssume: () => void;
   onAssign: (userId: string) => void;
   onTransfer: (userId: string) => void;
@@ -1563,7 +1652,7 @@ function DetailsPanel({
                 {picker === "assign" ? "Atribuir para:" : "Transferir para:"}
               </div>
               <div className="grid grid-cols-1 gap-1">
-                {users.filter((u) => u.tenantId === conversation.tenantId && (u.role === "ATENDENTE" || u.role === "ATENDENTE_GERAL" || u.role === "SUPERVISOR" || u.role === "ADMIN_EMPRESA")).map((u) => (
+                {attendants.map((u) => (
                   <button
                     key={u.id}
                     onClick={() => {

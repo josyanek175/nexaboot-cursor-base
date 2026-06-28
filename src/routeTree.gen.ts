@@ -16,6 +16,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution'
 import { Route as ApiUsersRouteImport } from './routes/api/users'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
+import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
+import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
 import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
 import { Route as AppLogsRouteImport } from './routes/_app.logs'
 import { Route as AppGruposInternosRouteImport } from './routes/_app.grupos-internos'
@@ -27,12 +29,19 @@ import { Route as AppComunicacaoInternaRouteImport } from './routes/_app.comunic
 import { Route as AppCanaisRouteImport } from './routes/_app.canais'
 import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app.atendimento'
+import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
+import { Route as ApiInternalChatUnreadCountRouteImport } from './routes/api/internal-chat/unread-count'
 import { Route as ApiInternalChatSendRouteImport } from './routes/api/internal-chat/send'
 import { Route as ApiInternalChatMessagesRouteImport } from './routes/api/internal-chat/messages'
+import { Route as ApiInternalChatMarkReadRouteImport } from './routes/api/internal-chat/mark-read'
 import { Route as ApiInternalChatListRouteImport } from './routes/api/internal-chat/list'
 import { Route as ApiInternalChatCreateRouteImport } from './routes/api/internal-chat/create'
+import { Route as ApiEvolutionStatusRouteImport } from './routes/api/evolution/status'
+import { Route as ApiEvolutionSchemaCheckRouteImport } from './routes/api/evolution/schema-check'
+import { Route as ApiEvolutionRegisterChannelRouteImport } from './routes/api/evolution/register-channel'
+import { Route as ApiEvolutionChannelsRouteImport } from './routes/api/evolution/channels'
 import { Route as ApiDebugDbRouteImport } from './routes/api/debug/db'
 import { Route as ApiDebugCurrentUserRouteImport } from './routes/api/debug/current-user'
 import { Route as ApiDebugColsRouteImport } from './routes/api/debug/cols'
@@ -40,9 +49,20 @@ import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
 import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
+import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
+import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
 import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
+import { Route as ApiEvolutionChannelsIdRouteImport } from './routes/api/evolution/channels/$id'
+import { Route as ApiConversationsIdReadRouteImport } from './routes/api/conversations/$id/read'
+import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
+import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
+import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
+import { Route as ApiEvolutionChannelsIdStatusRouteImport } from './routes/api/evolution/channels/$id/status'
+import { Route as ApiEvolutionChannelsIdQrcodeRouteImport } from './routes/api/evolution/channels/$id/qrcode'
+import { Route as ApiEvolutionChannelsIdDisconnectRouteImport } from './routes/api/evolution/channels/$id/disconnect'
+import { Route as ApiEvolutionChannelsIdConnectRouteImport } from './routes/api/evolution/channels/$id/connect'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -76,6 +96,16 @@ const ApiUsersRoute = ApiUsersRouteImport.update({
 const ApiMessagesRoute = ApiMessagesRouteImport.update({
   id: '/api/messages',
   path: '/api/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConversationsRoute = ApiConversationsRouteImport.update({
+  id: '/api/conversations',
+  path: '/api/conversations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAttendantsRoute = ApiAttendantsRouteImport.update({
+  id: '/api/attendants',
+  path: '/api/attendants',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppUsuariosRoute = AppUsuariosRouteImport.update({
@@ -133,6 +163,11 @@ const AppAtendimentoRoute = AppAtendimentoRouteImport.update({
   path: '/atendimento',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiWebhooksEvolutionRoute = ApiWebhooksEvolutionRouteImport.update({
+  id: '/api/webhooks/evolution',
+  path: '/api/webhooks/evolution',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUsersIdRoute = ApiUsersIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -143,6 +178,12 @@ const ApiInternalChatUsersRoute = ApiInternalChatUsersRouteImport.update({
   path: '/api/internal-chat/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInternalChatUnreadCountRoute =
+  ApiInternalChatUnreadCountRouteImport.update({
+    id: '/api/internal-chat/unread-count',
+    path: '/api/internal-chat/unread-count',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiInternalChatSendRoute = ApiInternalChatSendRouteImport.update({
   id: '/api/internal-chat/send',
   path: '/api/internal-chat/send',
@@ -153,6 +194,11 @@ const ApiInternalChatMessagesRoute = ApiInternalChatMessagesRouteImport.update({
   path: '/api/internal-chat/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInternalChatMarkReadRoute = ApiInternalChatMarkReadRouteImport.update({
+  id: '/api/internal-chat/mark-read',
+  path: '/api/internal-chat/mark-read',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiInternalChatListRoute = ApiInternalChatListRouteImport.update({
   id: '/api/internal-chat/list',
   path: '/api/internal-chat/list',
@@ -161,6 +207,27 @@ const ApiInternalChatListRoute = ApiInternalChatListRouteImport.update({
 const ApiInternalChatCreateRoute = ApiInternalChatCreateRouteImport.update({
   id: '/api/internal-chat/create',
   path: '/api/internal-chat/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEvolutionStatusRoute = ApiEvolutionStatusRouteImport.update({
+  id: '/api/evolution/status',
+  path: '/api/evolution/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEvolutionSchemaCheckRoute = ApiEvolutionSchemaCheckRouteImport.update({
+  id: '/api/evolution/schema-check',
+  path: '/api/evolution/schema-check',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEvolutionRegisterChannelRoute =
+  ApiEvolutionRegisterChannelRouteImport.update({
+    id: '/api/evolution/register-channel',
+    path: '/api/evolution/register-channel',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiEvolutionChannelsRoute = ApiEvolutionChannelsRouteImport.update({
+  id: '/api/evolution/channels',
+  path: '/api/evolution/channels',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDebugDbRoute = ApiDebugDbRouteImport.update({
@@ -198,6 +265,11 @@ const ApiAdminSeedDemoRoute = ApiAdminSeedDemoRouteImport.update({
   path: '/api/admin/seed-demo',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminResetPasswordRoute = ApiAdminResetPasswordRouteImport.update({
+  id: '/api/admin/reset-password',
+  path: '/api/admin/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminAuthCheckRoute = ApiAdminAuthCheckRouteImport.update({
   id: '/api/admin/auth-check',
   path: '/api/admin/auth-check',
@@ -209,11 +281,69 @@ const ApiPublicWebhooksEvolutionRoute =
     path: '/api/public/webhooks/evolution',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiMessagesSendEvolutionRoute =
+  ApiMessagesSendEvolutionRouteImport.update({
+    id: '/send/evolution',
+    path: '/send/evolution',
+    getParentRoute: () => ApiMessagesRoute,
+  } as any)
 const ApiMessagesMessageIdMediaRoute =
   ApiMessagesMessageIdMediaRouteImport.update({
     id: '/$messageId/media',
     path: '/$messageId/media',
     getParentRoute: () => ApiMessagesRoute,
+  } as any)
+const ApiEvolutionChannelsIdRoute = ApiEvolutionChannelsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiEvolutionChannelsRoute,
+} as any)
+const ApiConversationsIdReadRoute = ApiConversationsIdReadRouteImport.update({
+  id: '/$id/read',
+  path: '/$id/read',
+  getParentRoute: () => ApiConversationsRoute,
+} as any)
+const ApiConversationsIdMessagesRoute =
+  ApiConversationsIdMessagesRouteImport.update({
+    id: '/$id/messages',
+    path: '/$id/messages',
+    getParentRoute: () => ApiConversationsRoute,
+  } as any)
+const ApiConversationsIdAssumeRoute =
+  ApiConversationsIdAssumeRouteImport.update({
+    id: '/$id/assume',
+    path: '/$id/assume',
+    getParentRoute: () => ApiConversationsRoute,
+  } as any)
+const ApiInternalChatMessagesIdAttachmentRoute =
+  ApiInternalChatMessagesIdAttachmentRouteImport.update({
+    id: '/$id/attachment',
+    path: '/$id/attachment',
+    getParentRoute: () => ApiInternalChatMessagesRoute,
+  } as any)
+const ApiEvolutionChannelsIdStatusRoute =
+  ApiEvolutionChannelsIdStatusRouteImport.update({
+    id: '/status',
+    path: '/status',
+    getParentRoute: () => ApiEvolutionChannelsIdRoute,
+  } as any)
+const ApiEvolutionChannelsIdQrcodeRoute =
+  ApiEvolutionChannelsIdQrcodeRouteImport.update({
+    id: '/qrcode',
+    path: '/qrcode',
+    getParentRoute: () => ApiEvolutionChannelsIdRoute,
+  } as any)
+const ApiEvolutionChannelsIdDisconnectRoute =
+  ApiEvolutionChannelsIdDisconnectRouteImport.update({
+    id: '/disconnect',
+    path: '/disconnect',
+    getParentRoute: () => ApiEvolutionChannelsIdRoute,
+  } as any)
+const ApiEvolutionChannelsIdConnectRoute =
+  ApiEvolutionChannelsIdConnectRouteImport.update({
+    id: '/connect',
+    path: '/connect',
+    getParentRoute: () => ApiEvolutionChannelsIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -231,10 +361,13 @@ export interface FileRoutesByFullPath {
   '/grupos-internos': typeof AppGruposInternosRoute
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
+  '/api/attendants': typeof ApiAttendantsRoute
+  '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
+  '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -242,14 +375,31 @@ export interface FileRoutesByFullPath {
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
+  '/api/evolution/channels': typeof ApiEvolutionChannelsRouteWithChildren
+  '/api/evolution/register-channel': typeof ApiEvolutionRegisterChannelRoute
+  '/api/evolution/schema-check': typeof ApiEvolutionSchemaCheckRoute
+  '/api/evolution/status': typeof ApiEvolutionStatusRoute
   '/api/internal-chat/create': typeof ApiInternalChatCreateRoute
   '/api/internal-chat/list': typeof ApiInternalChatListRoute
-  '/api/internal-chat/messages': typeof ApiInternalChatMessagesRoute
+  '/api/internal-chat/mark-read': typeof ApiInternalChatMarkReadRoute
+  '/api/internal-chat/messages': typeof ApiInternalChatMessagesRouteWithChildren
   '/api/internal-chat/send': typeof ApiInternalChatSendRoute
+  '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
+  '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
+  '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
+  '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
+  '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
+  '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
+  '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
+  '/api/evolution/channels/$id/status': typeof ApiEvolutionChannelsIdStatusRoute
+  '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -266,10 +416,13 @@ export interface FileRoutesByTo {
   '/grupos-internos': typeof AppGruposInternosRoute
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
+  '/api/attendants': typeof ApiAttendantsRoute
+  '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
+  '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -277,14 +430,31 @@ export interface FileRoutesByTo {
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
+  '/api/evolution/channels': typeof ApiEvolutionChannelsRouteWithChildren
+  '/api/evolution/register-channel': typeof ApiEvolutionRegisterChannelRoute
+  '/api/evolution/schema-check': typeof ApiEvolutionSchemaCheckRoute
+  '/api/evolution/status': typeof ApiEvolutionStatusRoute
   '/api/internal-chat/create': typeof ApiInternalChatCreateRoute
   '/api/internal-chat/list': typeof ApiInternalChatListRoute
-  '/api/internal-chat/messages': typeof ApiInternalChatMessagesRoute
+  '/api/internal-chat/mark-read': typeof ApiInternalChatMarkReadRoute
+  '/api/internal-chat/messages': typeof ApiInternalChatMessagesRouteWithChildren
   '/api/internal-chat/send': typeof ApiInternalChatSendRoute
+  '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
+  '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
+  '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
+  '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
+  '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
+  '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
+  '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
+  '/api/evolution/channels/$id/status': typeof ApiEvolutionChannelsIdStatusRoute
+  '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -303,10 +473,13 @@ export interface FileRoutesById {
   '/_app/grupos-internos': typeof AppGruposInternosRoute
   '/_app/logs': typeof AppLogsRoute
   '/_app/usuarios': typeof AppUsuariosRoute
+  '/api/attendants': typeof ApiAttendantsRoute
+  '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
+  '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -314,14 +487,31 @@ export interface FileRoutesById {
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
+  '/api/evolution/channels': typeof ApiEvolutionChannelsRouteWithChildren
+  '/api/evolution/register-channel': typeof ApiEvolutionRegisterChannelRoute
+  '/api/evolution/schema-check': typeof ApiEvolutionSchemaCheckRoute
+  '/api/evolution/status': typeof ApiEvolutionStatusRoute
   '/api/internal-chat/create': typeof ApiInternalChatCreateRoute
   '/api/internal-chat/list': typeof ApiInternalChatListRoute
-  '/api/internal-chat/messages': typeof ApiInternalChatMessagesRoute
+  '/api/internal-chat/mark-read': typeof ApiInternalChatMarkReadRoute
+  '/api/internal-chat/messages': typeof ApiInternalChatMessagesRouteWithChildren
   '/api/internal-chat/send': typeof ApiInternalChatSendRoute
+  '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
+  '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
+  '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
+  '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
+  '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
+  '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
+  '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
+  '/api/evolution/channels/$id/status': typeof ApiEvolutionChannelsIdStatusRoute
+  '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -340,10 +530,13 @@ export interface FileRouteTypes {
     | '/grupos-internos'
     | '/logs'
     | '/usuarios'
+    | '/api/attendants'
+    | '/api/conversations'
     | '/api/messages'
     | '/api/users'
     | '/webhook/evolution'
     | '/api/admin/auth-check'
+    | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
@@ -351,14 +544,31 @@ export interface FileRouteTypes {
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
+    | '/api/evolution/channels'
+    | '/api/evolution/register-channel'
+    | '/api/evolution/schema-check'
+    | '/api/evolution/status'
     | '/api/internal-chat/create'
     | '/api/internal-chat/list'
+    | '/api/internal-chat/mark-read'
     | '/api/internal-chat/messages'
     | '/api/internal-chat/send'
+    | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/users/$id'
+    | '/api/webhooks/evolution'
+    | '/api/conversations/$id/assume'
+    | '/api/conversations/$id/messages'
+    | '/api/conversations/$id/read'
+    | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
+    | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/evolution/channels/$id/connect'
+    | '/api/evolution/channels/$id/disconnect'
+    | '/api/evolution/channels/$id/qrcode'
+    | '/api/evolution/channels/$id/status'
+    | '/api/internal-chat/messages/$id/attachment'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -375,10 +585,13 @@ export interface FileRouteTypes {
     | '/grupos-internos'
     | '/logs'
     | '/usuarios'
+    | '/api/attendants'
+    | '/api/conversations'
     | '/api/messages'
     | '/api/users'
     | '/webhook/evolution'
     | '/api/admin/auth-check'
+    | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
@@ -386,14 +599,31 @@ export interface FileRouteTypes {
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
+    | '/api/evolution/channels'
+    | '/api/evolution/register-channel'
+    | '/api/evolution/schema-check'
+    | '/api/evolution/status'
     | '/api/internal-chat/create'
     | '/api/internal-chat/list'
+    | '/api/internal-chat/mark-read'
     | '/api/internal-chat/messages'
     | '/api/internal-chat/send'
+    | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/users/$id'
+    | '/api/webhooks/evolution'
+    | '/api/conversations/$id/assume'
+    | '/api/conversations/$id/messages'
+    | '/api/conversations/$id/read'
+    | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
+    | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/evolution/channels/$id/connect'
+    | '/api/evolution/channels/$id/disconnect'
+    | '/api/evolution/channels/$id/qrcode'
+    | '/api/evolution/channels/$id/status'
+    | '/api/internal-chat/messages/$id/attachment'
   id:
     | '__root__'
     | '/'
@@ -411,10 +641,13 @@ export interface FileRouteTypes {
     | '/_app/grupos-internos'
     | '/_app/logs'
     | '/_app/usuarios'
+    | '/api/attendants'
+    | '/api/conversations'
     | '/api/messages'
     | '/api/users'
     | '/webhook/evolution'
     | '/api/admin/auth-check'
+    | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
@@ -422,14 +655,31 @@ export interface FileRouteTypes {
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
+    | '/api/evolution/channels'
+    | '/api/evolution/register-channel'
+    | '/api/evolution/schema-check'
+    | '/api/evolution/status'
     | '/api/internal-chat/create'
     | '/api/internal-chat/list'
+    | '/api/internal-chat/mark-read'
     | '/api/internal-chat/messages'
     | '/api/internal-chat/send'
+    | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/users/$id'
+    | '/api/webhooks/evolution'
+    | '/api/conversations/$id/assume'
+    | '/api/conversations/$id/messages'
+    | '/api/conversations/$id/read'
+    | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
+    | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/evolution/channels/$id/connect'
+    | '/api/evolution/channels/$id/disconnect'
+    | '/api/evolution/channels/$id/qrcode'
+    | '/api/evolution/channels/$id/status'
+    | '/api/internal-chat/messages/$id/attachment'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -437,10 +687,13 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  ApiAttendantsRoute: typeof ApiAttendantsRoute
+  ApiConversationsRoute: typeof ApiConversationsRouteWithChildren
   ApiMessagesRoute: typeof ApiMessagesRouteWithChildren
   ApiUsersRoute: typeof ApiUsersRouteWithChildren
   WebhookEvolutionRoute: typeof WebhookEvolutionRoute
   ApiAdminAuthCheckRoute: typeof ApiAdminAuthCheckRoute
+  ApiAdminResetPasswordRoute: typeof ApiAdminResetPasswordRoute
   ApiAdminSeedDemoRoute: typeof ApiAdminSeedDemoRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
@@ -448,11 +701,18 @@ export interface RootRouteChildren {
   ApiDebugColsRoute: typeof ApiDebugColsRoute
   ApiDebugCurrentUserRoute: typeof ApiDebugCurrentUserRoute
   ApiDebugDbRoute: typeof ApiDebugDbRoute
+  ApiEvolutionChannelsRoute: typeof ApiEvolutionChannelsRouteWithChildren
+  ApiEvolutionRegisterChannelRoute: typeof ApiEvolutionRegisterChannelRoute
+  ApiEvolutionSchemaCheckRoute: typeof ApiEvolutionSchemaCheckRoute
+  ApiEvolutionStatusRoute: typeof ApiEvolutionStatusRoute
   ApiInternalChatCreateRoute: typeof ApiInternalChatCreateRoute
   ApiInternalChatListRoute: typeof ApiInternalChatListRoute
-  ApiInternalChatMessagesRoute: typeof ApiInternalChatMessagesRoute
+  ApiInternalChatMarkReadRoute: typeof ApiInternalChatMarkReadRoute
+  ApiInternalChatMessagesRoute: typeof ApiInternalChatMessagesRouteWithChildren
   ApiInternalChatSendRoute: typeof ApiInternalChatSendRoute
+  ApiInternalChatUnreadCountRoute: typeof ApiInternalChatUnreadCountRoute
   ApiInternalChatUsersRoute: typeof ApiInternalChatUsersRoute
+  ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
   ApiPublicWebhooksEvolutionRoute: typeof ApiPublicWebhooksEvolutionRoute
 }
 
@@ -505,6 +765,20 @@ declare module '@tanstack/react-router' {
       path: '/api/messages'
       fullPath: '/api/messages'
       preLoaderRoute: typeof ApiMessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/conversations': {
+      id: '/api/conversations'
+      path: '/api/conversations'
+      fullPath: '/api/conversations'
+      preLoaderRoute: typeof ApiConversationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/attendants': {
+      id: '/api/attendants'
+      path: '/api/attendants'
+      fullPath: '/api/attendants'
+      preLoaderRoute: typeof ApiAttendantsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/usuarios': {
@@ -584,6 +858,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAtendimentoRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/webhooks/evolution': {
+      id: '/api/webhooks/evolution'
+      path: '/api/webhooks/evolution'
+      fullPath: '/api/webhooks/evolution'
+      preLoaderRoute: typeof ApiWebhooksEvolutionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/users/$id': {
       id: '/api/users/$id'
       path: '/$id'
@@ -596,6 +877,13 @@ declare module '@tanstack/react-router' {
       path: '/api/internal-chat/users'
       fullPath: '/api/internal-chat/users'
       preLoaderRoute: typeof ApiInternalChatUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/unread-count': {
+      id: '/api/internal-chat/unread-count'
+      path: '/api/internal-chat/unread-count'
+      fullPath: '/api/internal-chat/unread-count'
+      preLoaderRoute: typeof ApiInternalChatUnreadCountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/internal-chat/send': {
@@ -612,6 +900,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInternalChatMessagesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/internal-chat/mark-read': {
+      id: '/api/internal-chat/mark-read'
+      path: '/api/internal-chat/mark-read'
+      fullPath: '/api/internal-chat/mark-read'
+      preLoaderRoute: typeof ApiInternalChatMarkReadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/internal-chat/list': {
       id: '/api/internal-chat/list'
       path: '/api/internal-chat/list'
@@ -624,6 +919,34 @@ declare module '@tanstack/react-router' {
       path: '/api/internal-chat/create'
       fullPath: '/api/internal-chat/create'
       preLoaderRoute: typeof ApiInternalChatCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/status': {
+      id: '/api/evolution/status'
+      path: '/api/evolution/status'
+      fullPath: '/api/evolution/status'
+      preLoaderRoute: typeof ApiEvolutionStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/schema-check': {
+      id: '/api/evolution/schema-check'
+      path: '/api/evolution/schema-check'
+      fullPath: '/api/evolution/schema-check'
+      preLoaderRoute: typeof ApiEvolutionSchemaCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/register-channel': {
+      id: '/api/evolution/register-channel'
+      path: '/api/evolution/register-channel'
+      fullPath: '/api/evolution/register-channel'
+      preLoaderRoute: typeof ApiEvolutionRegisterChannelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/channels': {
+      id: '/api/evolution/channels'
+      path: '/api/evolution/channels'
+      fullPath: '/api/evolution/channels'
+      preLoaderRoute: typeof ApiEvolutionChannelsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/debug/db': {
@@ -675,6 +998,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminSeedDemoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/reset-password': {
+      id: '/api/admin/reset-password'
+      path: '/api/admin/reset-password'
+      fullPath: '/api/admin/reset-password'
+      preLoaderRoute: typeof ApiAdminResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/auth-check': {
       id: '/api/admin/auth-check'
       path: '/api/admin/auth-check'
@@ -689,12 +1019,82 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhooksEvolutionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/messages/send/evolution': {
+      id: '/api/messages/send/evolution'
+      path: '/send/evolution'
+      fullPath: '/api/messages/send/evolution'
+      preLoaderRoute: typeof ApiMessagesSendEvolutionRouteImport
+      parentRoute: typeof ApiMessagesRoute
+    }
     '/api/messages/$messageId/media': {
       id: '/api/messages/$messageId/media'
       path: '/$messageId/media'
       fullPath: '/api/messages/$messageId/media'
       preLoaderRoute: typeof ApiMessagesMessageIdMediaRouteImport
       parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/evolution/channels/$id': {
+      id: '/api/evolution/channels/$id'
+      path: '/$id'
+      fullPath: '/api/evolution/channels/$id'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdRouteImport
+      parentRoute: typeof ApiEvolutionChannelsRoute
+    }
+    '/api/conversations/$id/read': {
+      id: '/api/conversations/$id/read'
+      path: '/$id/read'
+      fullPath: '/api/conversations/$id/read'
+      preLoaderRoute: typeof ApiConversationsIdReadRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/messages': {
+      id: '/api/conversations/$id/messages'
+      path: '/$id/messages'
+      fullPath: '/api/conversations/$id/messages'
+      preLoaderRoute: typeof ApiConversationsIdMessagesRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/assume': {
+      id: '/api/conversations/$id/assume'
+      path: '/$id/assume'
+      fullPath: '/api/conversations/$id/assume'
+      preLoaderRoute: typeof ApiConversationsIdAssumeRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/internal-chat/messages/$id/attachment': {
+      id: '/api/internal-chat/messages/$id/attachment'
+      path: '/$id/attachment'
+      fullPath: '/api/internal-chat/messages/$id/attachment'
+      preLoaderRoute: typeof ApiInternalChatMessagesIdAttachmentRouteImport
+      parentRoute: typeof ApiInternalChatMessagesRoute
+    }
+    '/api/evolution/channels/$id/status': {
+      id: '/api/evolution/channels/$id/status'
+      path: '/status'
+      fullPath: '/api/evolution/channels/$id/status'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdStatusRouteImport
+      parentRoute: typeof ApiEvolutionChannelsIdRoute
+    }
+    '/api/evolution/channels/$id/qrcode': {
+      id: '/api/evolution/channels/$id/qrcode'
+      path: '/qrcode'
+      fullPath: '/api/evolution/channels/$id/qrcode'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdQrcodeRouteImport
+      parentRoute: typeof ApiEvolutionChannelsIdRoute
+    }
+    '/api/evolution/channels/$id/disconnect': {
+      id: '/api/evolution/channels/$id/disconnect'
+      path: '/disconnect'
+      fullPath: '/api/evolution/channels/$id/disconnect'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdDisconnectRouteImport
+      parentRoute: typeof ApiEvolutionChannelsIdRoute
+    }
+    '/api/evolution/channels/$id/connect': {
+      id: '/api/evolution/channels/$id/connect'
+      path: '/connect'
+      fullPath: '/api/evolution/channels/$id/connect'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdConnectRouteImport
+      parentRoute: typeof ApiEvolutionChannelsIdRoute
     }
   }
 }
@@ -729,12 +1129,29 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface ApiConversationsRouteChildren {
+  ApiConversationsIdAssumeRoute: typeof ApiConversationsIdAssumeRoute
+  ApiConversationsIdMessagesRoute: typeof ApiConversationsIdMessagesRoute
+  ApiConversationsIdReadRoute: typeof ApiConversationsIdReadRoute
+}
+
+const ApiConversationsRouteChildren: ApiConversationsRouteChildren = {
+  ApiConversationsIdAssumeRoute: ApiConversationsIdAssumeRoute,
+  ApiConversationsIdMessagesRoute: ApiConversationsIdMessagesRoute,
+  ApiConversationsIdReadRoute: ApiConversationsIdReadRoute,
+}
+
+const ApiConversationsRouteWithChildren =
+  ApiConversationsRoute._addFileChildren(ApiConversationsRouteChildren)
+
 interface ApiMessagesRouteChildren {
   ApiMessagesMessageIdMediaRoute: typeof ApiMessagesMessageIdMediaRoute
+  ApiMessagesSendEvolutionRoute: typeof ApiMessagesSendEvolutionRoute
 }
 
 const ApiMessagesRouteChildren: ApiMessagesRouteChildren = {
   ApiMessagesMessageIdMediaRoute: ApiMessagesMessageIdMediaRoute,
+  ApiMessagesSendEvolutionRoute: ApiMessagesSendEvolutionRoute,
 }
 
 const ApiMessagesRouteWithChildren = ApiMessagesRoute._addFileChildren(
@@ -753,15 +1170,65 @@ const ApiUsersRouteWithChildren = ApiUsersRoute._addFileChildren(
   ApiUsersRouteChildren,
 )
 
+interface ApiEvolutionChannelsIdRouteChildren {
+  ApiEvolutionChannelsIdConnectRoute: typeof ApiEvolutionChannelsIdConnectRoute
+  ApiEvolutionChannelsIdDisconnectRoute: typeof ApiEvolutionChannelsIdDisconnectRoute
+  ApiEvolutionChannelsIdQrcodeRoute: typeof ApiEvolutionChannelsIdQrcodeRoute
+  ApiEvolutionChannelsIdStatusRoute: typeof ApiEvolutionChannelsIdStatusRoute
+}
+
+const ApiEvolutionChannelsIdRouteChildren: ApiEvolutionChannelsIdRouteChildren =
+  {
+    ApiEvolutionChannelsIdConnectRoute: ApiEvolutionChannelsIdConnectRoute,
+    ApiEvolutionChannelsIdDisconnectRoute:
+      ApiEvolutionChannelsIdDisconnectRoute,
+    ApiEvolutionChannelsIdQrcodeRoute: ApiEvolutionChannelsIdQrcodeRoute,
+    ApiEvolutionChannelsIdStatusRoute: ApiEvolutionChannelsIdStatusRoute,
+  }
+
+const ApiEvolutionChannelsIdRouteWithChildren =
+  ApiEvolutionChannelsIdRoute._addFileChildren(
+    ApiEvolutionChannelsIdRouteChildren,
+  )
+
+interface ApiEvolutionChannelsRouteChildren {
+  ApiEvolutionChannelsIdRoute: typeof ApiEvolutionChannelsIdRouteWithChildren
+}
+
+const ApiEvolutionChannelsRouteChildren: ApiEvolutionChannelsRouteChildren = {
+  ApiEvolutionChannelsIdRoute: ApiEvolutionChannelsIdRouteWithChildren,
+}
+
+const ApiEvolutionChannelsRouteWithChildren =
+  ApiEvolutionChannelsRoute._addFileChildren(ApiEvolutionChannelsRouteChildren)
+
+interface ApiInternalChatMessagesRouteChildren {
+  ApiInternalChatMessagesIdAttachmentRoute: typeof ApiInternalChatMessagesIdAttachmentRoute
+}
+
+const ApiInternalChatMessagesRouteChildren: ApiInternalChatMessagesRouteChildren =
+  {
+    ApiInternalChatMessagesIdAttachmentRoute:
+      ApiInternalChatMessagesIdAttachmentRoute,
+  }
+
+const ApiInternalChatMessagesRouteWithChildren =
+  ApiInternalChatMessagesRoute._addFileChildren(
+    ApiInternalChatMessagesRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  ApiAttendantsRoute: ApiAttendantsRoute,
+  ApiConversationsRoute: ApiConversationsRouteWithChildren,
   ApiMessagesRoute: ApiMessagesRouteWithChildren,
   ApiUsersRoute: ApiUsersRouteWithChildren,
   WebhookEvolutionRoute: WebhookEvolutionRoute,
   ApiAdminAuthCheckRoute: ApiAdminAuthCheckRoute,
+  ApiAdminResetPasswordRoute: ApiAdminResetPasswordRoute,
   ApiAdminSeedDemoRoute: ApiAdminSeedDemoRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
@@ -769,13 +1236,30 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDebugColsRoute: ApiDebugColsRoute,
   ApiDebugCurrentUserRoute: ApiDebugCurrentUserRoute,
   ApiDebugDbRoute: ApiDebugDbRoute,
+  ApiEvolutionChannelsRoute: ApiEvolutionChannelsRouteWithChildren,
+  ApiEvolutionRegisterChannelRoute: ApiEvolutionRegisterChannelRoute,
+  ApiEvolutionSchemaCheckRoute: ApiEvolutionSchemaCheckRoute,
+  ApiEvolutionStatusRoute: ApiEvolutionStatusRoute,
   ApiInternalChatCreateRoute: ApiInternalChatCreateRoute,
   ApiInternalChatListRoute: ApiInternalChatListRoute,
-  ApiInternalChatMessagesRoute: ApiInternalChatMessagesRoute,
+  ApiInternalChatMarkReadRoute: ApiInternalChatMarkReadRoute,
+  ApiInternalChatMessagesRoute: ApiInternalChatMessagesRouteWithChildren,
   ApiInternalChatSendRoute: ApiInternalChatSendRoute,
+  ApiInternalChatUnreadCountRoute: ApiInternalChatUnreadCountRoute,
   ApiInternalChatUsersRoute: ApiInternalChatUsersRoute,
+  ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
   ApiPublicWebhooksEvolutionRoute: ApiPublicWebhooksEvolutionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
