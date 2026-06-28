@@ -4,7 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getSessionUserId } from "@/lib/session.server";
+import { getCurrentUserCompanyId } from "@/lib/company.server";
 
 const Body = z.object({
   conversationId: z.string().uuid(),
@@ -16,8 +16,8 @@ export const Route = createFileRoute("/api/messages/send/evolution")({
     handlers: {
       POST: async ({ request }) => {
         await ensureCrmSchema();
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const companyId = await getCurrentUserCompanyId();
+        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
         const json = await request.json().catch(() => null);
         const parsed = Body.safeParse(json);
@@ -40,6 +40,7 @@ export const Route = createFileRoute("/api/messages/send/evolution")({
           JOIN public.contacts ct ON ct.id = c.contact_id
           JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
           WHERE c.id = ${conversationId}::uuid
+            AND c.company_id = ${companyId}::uuid
           LIMIT 1
         `;
         const conv = rows[0];

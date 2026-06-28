@@ -3,15 +3,15 @@
 // última mensagem, horário, unread, canal/instância).
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getSessionUserId } from "@/lib/session.server";
+import { getCurrentUserCompanyId } from "@/lib/company.server";
 
 export const Route = createFileRoute("/api/conversations")({
   server: {
     handlers: {
       GET: async () => {
         await ensureCrmSchema();
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const companyId = await getCurrentUserCompanyId();
+        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
         const s = sql();
         const conversations = await s`
@@ -34,6 +34,7 @@ export const Route = createFileRoute("/api/conversations")({
           FROM public.conversations c
           JOIN public.contacts ct ON ct.id = c.contact_id
           JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
+          WHERE c.company_id = ${companyId}::uuid
           ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
           LIMIT 500
         `;

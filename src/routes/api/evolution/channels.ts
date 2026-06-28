@@ -4,7 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getSessionUserId } from "@/lib/session.server";
+import { getCurrentUserCompanyId } from "@/lib/company.server";
 import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
   instanceState, mapEvoStatus, webhookUrl,
@@ -18,30 +18,19 @@ const CreateBody = z.object({
     .min(1)
     .max(120)
     .regex(/^[a-zA-Z0-9._-]+$/, "use apenas letras, números, ponto, hífen ou underline"),
+  // Aceitos por compatibilidade, mas ignorados: o canal é vinculado à empresa
+  // do usuário logado, não a uma empresa arbitrária do corpo da requisição.
   companyName: z.string().trim().min(1).max(160).optional(),
   companySlug: z.string().trim().min(1).max(80).optional(),
 });
-
-async function ensureDefaultCompany(companyName?: string, companySlug?: string): Promise<string> {
-  const s = sql();
-  const slug = companySlug || "default";
-  const name = companyName || "Empresa Padrão";
-  const rows = await s<{ id: string }[]>`
-    INSERT INTO public.companies (name, slug)
-    VALUES (${name}, ${slug})
-    ON CONFLICT (slug) DO UPDATE SET updated_at = now()
-    RETURNING id
-  `;
-  return rows[0].id;
-}
 
 export const Route = createFileRoute("/api/evolution/channels")({
   server: {
     handlers: {
       GET: async () => {
         await ensureCrmSchema();
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const companyId = await getCurrentUserCompanyId();
+        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
         const s = sql();
         const channels = await s`
           SELECT id, company_id, name, display_name, phone_number,
@@ -49,6 +38,7 @@ export const Route = createFileRoute("/api/evolution/channels")({
                  last_connected_at, active, created_at, updated_at
           FROM public.whatsapp_channels
           WHERE deleted_at IS NULL AND active = true
+            AND company_id = ${companyId}::uuid
           ORDER BY created_at DESC
         `;
         return Response.json({ channels, evolutionConfigured: hasEvoConfig(), webhookUrl: webhookUrl() });
@@ -56,24 +46,26 @@ export const Route = createFileRoute("/api/evolution/channels")({
 
       POST: async ({ request }) => {
         await ensureCrmSchema();
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const companyId = await getCurrentUserCompanyId();
+        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
         const json = await request.json().catch(() => null);
         const parsed = CreateBody.safeParse(json);
         if (!parsed.success) {
           return Response.json({ error: "invalid_input", detail: parsed.error.flatten() }, { status: 400 });
         }
-        const { name, instanceName, companyName, companySlug } = parsed.data;
+        const { name, instanceName } = parsed.data;
         const s = sql();
-        const companyId = await ensureDefaultCompany(companyName, companySlug);
 
-        // Upsert do canal no banco (idempotente por instância). Reativa se soft-deleted.
-        const existing = await s<{ id: string }[]>`
-          SELECT id FROM public.whatsapp_channels
+        // Instância é única globalmente: bloqueia se já pertence a outra empresa.
+        const existing = await s<{ id: string; company_id: string | null }[]>`
+          SELECT id, company_id FROM public.whatsapp_channels
           WHERE lower(channel_type) = 'evolution' AND evolution_instance_name = ${instanceName}
           LIMIT 1
         `;
+        if (existing[0] && existing[0].company_id && existing[0].company_id !== companyId) {
+          return Response.json({ error: "instance_belongs_to_another_company" }, { status: 409 });
+        }
         let channelId: string;
         if (existing[0]) {
           channelId = existing[0].id;
