@@ -1,7 +1,7 @@
 # NexaBoot — deploy como Node server (Easypanel/VM).
 # Multi-stage: build com Bun (respeita bun.lock) e runtime com Node.
-# O build gera /app/dist (dist/client + dist/server/server.js).
-# O runtime precisa de dist + node_modules + package.json.
+# Com o plugin nitro(), o build gera /app/.output (servidor Node auto-contido).
+# A saída .output NÃO precisa de node_modules em runtime.
 
 # ---------- Stage 1: build ----------
 FROM oven/bun:1 AS builder
@@ -12,11 +12,14 @@ WORKDIR /app
 ARG VITE_API_URL=""
 ENV VITE_API_URL=$VITE_API_URL
 
+# Força o preset Node do Nitro durante o build.
+ENV NITRO_PRESET=node-server
+
 # Instala dependências usando o lockfile.
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
-# Copia o restante e gera o build de produção (vite build => dist/).
+# Copia o restante e gera o build de produção (vite build => .output/).
 COPY . .
 RUN bun run build
 
@@ -27,17 +30,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
-ENV NITRO_HOST=0.0.0.0
 ENV NITRO_PORT=3000
+ENV NITRO_HOST=0.0.0.0
 
-# Saída do build + dependências, manifesto e launcher para runtime.
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/server.mjs ./server.mjs
+# Saída auto-contida do Nitro (node-server).
+COPY --from=builder /app/.output ./.output
 
 EXPOSE 3000
 
-# CMD TEMPORÁRIO de diagnóstico — não reinicia (sleep 3600) e mostra exit code.
-# Para produção, troque por: CMD ["node", "server.mjs"]
-CMD ["sh", "-c", "echo '=== NEXABOOT STARTING ===' && pwd && ls -la && echo '=== DIST SERVER ===' && ls -la dist/server && echo '=== SERVER HEAD ===' && sed -n '1,120p' dist/server/server.js && echo '=== ENV ===' && echo PORT=$PORT HOST=$HOST NODE_ENV=$NODE_ENV && echo '=== START NODE ===' && node dist/server/server.js; code=$?; echo '=== NODE EXITED WITH CODE '$code' ==='; sleep 3600"]
+CMD ["node", ".output/server/index.mjs"]

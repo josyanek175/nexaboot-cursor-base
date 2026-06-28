@@ -1,13 +1,20 @@
 // Configuração Vite para deploy como Node server (Easypanel/VM).
-// Alvo Nitro = "node-server": gera .output/server/index.mjs (auto-contido),
-// iniciado com `node .output/server/index.mjs` e escutando em PORT.
 //
-// IMPORTANTE: NÃO usamos mais @lovable.dev/vite-tanstack-config nem
-// @cloudflare/vite-plugin — o build deixou de ter como alvo o Cloudflare Workers.
+// O plugin nitro() (de "nitro/vite") é o que faz o build gerar
+// `.output/server/index.mjs` — um servidor Node real (com listen()),
+// iniciado por `node .output/server/index.mjs`.
+//
+// Sem o nitro(), o tanstackStart faz apenas o build SSR em `dist/`
+// (handler { fetch }, sem servidor HTTP permanente).
+//
+// Preset do Nitro: node-server (padrão em ambiente sem plataforma detectada;
+// reforçado por NITRO_PRESET=node-server no build do Dockerfile).
+// NÃO usamos Cloudflare Workers, Lovable config nem Rsbuild.
 import { defineConfig } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { nitro } from "nitro/vite";
 import viteReact from "@vitejs/plugin-react";
 
 export default defineConfig({
@@ -15,9 +22,10 @@ export default defineConfig({
     // Resolve o alias "@/* -> ./src/*" a partir do tsconfig.json.
     tsConfigPaths(),
     tailwindcss(),
-    // target define o preset do Nitro. node-server => servidor Node tradicional.
-    tanstackStart({ target: "node-server" }),
-    // Plugin React deve vir depois do tanstackStart.
+    tanstackStart(),
+    // Gera a saída Nitro em .output/ (preset node-server).
+    nitro(),
+    // Plugin React deve vir depois do tanstackStart/nitro.
     viteReact(),
   ],
 });
