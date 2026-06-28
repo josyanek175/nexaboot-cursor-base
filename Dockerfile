@@ -30,13 +30,14 @@ ENV HOST=0.0.0.0
 ENV NITRO_HOST=0.0.0.0
 ENV NITRO_PORT=3000
 
-# Saída do build + dependências e manifesto para runtime.
+# Saída do build + dependências, manifesto e launcher para runtime.
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/server.mjs ./server.mjs
 
 EXPOSE 3000
 
-# CMD TEMPORÁRIO de diagnóstico — imprime contexto antes de iniciar o Node.
-# Volte para: CMD ["node", "dist/server/server.js"] após o diagnóstico.
-CMD ["sh", "-c", "echo '=== NEXABOOT STARTING ===' && pwd && ls -la && echo '=== DIST ===' && ls -la dist && echo '=== DIST SERVER ===' && ls -la dist/server && echo '=== ENV ===' && echo PORT=$PORT HOST=$HOST NODE_ENV=$NODE_ENV NITRO_PORT=$NITRO_PORT NITRO_HOST=$NITRO_HOST && echo '=== START NODE ===' && node dist/server/server.js"]
+# CMD TEMPORÁRIO de diagnóstico — não reinicia (sleep 3600) e mostra exit code.
+# Para produção, troque por: CMD ["node", "server.mjs"]
+CMD ["sh", "-c", "echo '=== NEXABOOT STARTING ===' && pwd && ls -la && echo '=== DIST SERVER ===' && ls -la dist/server && echo '=== SERVER HEAD ===' && sed -n '1,120p' dist/server/server.js && echo '=== ENV ===' && echo PORT=$PORT HOST=$HOST NODE_ENV=$NODE_ENV && echo '=== START NODE ===' && node dist/server/server.js; code=$?; echo '=== NODE EXITED WITH CODE '$code' ==='; sleep 3600"]
