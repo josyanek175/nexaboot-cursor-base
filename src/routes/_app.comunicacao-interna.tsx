@@ -3,6 +3,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { MessageSquare, Send, Loader2, Users, AlertTriangle, Plus, X } from "lucide-react";
+import { setUnread as setUnreadStore } from "@/lib/unread-store";
 
 export const Route = createFileRoute("/_app/comunicacao-interna")({
   component: ComunicacaoInternaPage,
@@ -112,6 +113,8 @@ function ComunicacaoInternaPage() {
         const r = await jget<{ chats: ChatRow[] }>("/api/internal-chat/list");
         if (cancel) return;
         setChats(r.chats);
+        // Mantém o badge do menu lateral em sincronia com a soma das não lidas.
+        setUnreadStore("internal", r.chats.reduce((acc, c) => acc + (c.unread || 0), 0));
         setChatsError(null);
       } catch (e) {
         if (!cancel) setChatsError((e as Error).message);
@@ -153,6 +156,22 @@ function ComunicacaoInternaPage() {
     load();
     const id = setInterval(load, 5000);
     return () => { cancel = true; clearInterval(id); };
+  }, [activeId]);
+
+  // Ao abrir um chat: marca como lido e atualiza o badge do menu imediatamente.
+  useEffect(() => {
+    if (!activeId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const r = await jpost<{ count: number }>("/api/internal-chat/mark-read", { chatId: activeId });
+        if (!cancel) setUnreadStore("internal", r.count);
+        if (!cancel) reloadChats(); // zera o contador do chat aberto na lista
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => { cancel = true; };
   }, [activeId]);
 
   // auto scroll

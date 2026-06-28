@@ -7,7 +7,7 @@ import {
 import { canManageInternalGroups } from "@/lib/current-user";
 import { useEffect, useState } from "react";
 import { users, tenants, type Role } from "@/lib/mocks";
-import { subscribeUnread, type UnreadKey } from "@/lib/unread-store";
+import { subscribeUnread, setUnread as setUnreadStore, type UnreadKey } from "@/lib/unread-store";
 import { SessionProvider, useSession } from "@/lib/session";
 import { useAuth } from "@/lib/auth";
 
@@ -62,6 +62,29 @@ function Shell() {
   const [unread, setUnread] = useState({ atendimento: 0, internal: 0 });
 
   useEffect(() => subscribeUnread(setUnread), []);
+
+  // Polling global do contador de Comunicação Interna não lida (a cada 10s).
+  // Mantém o badge do menu atualizado em qualquer página do sistema.
+  useEffect(() => {
+    let cancel = false;
+    const loadUnread = async () => {
+      try {
+        const r = await fetch("/api/internal-chat/unread-count", { credentials: "include" });
+        if (!r.ok) return;
+        const j = (await r.json()) as { count?: number };
+        if (!cancel) setUnreadStore("internal", j.count ?? 0);
+      } catch {
+        /* offline/sem sessão — ignora */
+      }
+    };
+    loadUnread();
+    const id = setInterval(loadUnread, 10000);
+    return () => {
+      cancel = true;
+      clearInterval(id);
+    };
+  }, []);
+
   // Fecha sidebar mobile automaticamente ao navegar entre páginas
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
