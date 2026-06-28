@@ -20,6 +20,115 @@ export function sql() {
   return _sql;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Schema de Atendimento/CRM (Evolution) — banco principal (nexaboot-postgres).
+// Idempotente e NÃO destrutivo: só CREATE TABLE/INDEX IF NOT EXISTS e
+// ADD COLUMN IF NOT EXISTS. Não apaga nada, não usa Supabase/RLS.
+// Padrão com company_id, conforme o código do webhook/atendimento espera.
+// ───────────────────────────────────────────────────────────────────────────
+let _crmReady: Promise<void> | null = null;
+
+export async function ensureCrmSchema() {
+  if (_crmReady) return _crmReady;
+  _crmReady = (async () => {
+    const s = sql();
+    try {
+      await s.unsafe(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+      await s.unsafe(`
+        CREATE TABLE IF NOT EXISTS public.companies (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name TEXT NOT NULL,
+          slug TEXT UNIQUE,
+          active BOOLEAN NOT NULL DEFAULT true,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE TABLE IF NOT EXISTS public.whatsapp_channels (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+          name TEXT,
+          channel_type TEXT NOT NULL DEFAULT 'evolution',
+          evolution_instance_name TEXT,
+          status TEXT NOT NULL DEFAULT 'disconnected',
+          last_connected_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_channels_type_instance
+          ON public.whatsapp_channels(channel_type, evolution_instance_name);
+
+        CREATE TABLE IF NOT EXISTS public.contacts (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+          phone TEXT NOT NULL,
+          name TEXT,
+          external_jid TEXT,
+          contact_type TEXT NOT NULL DEFAULT 'individual',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS contacts_company_phone_uniq
+          ON public.contacts(company_id, phone);
+        CREATE INDEX IF NOT EXISTS idx_contacts_company_phone
+          ON public.contacts(company_id, phone);
+
+        CREATE TABLE IF NOT EXISTS public.conversations (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+          contact_id UUID REFERENCES public.contacts(id) ON DELETE CASCADE,
+          whatsapp_channel_id UUID REFERENCES public.whatsapp_channels(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'open',
+          unread_count INTEGER NOT NULL DEFAULT 0,
+          last_message TEXT,
+          last_message_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_conversations_company ON public.conversations(company_id);
+        CREATE INDEX IF NOT EXISTS idx_conversations_contact ON public.conversations(contact_id);
+        CREATE INDEX IF NOT EXISTS idx_conversations_channel ON public.conversations(whatsapp_channel_id);
+
+        CREATE TABLE IF NOT EXISTS public.messages (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          conversation_id UUID REFERENCES public.conversations(id) ON DELETE CASCADE,
+          external_id TEXT,
+          external_message_id TEXT,
+          direction TEXT,
+          message_type TEXT,
+          message_text TEXT,
+          from_me BOOLEAN NOT NULL DEFAULT false,
+          raw_payload JSONB,
+          media_type TEXT,
+          media_mimetype TEXT,
+          mime_type TEXT,
+          media_filename TEXT,
+          media_caption TEXT,
+          media_base64 TEXT,
+          media_error TEXT,
+          media_url TEXT,
+          media_seconds INTEGER,
+          status TEXT NOT NULL DEFAULT 'received',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation ON public.messages(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_external_id ON public.messages(external_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_external_message_id ON public.messages(external_message_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS messages_conv_extid_uniq
+          ON public.messages(conversation_id, external_message_id)
+          WHERE external_message_id IS NOT NULL;
+      `);
+      console.log("[CRM_SCHEMA_OK]");
+    } catch (e) {
+      const err = e as { message?: string; code?: string; detail?: string };
+      console.error("[CRM_SCHEMA_FAIL]", { message: err.message, code: err.code, detail: err.detail });
+      _crmReady = null; // permite nova tentativa
+      throw e;
+    }
+  })();
+  return _crmReady;
+}
+
 export async function ensureSchema() {
   if (_schemaReady) return _schemaReady;
   _schemaReady = (async () => {

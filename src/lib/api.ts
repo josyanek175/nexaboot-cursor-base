@@ -1,7 +1,10 @@
-const API_URL = import.meta.env.VITE_API_URL;
+// Cliente de API do próprio nexaboot-web (mesma origem, prefixo /api).
+// Fase 1 Evolution: paramos de depender de VITE_API_URL externo.
+// Mantém compatibilidade: se VITE_API_URL for definido, ele é respeitado.
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 export async function apiGet(path: string) {
-  const response = await fetch(`${API_URL}${path}`);
+  const response = await fetch(`${API_URL}${path}`, { credentials: "include" });
   if (!response.ok) {
     throw new Error(`Erro API: ${response.status}`);
   }
@@ -11,6 +14,7 @@ export async function apiGet(path: string) {
 export async function apiPost(path: string, body?: any) {
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },

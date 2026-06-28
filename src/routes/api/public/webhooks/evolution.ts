@@ -6,7 +6,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql } from "@/lib/pg.server";
+import { sql, ensureCrmSchema } from "@/lib/pg.server";
 
 const PayloadSchema = z
   .object({
@@ -61,7 +61,7 @@ async function findChannelByInstance(instance: string): Promise<ChannelRow | nul
   const rows = await s<ChannelRow[]>`
     SELECT id, company_id, evolution_instance_name, name
     FROM public.whatsapp_channels
-    WHERE channel_type = 'EVOLUTION'
+    WHERE lower(channel_type) = 'evolution'
       AND evolution_instance_name = ${instance}
     LIMIT 1
   `;
@@ -256,7 +256,9 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
   const parsed = pickMessageType(msg);
 
   const contactId = await upsertContact(channel.company_id, phone, remoteJid, pushName, fromMe);
+  console.log("[EVOLUTION_CONTACT_UPSERT]", { contactId, phone, fromMe });
   const conversationId = await upsertConversation(channel.company_id, channel.id, contactId);
+  console.log("[EVOLUTION_CONVERSATION_UPSERT]", { conversationId, channelId: channel.id });
 
   let mediaBase64: string | null = null;
   let mimeType: string | null = parsed.mimeType ?? null;
@@ -312,6 +314,10 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
     RETURNING id
   `;
 
+  if (inserted[0]) {
+    console.log("[EVOLUTION_MESSAGE_SAVED]", { messageId: inserted[0].id, conversationId, direction, type: parsed.type });
+  }
+
   if (inserted[0] && mediaBase64) {
     // Após termos o id, gravamos uma URL servida pela própria API.
     const mediaUrl = `/api/messages/${inserted[0].id}/media`;
@@ -355,6 +361,7 @@ export async function handleEvolutionWebhookPOST(request: Request): Promise<Resp
   }
 
   try {
+    await ensureCrmSchema();
     const channel = await findChannelByInstance(String(instance));
     if (!channel) {
       console.log("[WEBHOOK_CHANNEL_NOT_FOUND]", { instance, event });

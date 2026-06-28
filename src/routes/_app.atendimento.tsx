@@ -9,7 +9,7 @@ import {
   Wifi, WifiOff, FlaskConical,
 } from "lucide-react";
 import {
-  getContact, getChannel, getUser, getTenant,
+  getContact, getChannel, getUser,
   channels, contacts, users,
   formatTime, formatBytes,
   type Conversation, type Message, type ConversationStatus, type MessageType,
@@ -17,7 +17,7 @@ import {
 } from "@/lib/mocks";
 import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
-import { canViewConversation, canSeeAllConversations, inTenantScope } from "@/lib/permissions";
+import { canSeeAllConversations, inTenantScope } from "@/lib/permissions";
 import { pushAudit } from "@/lib/audit-log";
 import { sendMedia as evoSendMedia, type EvolutionMediaType } from "@/lib/evolution";
 import { apiGet, apiPost } from "@/lib/api";
@@ -328,7 +328,7 @@ function AtendimentoPage() {
       setMsgsError(null);
     }
     try {
-      const data = await apiGet(`/messages?conversation_id=${encodeURIComponent(convId)}`);
+      const data = await apiGet(`/conversations/${encodeURIComponent(convId)}/messages`);
       if (!opts?.silent) console.log("mensagens retornadas", data);
       const list: any[] = Array.isArray(data?.messages)
         ? data.messages
@@ -417,15 +417,10 @@ function AtendimentoPage() {
   );
 
   const filtered = useMemo(() => {
+    // Fase 1 Evolution: dados reais vêm do banco principal (single-company).
+    // Filtros de tenant/permissão/telefone (baseados em mocks) ficam desligados
+    // aqui para não esconder conversas reais; mantemos status/canal/tipo/busca.
     return convs
-      // 1) Isolamento multitenant + regras por perfil (centralizado em permissions.ts).
-      .filter((c) => {
-        const t = getTenant(c.tenantId);
-        if (!t) return false;
-        return canViewConversation(actor, c, t);
-      })
-      // 2) ADMIN_GERAL respeita o tenant selecionado no switcher (a menos que seja o próprio).
-      .filter((c) => (isSuperAdmin ? c.tenantId === session.tenantId : true))
       .filter((c) => statusFilter === "all" || c.status === statusFilter)
       .filter((c) => channelFilter === "all" || c.channelId === channelFilter)
       .filter((c) => {
@@ -441,23 +436,16 @@ function AtendimentoPage() {
           : c.assignedTo === assigneeFilter,
       )
       .filter((c) => {
-        // Mostrar apenas números brasileiros (DDI 55).
-        const ct = getContact(c.contactId);
-        const phone = (ct?.phone || "").replace(/\D/g, "");
-        if (!phone) return false;
-        return phone.startsWith("55");
-      })
-      .filter((c) => {
         if (!search) return true;
         const ct = getContact(c.contactId);
         if (!ct) return false;
         const s = search.toLowerCase();
-        if (ct.name.toLowerCase().includes(s) || ct.phone.includes(s)) return true;
+        if ((ct.name || "").toLowerCase().includes(s) || (ct.phone || "").includes(s)) return true;
         return (msgs[c.id] ?? []).some((m) => m.text?.toLowerCase().includes(s));
       })
       .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
 
-  }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search, actor, isSuperAdmin, session.tenantId]);
+  }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search]);
 
   // Garante que a conversa selecionada seja sempre uma que o usuário pode ver.
   useEffect(() => {
@@ -541,7 +529,6 @@ function AtendimentoPage() {
     if (!selected || !text.trim()) return;
     const guard = guardSend(selected);
     if (!guard.ok || !guard.channel) return;
-    const channel = guard.channel;
     const contact = getContact(selected.contactId);
 
     const msgId = `m-${Date.now()}`;
@@ -563,10 +550,8 @@ function AtendimentoPage() {
     }
     setDraft("");
 
-    // Envio via REST: POST /messages/send/evolution
-    const instance = conversationInstanceName.get(selected.id) || channel.name || "Principal";
-    const number = conversationPhone.get(selected.id) || contact.phone;
-    const payload = { instance, number, text };
+    // Envio via REST local: POST /api/messages/send/evolution
+    const payload = { conversationId: selected.id, text };
     console.log("send evolution payload", payload);
     try {
       const result = await apiPost("/messages/send/evolution", payload);
