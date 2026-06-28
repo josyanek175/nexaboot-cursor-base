@@ -344,7 +344,45 @@ async function handleConnectionUpdate(channel: ChannelRow, raw: Json) {
   }
 }
 
+/**
+ * Lê o segredo do webhook em qualquer um dos formatos aceitos:
+ * query ?token=, header x-webhook-secret ou header apikey.
+ */
+function readWebhookToken(request: Request): string {
+  const url = new URL(request.url);
+  return (
+    url.searchParams.get("token") ||
+    request.headers.get("x-webhook-secret") ||
+    request.headers.get("apikey") ||
+    ""
+  );
+}
+
+/**
+ * Validação central e obrigatória do EVOLUTION_WEBHOOK_SECRET.
+ * Garante que NENHUM caminho chame a ingestão sem token válido.
+ * Retorna null quando autorizado; uma Response de erro quando bloqueado.
+ */
+function checkWebhookAuth(request: Request): Response | null {
+  console.log("[EVOLUTION_WEBHOOK_RECEIVED]");
+  const expected = process.env.EVOLUTION_WEBHOOK_SECRET;
+  if (!expected) {
+    console.error("[EVOLUTION_WEBHOOK_AUTH_FAIL]", { reason: "secret_not_configured" });
+    return Response.json({ error: "webhook_secret_not_configured" }, { status: 503 });
+  }
+  if (readWebhookToken(request) !== expected) {
+    console.warn("[EVOLUTION_WEBHOOK_AUTH_FAIL]", { reason: "invalid_token" });
+    return Response.json({ error: "invalid_token" }, { status: 401 });
+  }
+  console.log("[EVOLUTION_WEBHOOK_AUTH_OK]");
+  return null;
+}
+
 export async function handleEvolutionWebhookPOST(request: Request): Promise<Response> {
+  // Segurança: validação obrigatória antes de qualquer leitura do corpo.
+  const authError = checkWebhookAuth(request);
+  if (authError) return authError;
+
   let body: z.infer<typeof PayloadSchema>;
   try {
     body = PayloadSchema.parse(await request.json());
