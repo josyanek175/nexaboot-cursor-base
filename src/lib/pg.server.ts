@@ -170,6 +170,15 @@ export async function ensureSchema() {
         );
         CREATE INDEX IF NOT EXISTS internal_messages_chat_idx ON internal_messages(chat_id, created_at);
 
+        -- Anexos (arquivos salvos em disco/volume; banco guarda só metadados + caminho).
+        -- Idempotente e não destrutivo: não remove nem altera mensagens existentes.
+        ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;
+        ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_mime_type TEXT;
+        ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_filename TEXT;
+        ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_original_name TEXT;
+        ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER;
+        ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_type TEXT;
+
         CREATE TABLE IF NOT EXISTS internal_notifications (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,

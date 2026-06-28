@@ -27,3 +27,7 @@ pnpm-debug.log*
 .env
 .env.*
 .dev.vars
+
+# Uploads locais do chat interno — em produção é um VOLUME persistente,
+# não deve ser copiado para a imagem.
+storage

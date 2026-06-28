@@ -1,9 +1,23 @@
 // Comunicação Interna — integrada às APIs reais (/api/auth/* + /api/internal-chat/*).
 // Não usa Supabase, não usa localStorage como banco. Mantém layout split (lista + chat).
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { MessageSquare, Send, Loader2, Users, AlertTriangle, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  MessageSquare, Send, Loader2, Users, AlertTriangle, Plus, X,
+  Paperclip, FileText, Download,
+} from "lucide-react";
 import { setUnread as setUnreadStore } from "@/lib/unread-store";
+
+// Mantém em sincronia com src/lib/internal-upload.server.ts
+const ACCEPT = ".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv";
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+function formatBytes(n: number | null | undefined): string {
+  if (!n || n <= 0) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export const Route = createFileRoute("/_app/comunicacao-interna")({
   component: ComunicacaoInternaPage,
@@ -34,6 +48,10 @@ interface MessageRow {
   sender_name: string;
   body: string;
   created_at: string;
+  attachment_mime_type?: string | null;
+  attachment_original_name?: string | null;
+  attachment_size?: number | null;
+  attachment_type?: "image" | "document" | null;
 }
 
 async function jget<T>(url: string): Promise<T> {
@@ -77,10 +95,43 @@ function ComunicacaoInternaPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Anexo selecionado (ainda não enviado)
+  const [file, setFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Modal "Nova conversa"
   const [newOpen, setNewOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  function clearFile() {
+    setFile(null);
+    setFileError(null);
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function onPickFile(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setFileError(null);
+    if (!f) return;
+    if (f.size > MAX_UPLOAD_BYTES) {
+      setFileError("Arquivo excede o limite de 10 MB.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    const isImage = f.type.startsWith("image/");
+    setFile(f);
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return isImage ? URL.createObjectURL(f) : null;
+    });
+  }
 
   async function reloadChats() {
     try {
@@ -180,23 +231,60 @@ function ComunicacaoInternaPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, activeId]);
 
+  // Limpa anexo selecionado ao trocar de conversa
+  useEffect(() => {
+    setFile(null);
+    setFileError(null);
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [activeId]);
+
+  // Revoga o object URL do preview ao desmontar / quando muda
+  useEffect(() => {
+    return () => {
+      if (filePreview) URL.revokeObjectURL(filePreview);
+    };
+  }, [filePreview]);
+
   const active = useMemo(() => chats.find((c) => c.id === activeId) ?? null, [chats, activeId]);
 
   async function onSend(e: FormEvent) {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || !activeId || sending) return;
+    if ((!text && !file) || !activeId || sending) return;
     setSending(true);
     try {
-      const r = await jpost<{ message: MessageRow }>("/api/internal-chat/send", {
-        chatId: activeId,
-        body: text,
-      });
+      let message: MessageRow;
+      if (file) {
+        // multipart/form-data: texto + arquivo (ou só arquivo)
+        const fd = new FormData();
+        fd.append("chatId", activeId);
+        fd.append("body", text);
+        fd.append("file", file);
+        const r = await fetch("/api/internal-chat/send", {
+          method: "POST",
+          credentials: "include",
+          body: fd,
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error((j as { message?: string; error?: string }).message ?? (j as { error?: string }).error ?? `HTTP ${r.status}`);
+        message = (j as { message: MessageRow }).message;
+      } else {
+        const r = await jpost<{ message: MessageRow }>("/api/internal-chat/send", {
+          chatId: activeId,
+          body: text,
+        });
+        message = r.message;
+      }
       setDraft("");
+      clearFile();
       // injeta otimista
       setMessages((prev) => {
-        if (prev.some((m) => m.id === r.message.id)) return prev;
-        return [...prev, { ...r.message, sender_name: me?.name ?? "Eu" }];
+        if (prev.some((m) => m.id === message.id)) return prev;
+        return [...prev, { ...message, sender_name: me?.name ?? "Eu" }];
       });
     } catch (e) {
       setMsgsError((e as Error).message);
@@ -323,11 +411,40 @@ function ComunicacaoInternaPage() {
               ) : (
                 messages.map((m) => {
                   const mine = m.sender_id === me.id;
+                  const attUrl = m.attachment_type ? `/api/internal-chat/messages/${m.id}/attachment` : null;
                   return (
                     <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                         {!mine && <div className="mb-0.5 text-[10px] font-medium opacity-80">{m.sender_name}</div>}
-                        <div className="whitespace-pre-wrap break-words">{m.body}</div>
+
+                        {attUrl && m.attachment_type === "image" && (
+                          <a href={attUrl} target="_blank" rel="noreferrer" className="block">
+                            <img
+                              src={attUrl}
+                              alt={m.attachment_original_name ?? "imagem"}
+                              className="mb-1 max-h-60 w-auto max-w-full rounded-md object-cover"
+                              loading="lazy"
+                            />
+                          </a>
+                        )}
+
+                        {attUrl && m.attachment_type === "document" && (
+                          <a
+                            href={attUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`mb-1 flex items-center gap-2 rounded-md border px-2.5 py-2 ${mine ? "border-primary-foreground/30 hover:bg-primary-foreground/10" : "border-border bg-background hover:bg-accent"}`}
+                          >
+                            <FileText className="h-5 w-5 shrink-0 opacity-80" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs font-medium">{m.attachment_original_name ?? "Documento"}</span>
+                              <span className="block text-[10px] opacity-70">{formatBytes(m.attachment_size)}</span>
+                            </span>
+                            <Download className="h-4 w-4 shrink-0 opacity-80" />
+                          </a>
+                        )}
+
+                        {m.body && <div className="whitespace-pre-wrap break-words">{m.body}</div>}
                         <div className={`mt-1 text-right text-[10px] ${mine ? "opacity-80" : "text-muted-foreground"}`}>
                           {formatTime(m.created_at)}
                         </div>
@@ -338,24 +455,73 @@ function ComunicacaoInternaPage() {
               )}
             </div>
 
-            <form onSubmit={onSend} className="flex gap-2 border-t border-border bg-card p-3">
-              <input
-                type="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Digite uma mensagem…"
-                className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                disabled={sending}
-              />
-              <button
-                type="submit"
-                disabled={sending || !draft.trim()}
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-              >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Enviar
-              </button>
-            </form>
+            <div className="border-t border-border bg-card">
+              {/* Preview do anexo selecionado */}
+              {(file || fileError) && (
+                <div className="flex items-center gap-3 px-3 pt-3">
+                  {fileError ? (
+                    <div className="flex-1 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{fileError}</div>
+                  ) : file ? (
+                    <div className="flex flex-1 items-center gap-3 rounded-md border border-border bg-background p-2">
+                      {filePreview ? (
+                        <img src={filePreview} alt="preview" className="h-12 w-12 rounded object-cover" />
+                      ) : (
+                        <div className="grid h-12 w-12 place-items-center rounded bg-muted">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium">{file.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{formatBytes(file.size)}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearFile}
+                        className="rounded p-1 text-muted-foreground hover:bg-accent"
+                        title="Remover anexo"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <form onSubmit={onSend} className="flex items-center gap-2 p-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ACCEPT}
+                  onChange={onPickFile}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sending}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent disabled:opacity-50"
+                  title="Anexar arquivo"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+                <input
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Digite uma mensagem…"
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                  disabled={sending}
+                />
+                <button
+                  type="submit"
+                  disabled={sending || (!draft.trim() && !file)}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Enviar
+                </button>
+              </form>
+            </div>
           </>
         )}
       </section>

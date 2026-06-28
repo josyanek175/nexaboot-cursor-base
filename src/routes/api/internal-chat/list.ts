@@ -21,7 +21,13 @@ export const Route = createFileRoute("/api/internal-chat/list")({
               ), c.name)
               ELSE c.name
             END AS name,
-            (SELECT body FROM internal_messages m WHERE m.chat_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message,
+            (SELECT CASE
+                      WHEN m.body <> '' THEN m.body
+                      WHEN m.attachment_type = 'image' THEN '📷 Imagem'
+                      WHEN m.attachment_type IS NOT NULL THEN '📎 Anexo'
+                      ELSE m.body
+                    END
+               FROM internal_messages m WHERE m.chat_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message,
             (SELECT created_at FROM internal_messages m WHERE m.chat_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_at,
             (SELECT COUNT(*) FROM internal_notifications n WHERE n.user_id = ${uid} AND n.chat_id = c.id AND n.read_at IS NULL)::int AS unread
           FROM internal_chats c

@@ -20,6 +20,8 @@ export const Route = createFileRoute("/api/internal-chat/messages")({
 
         const messages = await s`
           SELECT m.id, m.chat_id, m.sender_id, m.body, m.created_at,
+                 m.attachment_mime_type, m.attachment_original_name,
+                 m.attachment_size, m.attachment_type,
                  u.name AS sender_name
           FROM internal_messages m
           JOIN users u ON u.id = m.sender_id

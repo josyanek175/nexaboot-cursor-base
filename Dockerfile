@@ -33,6 +33,12 @@ ENV HOST=0.0.0.0
 ENV NITRO_PORT=3000
 ENV NITRO_HOST=0.0.0.0
 
+# Pasta de anexos da Comunicação Interna. No Easypanel, monte um VOLUME
+# persistente em /app/storage/internal-chat para não perder arquivos em redeploy.
+# A pasta é criada aqui só como fallback; o volume montado tem prioridade.
+ENV INTERNAL_UPLOAD_DIR=/app/storage/internal-chat
+RUN mkdir -p /app/storage/internal-chat
+
 # Saída auto-contida do Nitro (node-server).
 COPY --from=builder /app/.output ./.output
 
