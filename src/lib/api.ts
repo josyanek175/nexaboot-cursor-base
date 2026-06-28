@@ -21,6 +21,24 @@ export async function apiPost(path: string, body?: any) {
     body: JSON.stringify(body || {}),
   });
   if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.error ? ` (${data.error})` : "";
+    } catch {
+      // resposta sem corpo JSON
+    }
+    throw new Error(`Erro API: ${response.status}${detail}`);
+  }
+  return response.json();
+}
+
+export async function apiDelete(path: string) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!response.ok) {
     throw new Error(`Erro API: ${response.status}`);
   }
   return response.json();

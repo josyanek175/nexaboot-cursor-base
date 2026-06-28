@@ -58,6 +58,12 @@ export async function ensureCrmSchema() {
         CREATE INDEX IF NOT EXISTS idx_channels_type_instance
           ON public.whatsapp_channels(channel_type, evolution_instance_name);
 
+        -- Colunas extras para a tela de gestão de canais (idempotente).
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS phone_number TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS display_name TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
         CREATE TABLE IF NOT EXISTS public.contacts (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
