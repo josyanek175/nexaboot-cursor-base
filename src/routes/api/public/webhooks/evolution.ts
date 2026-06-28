@@ -26,15 +26,28 @@ type ChannelRow = {
 };
 
 type ParsedMsg = {
-  type: "text" | "image" | "audio" | "video" | "document";
+  type: "text" | "image" | "audio" | "video" | "document" | "reaction";
   body?: string;
   mimeType?: string;
   fileName?: string;
   durationSeconds?: number;
+  reactionEmoji?: string;
+  reactionToId?: string;
 };
 
 function pickMessageType(msg: Json): ParsedMsg {
   const m = (msg.message ?? {}) as any;
+  // Reação (emoji) do WhatsApp — nunca tratar como "não suportada".
+  if (m.reactionMessage) {
+    const emoji = typeof m.reactionMessage.text === "string" ? m.reactionMessage.text : "";
+    const reactionToId: string | undefined = m.reactionMessage.key?.id ?? undefined;
+    return {
+      type: "reaction",
+      body: emoji ? `Reagiu com ${emoji}` : "Removeu a reação",
+      reactionEmoji: emoji || undefined,
+      reactionToId,
+    };
+  }
   if (typeof m.conversation === "string") return { type: "text", body: m.conversation };
   if (m.extendedTextMessage?.text) return { type: "text", body: m.extendedTextMessage.text };
   if (m.imageMessage)
@@ -263,7 +276,7 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
   let mediaBase64: string | null = null;
   let mimeType: string | null = parsed.mimeType ?? null;
   let mediaError: string | null = null;
-  const isMedia = parsed.type !== "text";
+  const isMedia = parsed.type !== "text" && parsed.type !== "reaction";
 
   if (isMedia) {
     // Inclui o nome da instância no payload para o helper resolver o endpoint.
@@ -302,12 +315,14 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
       conversation_id, external_id, external_message_id, direction,
       message_type, message_text, from_me, raw_payload,
       media_type, media_mimetype, mime_type, media_filename,
-      media_caption, media_base64, media_error, media_url, status
+      media_caption, media_base64, media_error, media_url, status,
+      reaction_emoji, reaction_to_message_id
     ) VALUES (
       ${conversationId}::uuid, ${externalId}, ${externalId}, ${direction},
       ${parsed.type}, ${parsed.body ?? null}, ${fromMe}, ${fullPayload as any}::jsonb,
       ${isMedia ? parsed.type : null}, ${mimeType}, ${mimeType}, ${parsed.fileName ?? null},
-      ${parsed.body ?? null}, ${mediaBase64}, ${mediaError}, ${null}, 'received'
+      ${parsed.body ?? null}, ${mediaBase64}, ${mediaError}, ${null}, 'received',
+      ${parsed.reactionEmoji ?? null}, ${parsed.reactionToId ?? null}
     )
     ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
     DO NOTHING

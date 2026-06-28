@@ -19,7 +19,7 @@ import { setUnread } from "@/lib/unread-store";
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
 type ConversationStatus = "open" | "waiting" | "finished";
-type MessageType = "text" | "image" | "audio" | "document" | "video" | "internal";
+type MessageType = "text" | "image" | "audio" | "document" | "video" | "internal" | "reaction";
 type MessageDirection = "in" | "out";
 type MessageStatus = "sent" | "delivered" | "read" | "error";
 type ChannelStatus = "connected" | "connecting" | "qrcode" | "disconnected" | "error";
@@ -76,6 +76,7 @@ interface Message {
   authorName?: string;
   isInternalNote?: boolean;
   thumbnailUrl?: string;
+  reactionEmoji?: string;
 }
 
 // ───────── Utilitários de formatação ─────────
@@ -269,7 +270,7 @@ function transformApiMessage(m: any, conversationId: string): Message {
   const mediaType = m.media_type ?? m.mediaType ?? undefined;
   const rawType = mediaType || m.message_type || m.type || "text";
   const type: MessageType =
-    rawType === "image" || rawType === "audio" || rawType === "video" || rawType === "document" || rawType === "internal"
+    rawType === "image" || rawType === "audio" || rawType === "video" || rawType === "document" || rawType === "internal" || rawType === "reaction"
       ? rawType
       : "text";
 
@@ -324,9 +325,10 @@ function transformApiMessage(m: any, conversationId: string): Message {
     durationSeconds: m.media_duration ?? m.duration_seconds ?? m.durationSeconds ?? undefined,
     status,
     createdAt: m.created_at ?? m.createdAt ?? new Date().toISOString(),
-    authorName: m.author_name ?? m.authorName,
+    authorName: m.author_name ?? m.authorName ?? m.sent_by_name ?? undefined,
     thumbnailUrl,
     mediaError,
+    reactionEmoji: m.reaction_emoji ?? m.reactionEmoji ?? undefined,
   };
 }
 
@@ -1320,6 +1322,20 @@ function BubbleInner({ m }: { m: Message }) {
       </div>
     );
   }
+  if (m.type === "reaction") {
+    const reactedOut = m.direction === "out";
+    const who = reactedOut ? (m.authorName || "Atendente") : "Cliente";
+    const reactionLabel = m.reactionEmoji
+      ? `${who} reagiu com ${m.reactionEmoji}`
+      : (m.text || `${who} reagiu`);
+    return (
+      <div className="flex justify-center">
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground">
+          {reactionLabel}
+        </span>
+      </div>
+    );
+  }
   const isMedia = m.type === "image" || m.type === "audio" || m.type === "video" || m.type === "document";
   // Estratégia definitiva: media_url já vem salvo pelo webhook (storage público).
   // Não tentamos mais resolver via proxy/base64 sob demanda.
@@ -1494,6 +1510,8 @@ function BubbleInner({ m }: { m: Message }) {
           m.text && <div className="whitespace-pre-wrap">{m.text}</div>
         )}
         <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+          {out && m.authorName && <span className="font-medium">{m.authorName}</span>}
+          {out && m.authorName && <span aria-hidden>·</span>}
           <span>{formatTime(m.createdAt)}</span>
           {out && <StatusIcon status={m.status} />}
         </div>

@@ -5,6 +5,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { getSessionUserId } from "@/lib/session.server";
 
 const Body = z.object({
   conversationId: z.string().uuid(),
@@ -25,6 +26,17 @@ export const Route = createFileRoute("/api/messages/send/evolution")({
         const { conversationId, text } = parsed.data;
 
         const s = sql();
+
+        // Autoria: usuário logado, restrito à mesma empresa (nunca outra).
+        const uid = getSessionUserId();
+        const attendantRows = uid
+          ? await s<{ id: string; name: string | null }[]>`
+              SELECT id, name FROM public.users
+              WHERE id = ${uid}::uuid AND company_id = ${companyId}::uuid
+              LIMIT 1
+            `
+          : [];
+        const attendant = attendantRows[0] ?? null;
         const rows = await s<{
           id: string;
           company_id: string;
@@ -88,12 +100,15 @@ export const Route = createFileRoute("/api/messages/send/evolution")({
         const inserted = await s`
           INSERT INTO public.messages
             (conversation_id, external_id, external_message_id, direction,
-             message_type, message_text, from_me, status)
+             message_type, message_text, from_me, status,
+             sent_by_user_id, sent_by_name)
           VALUES
             (${conversationId}::uuid, ${providerId}, ${providerId}, 'out',
-             'text', ${text}, true, 'sent')
+             'text', ${text}, true, 'sent',
+             ${attendant?.id ?? null}, ${attendant?.name ?? null})
           RETURNING id, conversation_id, direction, message_type,
-                    message_text AS body, from_me, status, created_at
+                    message_text AS body, from_me, status, created_at,
+                    sent_by_user_id, sent_by_name
         `;
         await s`
           UPDATE public.conversations

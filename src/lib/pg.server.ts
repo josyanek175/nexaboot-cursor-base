@@ -223,6 +223,13 @@ export async function ensureCrmSchema() {
         CREATE UNIQUE INDEX IF NOT EXISTS messages_conv_extid_uniq
           ON public.messages(conversation_id, external_message_id)
           WHERE external_message_id IS NOT NULL;
+
+        -- Autoria do atendente (Fase 2.2) e reações do WhatsApp. Idempotente e
+        -- não destrutivo: mensagens antigas ficam com estes campos NULL.
+        ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sent_by_user_id UUID;
+        ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sent_by_name TEXT;
+        ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_emoji TEXT;
+        ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_to_message_id TEXT;
       `);
 
       // ── Regra de segurança NexaBoot: proibido apagar em cascata ──
