@@ -379,6 +379,10 @@ function AtendimentoPage() {
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const [draft, setDraft] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  // Busca de contatos reais (mesmo sem conversa) para iniciar atendimento.
+  const [contactResults, setContactResults] = useState<Contact[]>([]);
+  const [searchingContacts, setSearchingContacts] = useState(false);
+  const [startingContactId, setStartingContactId] = useState<string>("");
 
   // Snapshot anterior para detectar mensagens novas no polling.
   const prevConvsRef = useRef<Map<string, string>>(new Map());
@@ -607,6 +611,85 @@ function AtendimentoPage() {
       .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
 
   }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search]);
+
+  // Busca contatos reais (mesmo sem conversa) em /api/contacts?q= ao digitar.
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 2) {
+      setContactResults([]);
+      setSearchingContacts(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchingContacts(true);
+    const t = setTimeout(async () => {
+      try {
+        const data = await apiGet(`/contacts?q=${encodeURIComponent(q)}`);
+        const list: any[] = Array.isArray(data?.contacts) ? data.contacts : [];
+        if (cancelled) return;
+        setContactResults(
+          list.map((c) => ({
+            id: c.id,
+            tenantId: session.tenantId,
+            name: c.name || c.phone || "Contato",
+            phone: c.phone || "",
+            email: c.email ?? undefined,
+            avatarColor: c.avatar_color || colorFor(String(c.phone || c.id)),
+          })),
+        );
+      } catch {
+        if (!cancelled) setContactResults([]);
+      } finally {
+        if (!cancelled) setSearchingContacts(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [search, session.tenantId]);
+
+  // Contatos que casaram com a busca mas ainda NÃO possuem conversa carregada.
+  const contactsWithoutConversation = useMemo(() => {
+    if (!search.trim()) return [];
+    const withConv = new Set(convs.map((c) => c.contactId));
+    return contactResults.filter((ct) => !withConv.has(ct.id));
+  }, [contactResults, convs, search]);
+
+  /** Resolve o canal real para iniciar uma conversa nova. */
+  function resolveStartChannelId(): string | null {
+    if (channelFilter !== "all") return channelFilter;
+    if (tenantChannels.length === 1) return tenantChannels[0].id;
+    return null;
+  }
+
+  /** Abre/cria uma conversa real para um contato sem conversa, num canal real. */
+  async function startConversationWithContact(ct: Contact) {
+    if (tenantChannels.length === 0) {
+      toast.error("Nenhum canal real disponível. Conecte um canal em Canais.");
+      return;
+    }
+    const channelId = resolveStartChannelId();
+    if (!channelId) {
+      toast.info("Selecione um canal no filtro para iniciar a conversa.");
+      return;
+    }
+    setStartingContactId(ct.id);
+    try {
+      const res = await apiPost("/conversations/start", { contactId: ct.id, channelId });
+      const convId: string | undefined = res?.conversationId;
+      if (!convId) throw new Error("resposta inválida do servidor");
+      // Registra o contato localmente para getContact resolver de imediato.
+      if (!contacts.find((x) => x.id === ct.id)) contacts.push(ct);
+      await reloadConversations({ silent: true });
+      setSelectedId(convId);
+      setMobileView("chat");
+      setSearch("");
+      setContactResults([]);
+      toast.success(res?.created ? "Conversa iniciada" : "Conversa aberta");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao iniciar conversa");
+    } finally {
+      setStartingContactId("");
+    }
+  }
 
   // Garante que a conversa selecionada seja sempre uma que o usuário pode ver.
   useEffect(() => {
@@ -918,8 +1001,28 @@ function AtendimentoPage() {
               onClick={() => { setSelectedId(c.id); setMobileView("chat"); }}
             />
           ))}
-          {!loadingConvs && !convsError && filtered.length === 0 && (
-            <li className="p-6 text-center text-sm text-muted-foreground">Nenhuma conversa encontrada.</li>
+
+          {/* Contatos reais sem conversa — permite iniciar um novo atendimento. */}
+          {!loadingConvs && !convsError && search.trim().length >= 2 && contactsWithoutConversation.length > 0 && (
+            <>
+              <li className="bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Contatos sem conversa
+              </li>
+              {contactsWithoutConversation.map((ct) => (
+                <ContactResultRow
+                  key={`ctr-${ct.id}`}
+                  contact={ct}
+                  starting={startingContactId === ct.id}
+                  onClick={() => startConversationWithContact(ct)}
+                />
+              ))}
+            </>
+          )}
+
+          {!loadingConvs && !convsError && filtered.length === 0 && contactsWithoutConversation.length === 0 && (
+            <li className="p-6 text-center text-sm text-muted-foreground">
+              {search.trim().length >= 2 && searchingContacts ? "Buscando contatos…" : "Nenhuma conversa encontrada."}
+            </li>
           )}
         </ul>
       </section>
@@ -1052,6 +1155,37 @@ function ConversationRow({
               <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">Grupo</span>
             )}
             <StatusChip status={conv.status} />
+          </div>
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function ContactResultRow({
+  contact, starting, onClick,
+}: { contact: Contact; starting?: boolean; onClick: () => void }) {
+  return (
+    <li>
+      <button
+        onClick={onClick}
+        disabled={starting}
+        className="flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-muted/60 disabled:opacity-60"
+      >
+        <div
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+          style={{ backgroundColor: contact.avatarColor }}
+        >
+          {(contact.name || contact.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("")}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{contact.name || contact.phone}</div>
+          {contact.phone && <div className="truncate text-xs text-muted-foreground">{contact.phone}</div>}
+          <div className="mt-1">
+            <span className="inline-flex items-center gap-1 rounded bg-whatsapp/10 px-1.5 py-0.5 text-[10px] font-medium text-whatsapp">
+              <UserPlus className="h-3 w-3" />
+              {starting ? "Abrindo…" : "Novo atendimento"}
+            </span>
           </div>
         </div>
       </button>
