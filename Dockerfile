@@ -37,4 +37,6 @@ COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 
-CMD ["node", "dist/server/server.js"]
+# CMD TEMPORÁRIO de diagnóstico — imprime contexto antes de iniciar o Node.
+# Volte para: CMD ["node", "dist/server/server.js"] após o diagnóstico.
+CMD ["sh", "-c", "echo '=== NEXABOOT STARTING ===' && pwd && ls -la && echo '=== DIST ===' && ls -la dist && echo '=== DIST SERVER ===' && ls -la dist/server && echo '=== ENV ===' && echo PORT=$PORT HOST=$HOST NODE_ENV=$NODE_ENV NITRO_PORT=$NITRO_PORT NITRO_HOST=$NITRO_HOST && echo '=== START NODE ===' && node dist/server/server.js"]
