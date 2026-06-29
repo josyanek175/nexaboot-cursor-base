@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { sql, ensureSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireCompanyId } from "@/lib/company.server";
 
 const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI"]);
 
@@ -19,7 +20,7 @@ async function getActor() {
   const uid = getSessionUserId();
   if (!uid) return null;
   const rows = await sql()`
-    SELECT id, email, name, role, tenant_id
+    SELECT id, email, name, role, tenant_id, company_id
     FROM public.users WHERE id = ${uid}
   `;
   return rows[0] ?? null;
@@ -34,6 +35,9 @@ export const Route = createFileRoute("/api/users/$id")({
     handlers: {
       GET: async ({ params }) => {
         await ensureSchema();
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
         if (!ADMIN_ROLES.has(String(actor.role))) {
@@ -41,10 +45,10 @@ export const Route = createFileRoute("/api/users/$id")({
         }
         if (!isUuid(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
         const rows = await sql()`
-          SELECT id, tenant_id, name, email, role, active, avatar_url,
+          SELECT id, tenant_id, company_id, name, email, role, active, avatar_url,
                  last_login_at, created_at, updated_at
           FROM public.users
-          WHERE id = ${params.id} AND tenant_id = ${actor.tenant_id}
+          WHERE id = ${params.id} AND company_id = ${companyId}::uuid
         `;
         if (!rows[0]) return Response.json({ error: "not_found" }, { status: 404 });
         return Response.json({ user: rows[0] });
@@ -52,6 +56,9 @@ export const Route = createFileRoute("/api/users/$id")({
 
       PUT: async ({ request, params }) => {
         await ensureSchema();
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
         if (!ADMIN_ROLES.has(String(actor.role))) {
@@ -70,7 +77,7 @@ export const Route = createFileRoute("/api/users/$id")({
 
         const target = await sql()`
           SELECT id FROM public.users
-          WHERE id = ${params.id} AND tenant_id = ${actor.tenant_id}
+          WHERE id = ${params.id} AND company_id = ${companyId}::uuid
         `;
         if (!target[0]) return Response.json({ error: "not_found" }, { status: 404 });
 
@@ -89,8 +96,8 @@ export const Route = createFileRoute("/api/users/$id")({
               avatar_url    = COALESCE(${d.avatar_url ?? null}, avatar_url),
               password_hash = COALESCE(${passwordHash}, password_hash),
               updated_at    = now()
-            WHERE id = ${params.id} AND tenant_id = ${actor.tenant_id}
-            RETURNING id, tenant_id, name, email, role, active, avatar_url,
+            WHERE id = ${params.id} AND company_id = ${companyId}::uuid
+            RETURNING id, tenant_id, company_id, name, email, role, active, avatar_url,
                       last_login_at, created_at, updated_at
           `;
           return Response.json({ user: rows[0] });
@@ -109,6 +116,9 @@ export const Route = createFileRoute("/api/users/$id")({
 
       DELETE: async ({ params }) => {
         await ensureSchema();
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
         if (!ADMIN_ROLES.has(String(actor.role))) {
@@ -120,7 +130,7 @@ export const Route = createFileRoute("/api/users/$id")({
         }
         const rows = await sql()`
           UPDATE public.users SET active = false, updated_at = now()
-          WHERE id = ${params.id} AND tenant_id = ${actor.tenant_id}
+          WHERE id = ${params.id} AND company_id = ${companyId}::uuid
           RETURNING id, active
         `;
         if (!rows[0]) return Response.json({ error: "not_found" }, { status: 404 });

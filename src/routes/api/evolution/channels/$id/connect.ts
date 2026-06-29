@@ -2,7 +2,7 @@
 // configura o webhook e retorna o QR Code para escanear.
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
   connectInstanceEvo, extractQr, instanceState, mapEvoStatus,
@@ -15,8 +15,9 @@ export const Route = createFileRoute("/api/evolution/channels/$id/connect")({
     handlers: {
       POST: async ({ params }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
         if (!hasEvoConfig()) return Response.json({ error: "missing_evolution_config" }, { status: 400 });
 

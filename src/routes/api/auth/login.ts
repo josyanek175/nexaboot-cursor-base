@@ -105,12 +105,13 @@ export const Route = createFileRoute("/api/auth/login")({
           name: string;
           role: string;
           tenant_id: string;
+          company_id: string | null;
           password_hash: unknown;
           active: boolean | null;
         }>;
         try {
           rows = (await s`
-            SELECT id, email, name, role, tenant_id, password_hash, active
+            SELECT id, email, name, role, tenant_id, company_id, password_hash, active
             FROM public.users
             WHERE lower(email) = ${email}
             LIMIT 1
@@ -176,6 +177,42 @@ export const Route = createFileRoute("/api/auth/login")({
         });
         if (!bcryptMatch) {
           return Response.json({ error: "invalid_password" }, { status: 401 });
+        }
+
+        // 5.1) EMPRESA OBRIGATÓRIA (isolamento multitenant) --------------
+        // Decisão oficial: company_id é a fonte única de isolamento. Nenhum
+        // usuário opera sem empresa válida. Nesta fase TODOS os perfis exigem
+        // empresa válida (inclusive ADMIN_GERAL/SUPER_ADMIN), pois ainda não há
+        // tratamento explícito de acesso multiempresa.
+        let companyValid = false;
+        let companyName: string | null = null;
+        if (u.company_id) {
+          try {
+            const c = await s`
+              SELECT id, name FROM public.companies WHERE id = ${u.company_id}::uuid LIMIT 1
+            `;
+            if (c[0]) {
+              companyValid = true;
+              companyName = (c[0] as { name: string }).name;
+            }
+          } catch (e) {
+            console.error("[LOGIN_COMPANY_CHECK_FAIL]", { userId: u.id, message: (e as Error).message });
+          }
+        }
+        console.log("[LOGIN_COMPANY_CHECK]", {
+          userId: u.id,
+          company_id: u.company_id,
+          companyValid,
+        });
+        if (!companyValid) {
+          console.warn("[LOGIN_BLOCKED_NO_COMPANY]", { userId: u.id, email: u.email, role: u.role });
+          return Response.json(
+            {
+              error: "no_company",
+              message: "Usuário sem empresa vinculada. Contate o administrador.",
+            },
+            { status: 403 },
+          );
         }
 
         // 6) Tenant — apenas diagnóstico, NÃO bloqueia o login -----------
@@ -246,6 +283,9 @@ export const Route = createFileRoute("/api/auth/login")({
               name: u.name,
               role: u.role,
               tenant_id: u.tenant_id,
+              company_id: u.company_id,
+              company_name: companyName,
+              company_valid: true,
             },
             diag: {
               db: dbMeta?.database ?? null,

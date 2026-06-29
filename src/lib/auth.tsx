@@ -21,6 +21,9 @@ interface DbUser {
   name: string;
   role: string;
   tenant_id: string;
+  company_id?: string | null;
+  company_name?: string | null;
+  company_valid?: boolean;
 }
 
 function toUser(u: DbUser): User {
@@ -39,12 +42,19 @@ interface AuthContextValue {
   tenant: Tenant | null;
   isAuthenticated: boolean;
   hydrated: boolean;
+  /** Isolamento oficial por company_id: false bloqueia módulos operacionais. */
+  companyValid: boolean;
+  companyName: string | null;
+  companyMessage: string | null;
   attempts: number;
   lockedUntil: number | null;
   login: (email: string, password: string, remember: boolean) => Promise<LoginResult>;
   logout: () => void;
   requestPasswordReset: (email: string) => Promise<void>;
 }
+
+const NO_COMPANY_MESSAGE =
+  "Seu usuário não está vinculado a uma empresa. Contate o administrador.";
 
 export type LoginResult =
   | { ok: true }
@@ -60,6 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [companyValid, setCompanyValid] = useState(true);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [companyMessage, setCompanyMessage] = useState<string | null>(null);
 
   // Hidratação: pergunta ao backend quem está logado pelo cookie.
   useEffect(() => {
@@ -71,8 +84,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { Accept: "application/json" },
         });
         if (!res.ok) throw new Error("me failed");
-        const data = (await res.json()) as { user: DbUser | null };
-        if (!cancelled && data.user) setUser(toUser(data.user));
+        const data = (await res.json()) as {
+          user: DbUser | null;
+          company_message?: string;
+        };
+        if (!cancelled && data.user) {
+          setUser(toUser(data.user));
+          const valid = data.user.company_valid !== false;
+          setCompanyValid(valid);
+          setCompanyName(data.user.company_name ?? null);
+          setCompanyMessage(valid ? null : data.company_message ?? NO_COMPANY_MESSAGE);
+        }
       } catch {
         /* sem sessão */
       } finally {
@@ -109,10 +131,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user?: DbUser;
           error?: string;
           reason?: string;
+          message?: string;
         };
 
         if (!res.ok) {
           const code = data?.error ?? "unknown_error";
+
+          // Usuário sem empresa válida: bloqueio claro, NÃO conta como tentativa
+          // de senha (credenciais estavam corretas) e não dispara lockout.
+          if (code === "no_company") {
+            pushAudit({
+              tenantId: null,
+              actorId: "anonymous",
+              actorName: email,
+              action: "auth.login.blocked_no_company",
+              targetType: "auth",
+              targetId: email,
+              result: "denied",
+              reason: "Login bloqueado: usuário sem empresa vinculada.",
+            });
+            return {
+              ok: false,
+              reason: "blocked",
+              message:
+                data?.message ??
+                "Usuário sem empresa vinculada. Contate o administrador.",
+            };
+          }
+
           // Erros de infraestrutura não devem contar como tentativa nem bloquear.
           const isInfra = code === "db_connection_error" || code === "session_not_created";
 
@@ -172,6 +218,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const u = toUser(data.user);
         setUser(u);
+        const valid = data.user.company_valid !== false;
+        setCompanyValid(valid);
+        setCompanyName(data.user.company_name ?? null);
+        setCompanyMessage(valid ? null : NO_COMPANY_MESSAGE);
         setAttempts(0);
         setLockedUntil(null);
         pushAudit({
@@ -199,6 +249,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     const current = user;
     setUser(null);
+    setCompanyValid(true);
+    setCompanyName(null);
+    setCompanyMessage(null);
     fetch("/api/auth/me?action=logout", {
       method: "POST",
       credentials: "include",
@@ -251,6 +304,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tenant,
     isAuthenticated: !!user,
     hydrated,
+    companyValid,
+    companyName,
+    companyMessage,
     attempts,
     lockedUntil,
     login,

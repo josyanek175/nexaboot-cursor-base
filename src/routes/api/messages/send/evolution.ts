@@ -4,7 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 
 const Body = z.object({
@@ -17,8 +17,9 @@ export const Route = createFileRoute("/api/messages/send/evolution")({
     handlers: {
       POST: async ({ request }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
 
         const json = await request.json().catch(() => null);
         const parsed = Body.safeParse(json);

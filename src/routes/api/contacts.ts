@@ -7,7 +7,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 
 const CreateBody = z.object({
@@ -25,8 +25,9 @@ export const Route = createFileRoute("/api/contacts")({
     handlers: {
       GET: async ({ request }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
 
         const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
         const s = sql();
@@ -63,8 +64,9 @@ export const Route = createFileRoute("/api/contacts")({
 
       POST: async ({ request }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
 
         const json = await request.json().catch(() => null);
         const parsed = CreateBody.safeParse(json);

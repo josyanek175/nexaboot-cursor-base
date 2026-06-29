@@ -1,7 +1,7 @@
 // POST /api/conversations/:id/read — zera o contador de não lidas da conversa.
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -10,8 +10,9 @@ export const Route = createFileRoute("/api/conversations/$id/read")({
     handlers: {
       POST: async ({ params }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
 
         const s = sql();

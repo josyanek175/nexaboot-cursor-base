@@ -3,7 +3,6 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { sql, ensureSchema } from "@/lib/pg.server";
 import {
-  getSessionUserId,
   buildSessionSetCookie,
   describeSessionCookie,
   hasSessionSecret,
@@ -17,20 +16,11 @@ const Body = z.object({
   role: z.enum(["ADMIN", "USER"]).optional(),
 });
 
-async function getCurrentUser() {
-  const uid = getSessionUserId();
-  if (!uid) return null;
-  const s = sql();
-  const rows = await s`
-    SELECT id, email, name, role, tenant_id FROM public.users WHERE id = ${uid}
-  `;
-  return rows[0] ?? null;
-}
-
 export const Route = createFileRoute("/api/auth/register")({
   server: {
     handlers: {
-      // GET: informa o modo atual (bootstrap / admin / forbidden)
+      // GET: informa o modo atual. O cadastro público só existe para BOOTSTRAP
+      // (primeiro usuário). Demais usuários são criados pela gestão (/api/users).
       GET: async () => {
         try {
           await ensureSchema();
@@ -38,9 +28,7 @@ export const Route = createFileRoute("/api/auth/register")({
           const count = await s`SELECT COUNT(*)::int AS c FROM public.users`;
           const total = Number(count[0]?.c ?? 0);
           if (total === 0) return Response.json({ mode: "bootstrap" });
-          const me = await getCurrentUser();
-          if (me?.role === "ADMIN") return Response.json({ mode: "admin", me });
-          return Response.json({ mode: "forbidden", me });
+          return Response.json({ mode: "forbidden" });
         } catch (e) {
           console.error("[register:GET] erro:", e);
           return Response.json(
@@ -75,32 +63,26 @@ export const Route = createFileRoute("/api/auth/register")({
           const count = await s`SELECT COUNT(*)::int AS c FROM public.users`;
           const isBootstrap = Number(count[0]?.c ?? 0) === 0;
 
-          let actor: { role: string; tenant_id: string } | null = null;
+          // Segurança multitenant: NÃO existe criação de usuário operacional sem
+          // empresa por este endpoint. A gestão de usuários (com empresa vinculada)
+          // é feita por /api/users, que grava company_id = empresa do administrador.
+          // O register público fica restrito ao BOOTSTRAP (primeiro usuário), que
+          // cria a própria empresa para não nascer sem vínculo.
           if (!isBootstrap) {
-            const me = await getCurrentUser();
-            if (!me) {
-              return Response.json(
-                { error: "Não autenticado. Faça login como administrador." },
-                { status: 401 },
-              );
-            }
-            if (me.role !== "ADMIN") {
-              return Response.json(
-                { error: "Apenas administradores podem criar usuários" },
-                { status: 403 },
-              );
-            }
-            actor = { role: String(me.role), tenant_id: String(me.tenant_id ?? "default") };
+            return Response.json(
+              {
+                error:
+                  "Cadastro indisponível. Usuários devem ser criados pela gestão de usuários, vinculados a uma empresa.",
+              },
+              { status: 403 },
+            );
           }
 
           const email = parsed.data.email.toLowerCase().trim();
           const name = parsed.data.name.trim();
           const password = parsed.data.password;
-          const role = isBootstrap ? "ADMIN" : (parsed.data.role ?? "USER");
-          const tenantId =
-            parsed.data.tenantId?.trim() ||
-            actor?.tenant_id ||
-            "default";
+          const role = "ADMIN";
+          const tenantId = parsed.data.tenantId?.trim() || "default";
 
           console.log("[REGISTER_START]", { email, tenantId, role, isBootstrap });
 
@@ -118,21 +100,31 @@ export const Route = createFileRoute("/api/auth/register")({
           }
 
           const existing = await s`
-            SELECT id FROM public.users WHERE tenant_id = ${tenantId} AND email = ${email}
+            SELECT id FROM public.users WHERE lower(email) = ${email}
           `;
           if (existing.length) {
             return Response.json(
-              { error: "Usuário já cadastrado neste tenant" },
+              { error: "Usuário já cadastrado" },
               { status: 409 },
             );
           }
 
+          // Bootstrap cria a própria empresa, para o primeiro admin já nascer
+          // vinculado (nunca operacional sem empresa).
+          const companyRows = await s<{ id: string }[]>`
+            INSERT INTO public.companies (name)
+            VALUES ('Empresa Principal')
+            RETURNING id
+          `;
+          const companyId = companyRows[0].id;
+
           const hash = await bcrypt.hash(password, 10);
           const rows = await s`
-            INSERT INTO public.users (email, password_hash, name, role, tenant_id)
-            VALUES (${email}, ${hash}, ${name}, ${role}, ${tenantId})
-            RETURNING id, tenant_id, name, email, role, created_at
+            INSERT INTO public.users (email, password_hash, name, role, tenant_id, company_id)
+            VALUES (${email}, ${hash}, ${name}, ${role}, ${tenantId}, ${companyId}::uuid)
+            RETURNING id, tenant_id, company_id, name, email, role, created_at
           `;
+          console.log("[REGISTER_BOOTSTRAP_COMPANY]", { companyId, userEmail: email });
           const u = rows[0];
           if (!u) {
             console.error("[REGISTER_INSERT_FAIL] RETURNING vazio");

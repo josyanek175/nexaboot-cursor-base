@@ -3,7 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,8 +23,9 @@ export const Route = createFileRoute("/api/contacts/$id")({
     handlers: {
       PUT: async ({ request, params }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
 
         const json = await request.json().catch(() => null);
@@ -86,8 +87,9 @@ export const Route = createFileRoute("/api/contacts/$id")({
       // Exclusão definitiva só pela TI, diretamente no banco de dados.
       DELETE: async ({ params }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
 
         const s = sql();

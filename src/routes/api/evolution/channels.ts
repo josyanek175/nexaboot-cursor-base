@@ -4,7 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
   instanceState, mapEvoStatus, webhookUrl,
@@ -29,8 +29,9 @@ export const Route = createFileRoute("/api/evolution/channels")({
     handlers: {
       GET: async () => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         const s = sql();
         const channels = await s`
           SELECT id, company_id, name, display_name, phone_number,
@@ -46,8 +47,9 @@ export const Route = createFileRoute("/api/evolution/channels")({
 
       POST: async ({ request }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
 
         const json = await request.json().catch(() => null);
         const parsed = CreateBody.safeParse(json);

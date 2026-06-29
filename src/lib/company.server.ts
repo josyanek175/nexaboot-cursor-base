@@ -1,18 +1,35 @@
 // Isolamento multitenant por empresa (server-only).
 //
-// Resolve a empresa (company_id) do usuário logado para escopar todas as
-// queries de atendimento/canais. Idempotente e não destrutivo:
-//   - adiciona public.users.company_id (UUID NULL) se não existir
-//   - cria FK users.company_id -> companies(id) ON DELETE SET NULL (idempotente)
-//   - garante uma "Empresa Padrão" (slug='default') e vincula usuários sem company
+// DECISÃO OFICIAL: company_id é a ÚNICA fonte de isolamento de empresa nos
+// módulos operacionais (atendimento, contatos, canais, mensagens, usuários
+// operacionais, atendentes). tenant_id NÃO separa esses dados.
 //
-// NÃO mexe em tenant_id, senha, sessão ou login.
+// Regras de segurança (estritas):
+//   - usuário sem company_id válido NÃO opera o sistema;
+//   - NUNCA cria "Empresa Padrão" automaticamente;
+//   - NUNCA auto-atribui empresa a um usuário;
+//   - sem empresa válida => 403 (módulos operacionais negam acesso).
+//
+// NÃO mexe em tenant_id, senha, sessão ou login (isso é feito nos endpoints).
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 
 let _userCompanyReady: Promise<void> | null = null;
 
-/** Migração idempotente do vínculo users <-> companies. */
+/** Mensagem única exibida quando o usuário não tem empresa válida. */
+export const NO_COMPANY_MESSAGE =
+  "Usuário sem empresa vinculada. Contate o administrador.";
+
+/**
+ * Migração idempotente do vínculo users <-> companies.
+ *   - adiciona public.users.company_id (UUID NULL) se não existir
+ *   - cria FK users.company_id -> companies(id) (idempotente)
+ *   - cria índice de busca por company_id
+ *
+ * IMPORTANTE: NÃO cria empresa padrão e NÃO faz backfill/auto-atribuição.
+ * Isolamento é estrito: usuário sem company_id válido é bloqueado nos
+ * módulos operacionais.
+ */
 export async function ensureUserCompanySchema(): Promise<void> {
   if (_userCompanyReady) return _userCompanyReady;
   _userCompanyReady = (async () => {
@@ -20,14 +37,8 @@ export async function ensureUserCompanySchema(): Promise<void> {
     await ensureCrmSchema();
     const s = sql();
 
-    // Empresa padrão (não destrutivo).
-    await s`
-      INSERT INTO public.companies (name, slug)
-      VALUES ('Empresa Padrão', 'default')
-      ON CONFLICT (slug) DO NOTHING
-    `;
-
-    // Coluna + FK idempotentes. ON DELETE SET NULL para nunca apagar usuários.
+    // Coluna + FK + índice idempotentes. Mantém a FK existente como está
+    // (não recriamos para não alterar comportamento de bancos legados).
     await s.unsafe(`
       ALTER TABLE public.users ADD COLUMN IF NOT EXISTS company_id UUID;
       DO $$
@@ -43,14 +54,6 @@ export async function ensureUserCompanySchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_users_company ON public.users(company_id);
     `);
 
-    // Backfill: vincula usuários sem empresa à Empresa Padrão.
-    await s`
-      UPDATE public.users
-      SET company_id = (SELECT id FROM public.companies WHERE slug = 'default' LIMIT 1),
-          updated_at = now()
-      WHERE company_id IS NULL
-    `;
-
     console.log("[USER_COMPANY_SCHEMA_OK]");
   })().catch((e) => {
     _userCompanyReady = null; // permite nova tentativa
@@ -59,44 +62,88 @@ export async function ensureUserCompanySchema(): Promise<void> {
   return _userCompanyReady;
 }
 
-/** Id da Empresa Padrão (cria se necessário). */
-export async function getDefaultCompanyId(): Promise<string> {
-  await ensureUserCompanySchema();
-  const s = sql();
-  const rows = await s<{ id: string }[]>`
-    SELECT id FROM public.companies WHERE slug = 'default' LIMIT 1
-  `;
-  if (rows[0]) return rows[0].id;
-  const ins = await s<{ id: string }[]>`
-    INSERT INTO public.companies (name, slug)
-    VALUES ('Empresa Padrão', 'default')
-    ON CONFLICT (slug) DO UPDATE SET updated_at = now()
-    RETURNING id
-  `;
-  return ins[0].id;
+export interface CurrentUserCompanyInfo {
+  /** Há sessão válida e o usuário existe em public.users. */
+  authenticated: boolean;
+  /** company_id apenas quando a empresa é válida; caso contrário null. */
+  companyId: string | null;
+  /** Nome da empresa válida; caso contrário null. */
+  companyName: string | null;
+  /** true somente quando company_id existe E aponta para empresa existente. */
+  companyValid: boolean;
 }
 
 /**
- * Empresa do usuário logado. Valida sessão, garante o schema do vínculo e
- * atribui a Empresa Padrão caso o usuário ainda não tenha company_id.
- * Retorna null quando não há sessão válida (caller deve responder 401).
+ * Resolve a empresa do usuário logado, validando contra public.companies.
+ * NUNCA cria empresa padrão e NUNCA auto-atribui empresa.
  */
-export async function getCurrentUserCompanyId(): Promise<string | null> {
+export async function getCurrentUserCompanyInfo(): Promise<CurrentUserCompanyInfo> {
+  const empty: CurrentUserCompanyInfo = {
+    authenticated: false,
+    companyId: null,
+    companyName: null,
+    companyValid: false,
+  };
+
   const uid = getSessionUserId();
-  if (!uid) return null;
+  if (!uid) return empty;
+
   await ensureUserCompanySchema();
   const s = sql();
-  const rows = await s<{ company_id: string | null }[]>`
-    SELECT company_id FROM public.users WHERE id = ${uid}::uuid LIMIT 1
+  const rows = await s<
+    { company_id: string | null; company_pk: string | null; company_name: string | null }[]
+  >`
+    SELECT u.company_id,
+           c.id   AS company_pk,
+           c.name AS company_name
+    FROM public.users u
+    LEFT JOIN public.companies c ON c.id = u.company_id
+    WHERE u.id = ${uid}::uuid
+    LIMIT 1
   `;
-  if (!rows[0]) return null;
-  if (rows[0].company_id) return rows[0].company_id;
+  if (!rows[0]) return empty;
 
-  const companyId = await getDefaultCompanyId();
-  await s`
-    UPDATE public.users SET company_id = ${companyId}::uuid, updated_at = now()
-    WHERE id = ${uid}::uuid
-  `;
-  console.log("[USER_COMPANY_ASSIGNED_DEFAULT]", { userId: uid, companyId });
-  return companyId;
+  const companyValid = !!rows[0].company_pk;
+  return {
+    authenticated: true,
+    companyId: companyValid ? rows[0].company_id : null,
+    companyName: companyValid ? rows[0].company_name : null,
+    companyValid,
+  };
+}
+
+/**
+ * Empresa do usuário logado (validada). Retorna null quando:
+ *   - não há sessão; ou
+ *   - o usuário não tem company_id; ou
+ *   - o company_id aponta para empresa inexistente.
+ * NUNCA cria empresa padrão e NUNCA auto-atribui empresa.
+ */
+export async function getCurrentUserCompanyId(): Promise<string | null> {
+  const info = await getCurrentUserCompanyInfo();
+  return info.companyId;
+}
+
+/**
+ * Helper seguro para handlers de API operacionais.
+ * Retorna o companyId (string) quando há empresa válida, ou uma Response
+ * pronta (401 sem sessão / 403 sem empresa válida) que o handler deve retornar.
+ *
+ * Uso:
+ *   const company = await requireCompanyId();
+ *   if (company instanceof Response) return company;
+ *   const companyId = company;
+ */
+export async function requireCompanyId(): Promise<string | Response> {
+  const info = await getCurrentUserCompanyInfo();
+  if (!info.authenticated) {
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  if (!info.companyValid || !info.companyId) {
+    return Response.json(
+      { error: "no_company", message: NO_COMPANY_MESSAGE },
+      { status: 403 },
+    );
+  }
+  return info.companyId;
 }

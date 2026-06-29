@@ -6,6 +6,7 @@ import {
   buildClearSetCookie,
   COOKIE_NAME,
 } from "@/lib/session.server";
+import { getCurrentUserCompanyInfo, NO_COMPANY_MESSAGE } from "@/lib/company.server";
 
 export const Route = createFileRoute("/api/auth/me")({
   server: {
@@ -50,7 +51,17 @@ export const Route = createFileRoute("/api/auth/me")({
           );
         }
 
-        console.log("[ME_OK]", { userId: u.id, email: u.email, tenant_id: u.tenant_id });
+        // Empresa (isolamento oficial por company_id). O front usa company_valid
+        // para bloquear os módulos operacionais quando não há empresa válida.
+        const company = await getCurrentUserCompanyInfo();
+
+        console.log("[ME_OK]", {
+          userId: u.id,
+          email: u.email,
+          tenant_id: u.tenant_id,
+          company_id: company.companyId,
+          company_valid: company.companyValid,
+        });
         return Response.json({
           user: {
             id: u.id,
@@ -58,7 +69,11 @@ export const Route = createFileRoute("/api/auth/me")({
             name: u.name,
             role: u.role,
             tenant_id: u.tenant_id,
+            company_id: company.companyId,
+            company_name: company.companyName,
+            company_valid: company.companyValid,
           },
+          ...(company.companyValid ? {} : { company_message: NO_COMPANY_MESSAGE }),
         });
       },
       POST: async ({ request }) => {

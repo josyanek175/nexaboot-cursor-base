@@ -9,7 +9,7 @@
 // (base64 em media_base64 + media_url servido por /api/messages/:id/media).
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,8 +67,9 @@ export const Route = createFileRoute("/api/messages/send/media/evolution")({
     handlers: {
       POST: async ({ request }) => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
 
         let form: FormData;
         try {

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
-import { getSessionUserId } from "@/lib/session.server";
+import { requireCompanyId } from "@/lib/company.server";
 
 const QuerySchema = z.object({
   conversation_id: z.string().uuid(),
@@ -11,16 +11,26 @@ export const Route = createFileRoute("/api/messages")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const userId = getSessionUserId();
-        if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        // Isolamento oficial por company_id: sem empresa válida => 401/403.
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
 
         const parsed = QuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
         if (!parsed.success) return Response.json({ error: "invalid_query" }, { status: 400 });
 
         const s = sql();
 
-        // Schema oficial usa company_id; sessão do app não carrega esse contexto.
-        // Para não bloquear o frontend, retornamos as mensagens da conversa pedida.
+        // A conversa precisa pertencer à empresa do usuário (sem isso, qualquer
+        // UUID de conversa de outra empresa vazaria mensagens).
+        const owns = await s`
+          SELECT 1 FROM public.conversations
+          WHERE id = ${parsed.data.conversation_id}::uuid
+            AND company_id = ${companyId}::uuid
+          LIMIT 1
+        `;
+        if (!owns[0]) return Response.json({ error: "not_found" }, { status: 404 });
+
         const messages = await s`
           SELECT
             m.id,

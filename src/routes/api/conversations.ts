@@ -3,15 +3,16 @@
 // última mensagem, horário, unread, canal/instância).
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
 
 export const Route = createFileRoute("/api/conversations")({
   server: {
     handlers: {
       GET: async () => {
         await ensureCrmSchema();
-        const companyId = await getCurrentUserCompanyId();
-        if (!companyId) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
 
         const s = sql();
         const conversations = await s`
