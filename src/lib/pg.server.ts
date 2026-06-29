@@ -117,6 +117,100 @@ async function ensureNoCascadeFks(s: ReturnType<typeof sql>) {
   console.log("[CRM_FK_RESTRICT_OK]", { fk: "messages.conversation_id", orphansUnlinked: orphanMsgCount });
 }
 
+/**
+ * Garante telefone ÚNICO por empresa entre contatos ATIVOS, tratando duplicados
+ * legados SEM apagar dados. Passos (idempotente):
+ *   1) backfill de name_source (heurístico: placeholder → 'auto', senão 'manual');
+ *   2) remove o índice único antigo (não-parcial) para poder canonicalizar/mesclar;
+ *   3) normaliza telefones legados in-place (só dígitos) — canonicalização, não
+ *      destrutivo (external_jid permanece intacto);
+ *   4) mescla duplicados ativos por (company_id, phone): escolhe um principal
+ *      (preferindo name_source='manual', depois mais antigo), migra
+ *      conversations.contact_id para o principal e marca os demais como 'merged'
+ *      (nunca DELETE; mensagens preservadas);
+ *   5) cria índice único PARCIAL (telefone único só entre contatos ativos).
+ */
+async function ensureContactsDedup(s: ReturnType<typeof sql>) {
+  // 1) Backfill de name_source quando ausente.
+  await s`
+    UPDATE public.contacts
+    SET name_source = CASE
+      WHEN name IS NULL OR btrim(name) = '' OR name = phone THEN 'auto'
+      ELSE 'manual'
+    END
+    WHERE name_source IS NULL
+  `;
+
+  // 2) Remove índice único antigo (não-parcial), se existir.
+  await s.unsafe(`DROP INDEX IF EXISTS contacts_company_phone_uniq;`);
+
+  // 3) Canonicaliza telefones legados para apenas dígitos.
+  const normed = await s<{ id: string }[]>`
+    UPDATE public.contacts
+    SET phone = regexp_replace(coalesce(phone, ''), '\\D', '', 'g'),
+        updated_at = now()
+    WHERE phone IS DISTINCT FROM regexp_replace(coalesce(phone, ''), '\\D', '', 'g')
+    RETURNING id
+  `;
+  if (normed.length > 0) {
+    console.log("[CONTACTS_PHONE_NORMALIZED]", { updated: normed.length });
+  }
+
+  // 4) Mescla duplicados ATIVOS por (company_id, phone).
+  const dupGroups = await s<{ company_id: string; phone: string }[]>`
+    SELECT company_id, phone
+    FROM public.contacts
+    WHERE phone IS NOT NULL AND btrim(phone) <> ''
+      AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
+    GROUP BY company_id, phone
+    HAVING count(*) > 1
+  `;
+  for (const g of dupGroups) {
+    const rows = await s<{ id: string; name: string | null; name_source: string | null }[]>`
+      SELECT id, name, name_source
+      FROM public.contacts
+      WHERE company_id = ${g.company_id}::uuid AND phone = ${g.phone}
+        AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
+      ORDER BY (name_source = 'manual') DESC, created_at ASC
+    `;
+    const principal = rows[0];
+    const others = rows.slice(1);
+    for (const o of others) {
+      const moved = await s<{ id: string }[]>`
+        UPDATE public.conversations
+        SET contact_id = ${principal.id}::uuid, updated_at = now()
+        WHERE contact_id = ${o.id}::uuid
+        RETURNING id
+      `;
+      await s`
+        UPDATE public.contacts
+        SET status = 'merged', updated_at = now()
+        WHERE id = ${o.id}::uuid
+      `;
+      console.warn("[CONTACTS_DEDUP_MERGED]", {
+        companyId: g.company_id,
+        phone: g.phone,
+        principal: principal.id,
+        merged: o.id,
+        conversationsMoved: moved.length,
+      });
+    }
+  }
+
+  // 5) Índice único PARCIAL: telefone único entre contatos ATIVOS (ignora
+  //    telefone vazio e contatos merged/inativos).
+  await s.unsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS contacts_company_phone_active_uniq
+      ON public.contacts(company_id, phone)
+      WHERE phone IS NOT NULL AND btrim(phone) <> ''
+        AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo';
+  `);
+  console.log("[CONTACTS_UNIQUE_INDEX_OK]", {
+    index: "contacts_company_phone_active_uniq",
+    dupGroups: dupGroups.length,
+  });
+}
+
 export async function ensureCrmSchema() {
   if (_crmReady) return _crmReady;
   _crmReady = (async () => {
@@ -163,8 +257,9 @@ export async function ensureCrmSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS contacts_company_phone_uniq
-          ON public.contacts(company_id, phone);
+        -- Índice de busca por (company_id, phone). O índice ÚNICO de telefone é
+        -- aplicado em ensureContactsDedup() (parcial, só contatos ativos), depois
+        -- de tratar/mesclar duplicados legados sem apagar nada.
         CREATE INDEX IF NOT EXISTS idx_contacts_company_phone
           ON public.contacts(company_id, phone);
 
@@ -176,6 +271,9 @@ export async function ensureCrmSchema() {
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS status TEXT;
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS tags TEXT[];
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS avatar_color TEXT;
+        -- Origem do nome: 'manual' (tela /contatos) nunca é sobrescrito pelo
+        -- pushName do WhatsApp; 'whatsapp'/'auto' podem ser atualizados.
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS name_source TEXT;
 
         CREATE TABLE IF NOT EXISTS public.conversations (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -239,6 +337,10 @@ export async function ensureCrmSchema() {
       // Antes de validar cada FK, trata órfãos legados sem apagar nada
       // (apenas desvincula com NULL), evitando que o deploy quebre.
       await ensureNoCascadeFks(s);
+
+      // Telefone único por empresa (contatos ativos) + merge defensivo de
+      // duplicados legados, sem apagar nada.
+      await ensureContactsDedup(s);
 
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {

@@ -7,6 +7,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { normalizePhone } from "@/lib/phone";
 
 const PayloadSchema = z
   .object({
@@ -89,29 +90,60 @@ async function upsertContact(
   fromMe: boolean,
 ): Promise<string> {
   const s = sql();
-  const existing = await s<{ id: string; name: string | null }[]>`
-    SELECT id, name FROM public.contacts
+  // Um telefone normalizado = um único contato. Prioriza o contato ATIVO; se só
+  // houver inativo/merged, reaproveita o existente (nunca cria outro).
+  const existing = await s<
+    { id: string; name: string | null; name_source: string | null; status: string | null }[]
+  >`
+    SELECT id, name, name_source, status FROM public.contacts
     WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+    ORDER BY (status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo') DESC,
+             created_at ASC
     LIMIT 1
   `;
   if (existing[0]) {
-    const cur = existing[0].name;
+    const c = existing[0];
+    const cur = c.name;
+    const isManual = c.name_source === "manual";
     const isPlaceholder = !cur || cur.trim() === "" || cur === phone;
-    // Regra: só atualiza nome quando fromMe=false e contato está sem nome real.
-    if (!fromMe && name && name.trim() && isPlaceholder) {
-      await s`UPDATE public.contacts SET name = ${name}, updated_at = now() WHERE id = ${existing[0].id}::uuid`;
+    // Nome manual NUNCA é sobrescrito pelo pushName do WhatsApp. Só atualiza
+    // quando não é manual E o nome atual é vazio/igual ao telefone/placeholder.
+    if (!fromMe && name && name.trim() && !isManual && isPlaceholder) {
+      await s`
+        UPDATE public.contacts
+        SET name = ${name}, name_source = 'whatsapp', updated_at = now()
+        WHERE id = ${c.id}::uuid
+      `;
     }
-    return existing[0].id;
+    // Reaproveita contato inativo: reativa preservando todo o histórico.
+    if (c.status === "inativo") {
+      await s`UPDATE public.contacts SET status = 'ativo', updated_at = now() WHERE id = ${c.id}::uuid`;
+      console.log("[CONTACT_REACTIVATED]", { id: c.id, phone });
+    }
+    return c.id;
   }
-  // Regra: nunca criar contato com nome próprio quando fromMe=true.
-  const finalName = fromMe ? phone : (name && name.trim() ? name : phone);
-  const inserted = await s<{ id: string }[]>`
-    INSERT INTO public.contacts (company_id, phone, name, external_jid, contact_type)
-    VALUES (${companyId}::uuid, ${phone}, ${finalName}, ${externalJid}, 'individual')
-    ON CONFLICT (company_id, phone) DO UPDATE SET updated_at = now()
-    RETURNING id
-  `;
-  return inserted[0].id;
+  // Novo contato automático. Regra: nunca usa nome próprio quando fromMe=true.
+  const finalName = fromMe ? phone : name && name.trim() ? name : phone;
+  const nameSource = !fromMe && name && name.trim() ? "whatsapp" : "auto";
+  try {
+    const inserted = await s<{ id: string }[]>`
+      INSERT INTO public.contacts (company_id, phone, name, name_source, external_jid, contact_type)
+      VALUES (${companyId}::uuid, ${phone}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
+      RETURNING id
+    `;
+    return inserted[0].id;
+  } catch (e) {
+    // Corrida: outro processo criou o mesmo (company_id, phone). Reaproveita.
+    const again = await s<{ id: string }[]>`
+      SELECT id FROM public.contacts
+      WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+      ORDER BY (status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo') DESC,
+               created_at ASC
+      LIMIT 1
+    `;
+    if (again[0]) return again[0].id;
+    throw e;
+  }
 }
 
 async function upsertConversation(
@@ -120,15 +152,23 @@ async function upsertConversation(
   contactId: string,
 ): Promise<string> {
   const s = sql();
-  const existing = await s<{ id: string }[]>`
-    SELECT id FROM public.conversations
+  // Um contato + um canal = uma única conversa principal. Reaproveita a conversa
+  // existente em QUALQUER status (a mais recente). Nunca cria outra por diferença
+  // de nome/pushName. Se estiver fechada, reabre ao chegar nova mensagem.
+  const existing = await s<{ id: string; status: string | null }[]>`
+    SELECT id, status FROM public.conversations
     WHERE company_id = ${companyId}::uuid
       AND whatsapp_channel_id = ${channelId}::uuid
       AND contact_id = ${contactId}::uuid
-      AND status = 'open'
+    ORDER BY last_message_at DESC NULLS LAST, created_at DESC
     LIMIT 1
   `;
-  if (existing[0]) return existing[0].id;
+  if (existing[0]) {
+    if (existing[0].status !== "open") {
+      await s`UPDATE public.conversations SET status = 'open', updated_at = now() WHERE id = ${existing[0].id}::uuid`;
+    }
+    return existing[0].id;
+  }
   const inserted = await s<{ id: string }[]>`
     INSERT INTO public.conversations
       (company_id, contact_id, whatsapp_channel_id, status, unread_count, last_message_at)
@@ -259,7 +299,7 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
   if (!remoteJid) { console.log("[IGNORED_NO_REMOTE_JID]"); return; }
   if (remoteJid.endsWith("@g.us")) { console.log("[IGNORED_GROUP]", remoteJid); return; }
 
-  const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@lid", "").replace(/\D/g, "");
+  const phone = normalizePhone(remoteJid);
   if (!phone.startsWith("55") || phone.length < 12 || phone.length > 13) {
     console.log("[INVALID_PHONE_BLOCKED]", { remoteJid, phone });
     return;

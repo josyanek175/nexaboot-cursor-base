@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useSession } from "@/lib/session";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
+import { normalizePhone } from "@/lib/phone";
 
 export const Route = createFileRoute("/_app/contatos")({
   component: ContatosPage,
@@ -36,12 +37,6 @@ interface Contact {
 // ----------------------------------------------------------------------------
 // Helpers
 // ----------------------------------------------------------------------------
-
-/** Normaliza telefone: mantém apenas dígitos. */
-function normalizePhone(raw: unknown): string {
-  if (raw === null || raw === undefined) return "";
-  return String(raw).replace(/\D+/g, "");
-}
 
 /** Telefone válido: 10–15 dígitos (E.164 + folga). */
 function isValidPhone(p: string) {

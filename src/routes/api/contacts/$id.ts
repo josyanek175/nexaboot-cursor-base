@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { normalizePhone } from "@/lib/phone";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -16,10 +17,6 @@ const UpdateBody = z.object({
   tags: z.array(z.string().trim().min(1).max(40)).optional(),
   avatar_color: z.string().trim().max(20).optional().nullable(),
 });
-
-function normalizePhone(raw: string): string {
-  return String(raw).replace(/\D+/g, "");
-}
 
 export const Route = createFileRoute("/api/contacts/$id")({
   server: {
@@ -50,9 +47,13 @@ export const Route = createFileRoute("/api/contacts/$id")({
         if (!owns[0]) return Response.json({ error: "not_found" }, { status: 404 });
 
         try {
+          // Edição pela tela /contatos é sempre manual: ao alterar o nome,
+          // marca name_source='manual' para nunca ser sobrescrito pelo pushName.
+          const nameSource = d.name !== undefined ? "manual" : null;
           const rows = await s`
             UPDATE public.contacts SET
               name         = COALESCE(${d.name ?? null}, name),
+              name_source  = COALESCE(${nameSource}, name_source),
               phone        = COALESCE(${phone ?? null}, phone),
               email        = ${d.email ?? null},
               reference    = ${d.reference ?? null},
@@ -62,7 +63,8 @@ export const Route = createFileRoute("/api/contacts/$id")({
               updated_at   = now()
             WHERE id = ${params.id}::uuid AND company_id = ${companyId}::uuid
             RETURNING id, name, phone, email, reference, status, tags,
-                      avatar_color, contact_type, external_jid, created_at, updated_at
+                      avatar_color, contact_type, external_jid, name_source,
+                      created_at, updated_at
           `;
           return Response.json({ contact: rows[0] });
         } catch (e) {

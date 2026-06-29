@@ -8,6 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getCurrentUserCompanyId } from "@/lib/company.server";
+import { normalizePhone } from "@/lib/phone";
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(160),
@@ -18,10 +19,6 @@ const CreateBody = z.object({
   tags: z.array(z.string().trim().min(1).max(40)).optional(),
   avatar_color: z.string().trim().max(20).optional().nullable(),
 });
-
-function normalizePhone(raw: string): string {
-  return String(raw).replace(/\D+/g, "");
-}
 
 export const Route = createFileRoute("/api/contacts")({
   server: {
@@ -37,9 +34,11 @@ export const Route = createFileRoute("/api/contacts")({
         const contacts = q
           ? await s`
               SELECT id, name, phone, email, reference, status, tags,
-                     avatar_color, contact_type, external_jid, created_at, updated_at
+                     avatar_color, contact_type, external_jid, name_source,
+                     created_at, updated_at
               FROM public.contacts
               WHERE company_id = ${companyId}::uuid
+                AND status IS DISTINCT FROM 'merged'
                 AND (
                   name ILIKE ${"%" + q + "%"}
                   OR phone LIKE ${"%" + normalizePhone(q) + "%"}
@@ -50,9 +49,11 @@ export const Route = createFileRoute("/api/contacts")({
             `
           : await s`
               SELECT id, name, phone, email, reference, status, tags,
-                     avatar_color, contact_type, external_jid, created_at, updated_at
+                     avatar_color, contact_type, external_jid, name_source,
+                     created_at, updated_at
               FROM public.contacts
               WHERE company_id = ${companyId}::uuid
+                AND status IS DISTINCT FROM 'merged'
               ORDER BY created_at DESC
               LIMIT 1000
             `;
@@ -76,26 +77,69 @@ export const Route = createFileRoute("/api/contacts")({
         }
 
         const s = sql();
-        // Dedupe por (company_id, phone): não duplica contato existente.
-        const inserted = await s<{ id: string }[]>`
-          INSERT INTO public.contacts
-            (company_id, phone, name, email, reference, status, tags, avatar_color, contact_type)
-          VALUES
-            (${companyId}::uuid, ${phone}, ${d.name},
-             ${d.email ?? null}, ${d.reference ?? null}, ${d.status ?? "ativo"},
-             ${d.tags ?? null}, ${d.avatar_color ?? null}, 'individual')
-          ON CONFLICT (company_id, phone) DO NOTHING
-          RETURNING id
+
+        // 1) Já existe contato ATIVO com este telefone? Não duplica.
+        const active = await s<{ id: string }[]>`
+          SELECT id FROM public.contacts
+          WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+            AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
+          LIMIT 1
         `;
-        if (!inserted[0]) {
+        if (active[0]) {
           return Response.json({ error: "phone_already_exists" }, { status: 409 });
         }
-        const rows = await s`
-          SELECT id, name, phone, email, reference, status, tags,
-                 avatar_color, contact_type, external_jid, created_at, updated_at
-          FROM public.contacts WHERE id = ${inserted[0].id}::uuid
+
+        // 2) Existe inativo/merged com este telefone? Reaproveita (reativa),
+        //    preservando o histórico — em vez de criar outro contato.
+        const reusable = await s<{ id: string }[]>`
+          SELECT id FROM public.contacts
+          WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+            AND (status = 'inativo' OR status = 'merged')
+          ORDER BY (status = 'inativo') DESC, updated_at DESC
+          LIMIT 1
         `;
-        return Response.json({ contact: rows[0] }, { status: 201 });
+        if (reusable[0]) {
+          const rows = await s`
+            UPDATE public.contacts SET
+              name = ${d.name}, name_source = 'manual',
+              email = ${d.email ?? null}, reference = ${d.reference ?? null},
+              status = ${d.status ?? "ativo"}, tags = ${d.tags ?? null},
+              avatar_color = ${d.avatar_color ?? null}, updated_at = now()
+            WHERE id = ${reusable[0].id}::uuid
+            RETURNING id, name, phone, email, reference, status, tags,
+                      avatar_color, contact_type, external_jid, name_source,
+                      created_at, updated_at
+          `;
+          console.log("[CONTACT_REUSED_ON_CREATE]", { id: reusable[0].id, phone });
+          return Response.json({ contact: rows[0], reused: true }, { status: 200 });
+        }
+
+        // 3) Cria novo contato manual.
+        try {
+          const inserted = await s<{ id: string }[]>`
+            INSERT INTO public.contacts
+              (company_id, phone, name, name_source, email, reference, status,
+               tags, avatar_color, contact_type)
+            VALUES
+              (${companyId}::uuid, ${phone}, ${d.name}, 'manual',
+               ${d.email ?? null}, ${d.reference ?? null}, ${d.status ?? "ativo"},
+               ${d.tags ?? null}, ${d.avatar_color ?? null}, 'individual')
+            RETURNING id
+          `;
+          const rows = await s`
+            SELECT id, name, phone, email, reference, status, tags,
+                   avatar_color, contact_type, external_jid, name_source,
+                   created_at, updated_at
+            FROM public.contacts WHERE id = ${inserted[0].id}::uuid
+          `;
+          return Response.json({ contact: rows[0] }, { status: 201 });
+        } catch (e) {
+          const err = e as { code?: string };
+          if (err.code === "23505") {
+            return Response.json({ error: "phone_already_exists" }, { status: 409 });
+          }
+          throw e;
+        }
       },
     },
   },
