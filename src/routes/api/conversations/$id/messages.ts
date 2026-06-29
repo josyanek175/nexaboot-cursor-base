@@ -38,6 +38,7 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
             COALESCE(m.mime_type, m.media_mimetype) AS mime_type,
             m.media_filename AS file_name,
             m.media_seconds  AS duration_seconds,
+            m.media_size,
             m.media_caption,
             m.from_me,
             m.status,

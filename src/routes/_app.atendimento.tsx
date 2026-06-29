@@ -12,7 +12,7 @@ import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { canSeeAllConversations, inTenantScope } from "@/lib/permissions";
 import { pushAudit } from "@/lib/audit-log";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiPostForm } from "@/lib/api";
 import { ensureNotificationPermission, showBrowserNotification, playNotificationSound, isTabHidden } from "@/lib/notifications";
 import { setUnread } from "@/lib/unread-store";
 
@@ -381,6 +381,10 @@ function AtendimentoPage() {
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const [draft, setDraft] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  // Envio real de mídia (imagem/áudio) via input de arquivo escondido.
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const mediaKindRef = useRef<"image" | "audio">("image");
+  const [sendingMedia, setSendingMedia] = useState(false);
   // Busca de contatos reais (mesmo sem conversa) para iniciar atendimento.
   const [contactResults, setContactResults] = useState<Contact[]>([]);
   const [searchingContacts, setSearchingContacts] = useState(false);
@@ -822,11 +826,71 @@ function AtendimentoPage() {
     }
   }
 
-  function sendAttachment(_type: Exclude<MessageType, "internal" | "text">) {
+  // Allowlist e limites espelham o backend (validação dupla, sem confiar no client).
+  const IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp"];
+  const AUDIO_MIMES = ["audio/mpeg", "audio/mp3", "audio/ogg", "audio/webm", "audio/wav", "audio/mp4"];
+
+  function sendAttachment(type: "image" | "video" | "audio" | "document") {
     if (!selected) return;
-    // Envio de mídia real (upload + Evolution sendMedia) ainda não implementado
-    // no backend. Não injetamos mídia fake — apenas avisamos o usuário.
-    toast.info("Envio de mídia será habilitado em breve.");
+    if (sendingMedia) {
+      toast.info("Aguarde o envio atual terminar.");
+      return;
+    }
+    if (type === "image" || type === "audio") {
+      mediaKindRef.current = type;
+      const input = mediaInputRef.current;
+      if (input) {
+        input.accept = (type === "image" ? IMAGE_MIMES : AUDIO_MIMES).join(",");
+        input.value = "";
+        input.click();
+      }
+      return;
+    }
+    // Vídeo/documento ainda fora do escopo desta fase (sem mock).
+    toast.info("Envio de vídeo e documento será habilitado em breve.");
+  }
+
+  async function sendMediaFile(file: File, kind: "image" | "audio") {
+    if (!selected) return;
+    const guard = guardSend(selected);
+    if (!guard.ok || !guard.channel) return;
+
+    const mime = (file.type || "").toLowerCase();
+    const allowed = kind === "image" ? IMAGE_MIMES : AUDIO_MIMES;
+    if (!allowed.includes(mime)) {
+      toast.error("Tipo de arquivo não suportado.");
+      return;
+    }
+    const limit = kind === "image" ? 10 * 1024 * 1024 : 16 * 1024 * 1024;
+    if (file.size <= 0) {
+      toast.error("Arquivo vazio.");
+      return;
+    }
+    if (file.size > limit) {
+      toast.error(`Arquivo excede o limite (${kind === "image" ? "10" : "16"} MB).`);
+      return;
+    }
+
+    setSendingMedia(true);
+    const tId = toast.loading(kind === "image" ? "Enviando imagem…" : "Enviando áudio…");
+    try {
+      const fd = new FormData();
+      fd.append("conversationId", selected.id);
+      fd.append("file", file);
+      await apiPostForm("/messages/send/media/evolution", fd);
+      toast.success(kind === "image" ? "Imagem enviada." : "Áudio enviado.", { id: tId });
+      reloadMessages(selected.id, { silent: true });
+      reloadConversations({ silent: true });
+    } catch (e) {
+      toast.error(
+        e instanceof Error && /too_large/.test(e.message)
+          ? "Arquivo grande demais para o canal."
+          : "Falha ao enviar mídia. Tente novamente.",
+        { id: tId },
+      );
+    } finally {
+      setSendingMedia(false);
+    }
   }
   function addInternalNote(text: string) {
     if (!selected || !text.trim()) return;
@@ -1067,6 +1131,16 @@ function AtendimentoPage() {
               />
             )}
 
+            <input
+              ref={mediaInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) sendMediaFile(f, mediaKindRef.current);
+                e.target.value = "";
+              }}
+            />
             <ChatComposer
               value={draft}
               onChange={setDraft}

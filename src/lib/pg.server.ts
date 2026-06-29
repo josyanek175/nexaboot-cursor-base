@@ -230,6 +230,8 @@ export async function ensureCrmSchema() {
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sent_by_name TEXT;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_emoji TEXT;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_to_message_id TEXT;
+        -- Tamanho em bytes da mídia (envio/recebimento). Idempotente, não destrutivo.
+        ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS media_size BIGINT;
       `);
 
       // ── Regra de segurança NexaBoot: proibido apagar em cascata ──
