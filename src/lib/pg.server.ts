@@ -1,7 +1,7 @@
 // Conexão PostgreSQL externa via DATABASE_URL.
 // Usa postgres.js. Servidor-only.
 import postgres from "postgres";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhoneForMatch } from "@/lib/phone";
 
 let _sql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
@@ -120,16 +120,18 @@ async function ensureNoCascadeFks(s: ReturnType<typeof sql>) {
 
 /**
  * Garante telefone ÚNICO por empresa entre contatos ATIVOS, tratando duplicados
- * legados SEM apagar dados. Passos (idempotente):
+ * legados SEM apagar dados. A unicidade/dedup usa phone_match (chave canônica
+ * que ignora o nono dígito de celulares BR). Passos (idempotente):
  *   1) backfill de name_source (heurístico: placeholder → 'auto', senão 'manual');
- *   2) remove o índice único antigo (não-parcial) para poder canonicalizar/mesclar;
+ *   2) remove índices únicos antigos (por phone) para poder canonicalizar/mesclar;
  *   3) normaliza telefones legados in-place (só dígitos) — canonicalização, não
  *      destrutivo (external_jid permanece intacto);
- *   4) mescla duplicados ativos por (company_id, phone): escolhe um principal
+ *   4) backfill de phone_match (forma canônica sem o 9) e índice de apoio;
+ *   5) mescla duplicados ativos por (company_id, phone_match): escolhe principal
  *      (preferindo name_source='manual', depois mais antigo), migra
  *      conversations.contact_id para o principal e marca os demais como 'merged'
  *      (nunca DELETE; mensagens preservadas);
- *   5) cria índice único PARCIAL (telefone único só entre contatos ativos).
+ *   6) cria índice único PARCIAL por (company_id, phone_match) entre ativos.
  */
 async function ensureContactsDedup(s: ReturnType<typeof sql>) {
   // 1) Backfill de name_source quando ausente.
@@ -142,8 +144,9 @@ async function ensureContactsDedup(s: ReturnType<typeof sql>) {
     WHERE name_source IS NULL
   `;
 
-  // 2) Remove índice único antigo (não-parcial), se existir.
+  // 2) Remove índices únicos antigos (por phone), se existirem.
   await s.unsafe(`DROP INDEX IF EXISTS contacts_company_phone_uniq;`);
+  await s.unsafe(`DROP INDEX IF EXISTS contacts_company_phone_active_uniq;`);
 
   // 3) Canonicaliza telefones legados para apenas dígitos.
   const normed = await s<{ id: string }[]>`
@@ -157,20 +160,41 @@ async function ensureContactsDedup(s: ReturnType<typeof sql>) {
     console.log("[CONTACTS_PHONE_NORMALIZED]", { updated: normed.length });
   }
 
-  // 4) Mescla duplicados ATIVOS por (company_id, phone).
-  const dupGroups = await s<{ company_id: string; phone: string }[]>`
-    SELECT company_id, phone
+  // 4) Backfill de phone_match (forma canônica: remove o 9 de celular BR de 13
+  //    dígitos quando o dígito após o DDD é '9'). Idempotente.
+  await s.unsafe(`
+    UPDATE public.contacts
+    SET phone_match = CASE
+      WHEN phone ~ '^55' AND length(phone) = 13 AND substring(phone from 5 for 1) = '9'
+        THEN substring(phone from 1 for 4) || substring(phone from 6)
+      ELSE phone
+    END
+    WHERE phone_match IS DISTINCT FROM CASE
+      WHEN phone ~ '^55' AND length(phone) = 13 AND substring(phone from 5 for 1) = '9'
+        THEN substring(phone from 1 for 4) || substring(phone from 6)
+      ELSE phone
+    END;
+  `);
+  await s.unsafe(`
+    CREATE INDEX IF NOT EXISTS idx_contacts_company_phonematch
+      ON public.contacts(company_id, phone_match);
+  `);
+
+  // 5) Mescla duplicados ATIVOS por (company_id, phone_match) — trata as
+  //    variantes com/sem nono dígito como o MESMO contato.
+  const dupGroups = await s<{ company_id: string; phone_match: string }[]>`
+    SELECT company_id, phone_match
     FROM public.contacts
-    WHERE phone IS NOT NULL AND btrim(phone) <> ''
+    WHERE phone_match IS NOT NULL AND btrim(phone_match) <> ''
       AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
-    GROUP BY company_id, phone
+    GROUP BY company_id, phone_match
     HAVING count(*) > 1
   `;
   for (const g of dupGroups) {
     const rows = await s<{ id: string; name: string | null; name_source: string | null }[]>`
       SELECT id, name, name_source
       FROM public.contacts
-      WHERE company_id = ${g.company_id}::uuid AND phone = ${g.phone}
+      WHERE company_id = ${g.company_id}::uuid AND phone_match = ${g.phone_match}
         AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
       ORDER BY (name_source = 'manual') DESC, created_at ASC
     `;
@@ -190,7 +214,7 @@ async function ensureContactsDedup(s: ReturnType<typeof sql>) {
       `;
       console.warn("[CONTACTS_DEDUP_MERGED]", {
         companyId: g.company_id,
-        phone: g.phone,
+        phoneMatch: g.phone_match,
         principal: principal.id,
         merged: o.id,
         conversationsMoved: moved.length,
@@ -198,16 +222,16 @@ async function ensureContactsDedup(s: ReturnType<typeof sql>) {
     }
   }
 
-  // 5) Índice único PARCIAL: telefone único entre contatos ATIVOS (ignora
-  //    telefone vazio e contatos merged/inativos).
+  // 6) Índice único PARCIAL: telefone canônico único entre contatos ATIVOS
+  //    (ignora vazio e contatos merged/inativos).
   await s.unsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS contacts_company_phone_active_uniq
-      ON public.contacts(company_id, phone)
-      WHERE phone IS NOT NULL AND btrim(phone) <> ''
+    CREATE UNIQUE INDEX IF NOT EXISTS contacts_company_phonematch_active_uniq
+      ON public.contacts(company_id, phone_match)
+      WHERE phone_match IS NOT NULL AND btrim(phone_match) <> ''
         AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo';
   `);
   console.log("[CONTACTS_UNIQUE_INDEX_OK]", {
-    index: "contacts_company_phone_active_uniq",
+    index: "contacts_company_phonematch_active_uniq",
     dupGroups: dupGroups.length,
   });
 }
@@ -247,11 +271,11 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
       AND c.status IS DISTINCT FROM 'merged' AND c.status IS DISTINCT FROM 'archived'
   `;
   for (const oc of orphanConvs) {
-    const phone = normalizePhone(oc.remote_jid);
-    if (!phone) continue;
+    const phoneMatch = normalizePhoneForMatch(oc.remote_jid);
+    if (!phoneMatch) continue;
     const ct = await s<{ id: string }[]>`
       SELECT id FROM public.contacts
-      WHERE company_id = ${oc.company_id}::uuid AND phone = ${phone}
+      WHERE company_id = ${oc.company_id}::uuid AND phone_match = ${phoneMatch}
         AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
       ORDER BY (name_source = 'manual') DESC, created_at ASC
       LIMIT 1
@@ -402,6 +426,9 @@ export async function ensureCrmSchema() {
         -- Origem do nome: 'manual' (tela /contatos) nunca é sobrescrito pelo
         -- pushName do WhatsApp; 'whatsapp'/'auto' podem ser atualizados.
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS name_source TEXT;
+        -- Chave canônica de telefone (sem o nono dígito BR) usada para
+        -- unicidade/deduplicação tolerante a variantes com/sem o 9.
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS phone_match TEXT;
 
         CREATE TABLE IF NOT EXISTS public.conversations (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

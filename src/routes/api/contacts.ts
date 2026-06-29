@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getCurrentUserCompanyId } from "@/lib/company.server";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(160),
@@ -42,6 +42,7 @@ export const Route = createFileRoute("/api/contacts")({
                 AND (
                   name ILIKE ${"%" + q + "%"}
                   OR phone LIKE ${"%" + normalizePhone(q) + "%"}
+                  OR phone_match LIKE ${"%" + normalizePhoneForMatch(q) + "%"}
                   OR email ILIKE ${"%" + q + "%"}
                 )
               ORDER BY created_at DESC
@@ -75,13 +76,15 @@ export const Route = createFileRoute("/api/contacts")({
         if (phone.length < 8 || phone.length > 15) {
           return Response.json({ error: "invalid_phone" }, { status: 400 });
         }
+        // Chave canônica tolerante ao nono dígito BR (com/sem 9 = mesmo número).
+        const phoneMatch = normalizePhoneForMatch(phone);
 
         const s = sql();
 
-        // 1) Já existe contato ATIVO com este telefone? Não duplica.
+        // 1) Já existe contato ATIVO com variante equivalente? Não duplica.
         const active = await s<{ id: string }[]>`
           SELECT id FROM public.contacts
-          WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+          WHERE company_id = ${companyId}::uuid AND phone_match = ${phoneMatch}
             AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
           LIMIT 1
         `;
@@ -89,11 +92,11 @@ export const Route = createFileRoute("/api/contacts")({
           return Response.json({ error: "phone_already_exists" }, { status: 409 });
         }
 
-        // 2) Existe inativo/merged com este telefone? Reaproveita (reativa),
+        // 2) Existe inativo/merged com variante equivalente? Reaproveita (reativa),
         //    preservando o histórico — em vez de criar outro contato.
         const reusable = await s<{ id: string }[]>`
           SELECT id FROM public.contacts
-          WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+          WHERE company_id = ${companyId}::uuid AND phone_match = ${phoneMatch}
             AND (status = 'inativo' OR status = 'merged')
           ORDER BY (status = 'inativo') DESC, updated_at DESC
           LIMIT 1
@@ -102,6 +105,7 @@ export const Route = createFileRoute("/api/contacts")({
           const rows = await s`
             UPDATE public.contacts SET
               name = ${d.name}, name_source = 'manual',
+              phone = ${phone}, phone_match = ${phoneMatch},
               email = ${d.email ?? null}, reference = ${d.reference ?? null},
               status = ${d.status ?? "ativo"}, tags = ${d.tags ?? null},
               avatar_color = ${d.avatar_color ?? null}, updated_at = now()
@@ -118,10 +122,10 @@ export const Route = createFileRoute("/api/contacts")({
         try {
           const inserted = await s<{ id: string }[]>`
             INSERT INTO public.contacts
-              (company_id, phone, name, name_source, email, reference, status,
+              (company_id, phone, phone_match, name, name_source, email, reference, status,
                tags, avatar_color, contact_type)
             VALUES
-              (${companyId}::uuid, ${phone}, ${d.name}, 'manual',
+              (${companyId}::uuid, ${phone}, ${phoneMatch}, ${d.name}, 'manual',
                ${d.email ?? null}, ${d.reference ?? null}, ${d.status ?? "ativo"},
                ${d.tags ?? null}, ${d.avatar_color ?? null}, 'individual')
             RETURNING id

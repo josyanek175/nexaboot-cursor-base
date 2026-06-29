@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getCurrentUserCompanyId } from "@/lib/company.server";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,6 +37,8 @@ export const Route = createFileRoute("/api/contacts/$id")({
         if (phone !== undefined && (phone.length < 8 || phone.length > 15)) {
           return Response.json({ error: "invalid_phone" }, { status: 400 });
         }
+        // Recalcula a chave canônica (com/sem nono dígito BR) quando o telefone muda.
+        const phoneMatch = phone !== undefined ? normalizePhoneForMatch(phone) : undefined;
 
         const s = sql();
         const owns = await s`
@@ -55,6 +57,7 @@ export const Route = createFileRoute("/api/contacts/$id")({
               name         = COALESCE(${d.name ?? null}, name),
               name_source  = COALESCE(${nameSource}, name_source),
               phone        = COALESCE(${phone ?? null}, phone),
+              phone_match  = COALESCE(${phoneMatch ?? null}, phone_match),
               email        = ${d.email ?? null},
               reference    = ${d.reference ?? null},
               status       = COALESCE(${d.status ?? null}, status),

@@ -7,7 +7,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 
 const PayloadSchema = z
   .object({
@@ -90,13 +90,15 @@ async function upsertContact(
   fromMe: boolean,
 ): Promise<string> {
   const s = sql();
-  // Um telefone normalizado = um único contato. Prioriza o contato ATIVO; se só
-  // houver inativo/merged, reaproveita o existente (nunca cria outro).
+  // Chave canônica tolerante ao nono dígito BR (com/sem 9 = mesmo contato).
+  const phoneMatch = normalizePhoneForMatch(phone);
+  // Um telefone = um único contato. Procura por phone_match (variante equivalente).
+  // Prioriza o contato ATIVO; se só houver inativo/merged, reaproveita (nunca cria outro).
   const existing = await s<
     { id: string; name: string | null; name_source: string | null; status: string | null }[]
   >`
     SELECT id, name, name_source, status FROM public.contacts
-    WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+    WHERE company_id = ${companyId}::uuid AND phone_match = ${phoneMatch}
     ORDER BY (status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo') DESC,
              created_at ASC
     LIMIT 1
@@ -127,16 +129,18 @@ async function upsertContact(
   const nameSource = !fromMe && name && name.trim() ? "whatsapp" : "auto";
   try {
     const inserted = await s<{ id: string }[]>`
-      INSERT INTO public.contacts (company_id, phone, name, name_source, external_jid, contact_type)
-      VALUES (${companyId}::uuid, ${phone}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
+      INSERT INTO public.contacts
+        (company_id, phone, phone_match, name, name_source, external_jid, contact_type)
+      VALUES
+        (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
       RETURNING id
     `;
     return inserted[0].id;
   } catch (e) {
-    // Corrida: outro processo criou o mesmo (company_id, phone). Reaproveita.
+    // Corrida: outro processo criou o mesmo contato (variante). Reaproveita.
     const again = await s<{ id: string }[]>`
       SELECT id FROM public.contacts
-      WHERE company_id = ${companyId}::uuid AND phone = ${phone}
+      WHERE company_id = ${companyId}::uuid AND phone_match = ${phoneMatch}
       ORDER BY (status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo') DESC,
                created_at ASC
       LIMIT 1
