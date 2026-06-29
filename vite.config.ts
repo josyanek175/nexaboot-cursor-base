@@ -9,7 +9,7 @@
 //
 // Preset do Nitro: node-server (padrão em ambiente sem plataforma detectada;
 // reforçado por NITRO_PRESET=node-server no build do Dockerfile).
-// NÃO usamos Cloudflare Workers, Lovable config nem Rsbuild.
+// NÃO usamos Cloudflare Workers nem Rsbuild.
 import { defineConfig } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import tailwindcss from "@tailwindcss/vite";

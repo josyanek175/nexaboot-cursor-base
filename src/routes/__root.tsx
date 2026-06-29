@@ -74,18 +74,29 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "NexaBoot Foundation is a multi-tenant SaaS platform for business communication and customer support." },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "NexaBoot Foundation is a multi-tenant SaaS platform for business communication and customer support." },
+      { title: "NexaTech | NexaBoot" },
+      {
+        name: "description",
+        content:
+          "NexaBoot é a plataforma da NexaTech para atendimento, comunicação e gestão de conversas empresariais.",
+      },
+      { name: "author", content: "NexaTech" },
+      { property: "og:title", content: "NexaTech | NexaBoot" },
+      { property: "og:site_name", content: "NexaTech" },
+      {
+        property: "og:description",
+        content:
+          "Atendimento inteligente e multicanal para empresas com segurança, organização e integração WhatsApp.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "NexaBoot Foundation is a multi-tenant SaaS platform for business communication and customer support." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f3443288-c51b-4a12-8fc4-88ba214ee7ef/id-preview-93b4b2dd--e3dd5936-bf73-4115-81d3-1b12aa7557ec.lovable.app-1779156438952.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f3443288-c51b-4a12-8fc4-88ba214ee7ef/id-preview-93b4b2dd--e3dd5936-bf73-4115-81d3-1b12aa7557ec.lovable.app-1779156438952.png" },
+      { name: "twitter:site", content: "@NexaTech" },
+      { name: "twitter:title", content: "NexaTech | NexaBoot" },
+      {
+        name: "twitter:description",
+        content:
+          "Atendimento inteligente e multicanal para empresas com segurança, organização e integração WhatsApp.",
+      },
     ],
     links: [
       {
