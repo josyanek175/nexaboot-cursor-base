@@ -180,10 +180,15 @@ export const Route = createFileRoute("/api/auth/login")({
         }
 
         // 5.1) EMPRESA OBRIGATÓRIA (isolamento multitenant) --------------
-        // Decisão oficial: company_id é a fonte única de isolamento. Nenhum
-        // usuário opera sem empresa válida. Nesta fase TODOS os perfis exigem
-        // empresa válida (inclusive ADMIN_GERAL/SUPER_ADMIN), pois ainda não há
-        // tratamento explícito de acesso multiempresa.
+        // Decisão oficial: company_id é a fonte única de isolamento.
+        // Regra por perfil:
+        //   - SUPER_ADMIN e TI: perfis de PLATAFORMA — podem logar sem empresa
+        //     (mas os módulos/endpoints operacionais continuam exigindo empresa
+        //     válida; ver requireCompanyId);
+        //   - demais perfis: login BLOQUEADO se company_id for NULL/inválido.
+        const roleUpper = String(u.role || "").toUpperCase();
+        const isPlatform = roleUpper === "SUPER_ADMIN" || roleUpper === "TI";
+
         let companyValid = false;
         let companyName: string | null = null;
         if (u.company_id) {
@@ -203,8 +208,9 @@ export const Route = createFileRoute("/api/auth/login")({
           userId: u.id,
           company_id: u.company_id,
           companyValid,
+          isPlatform,
         });
-        if (!companyValid) {
+        if (!companyValid && !isPlatform) {
           console.warn("[LOGIN_BLOCKED_NO_COMPANY]", { userId: u.id, email: u.email, role: u.role });
           return Response.json(
             {
@@ -283,9 +289,10 @@ export const Route = createFileRoute("/api/auth/login")({
               name: u.name,
               role: u.role,
               tenant_id: u.tenant_id,
-              company_id: u.company_id,
+              company_id: companyValid ? u.company_id : null,
               company_name: companyName,
-              company_valid: true,
+              company_valid: companyValid,
+              platform_access: isPlatform,
             },
             diag: {
               db: dbMeta?.database ?? null,

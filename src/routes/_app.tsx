@@ -7,7 +7,8 @@ export const Route = createFileRoute("/_app")({
 });
 
 function GuardedApp() {
-  const { isAuthenticated, hydrated, companyValid, companyMessage, logout } = useAuth();
+  const { isAuthenticated, hydrated, companyValid, companyMessage, platformAccess, logout } =
+    useAuth();
 
   // Aguarda hidratação do localStorage para evitar redirect indevido na primeira renderização.
   if (!hydrated) {
@@ -22,9 +23,12 @@ function GuardedApp() {
     return <Navigate to="/login" />;
   }
 
-  // Isolamento oficial por company_id: sem empresa válida, bloqueia TODOS os
-  // módulos operacionais. O usuário pode apenas sair e contatar o administrador.
-  if (!companyValid) {
+  // Regra oficial por perfil:
+  //   - SUPER_ADMIN/TI (platformAccess): entram sem empresa; os módulos
+  //     OPERACIONAIS são bloqueados individualmente dentro do AppShell até haver
+  //     empresa válida/selecionada.
+  //   - Demais perfis sem empresa válida: acesso totalmente bloqueado.
+  if (!companyValid && !platformAccess) {
     return (
       <div className="grid min-h-screen place-items-center bg-background p-6">
         <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-sm">

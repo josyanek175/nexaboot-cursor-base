@@ -24,6 +24,13 @@ interface DbUser {
   company_id?: string | null;
   company_name?: string | null;
   company_valid?: boolean;
+  platform_access?: boolean;
+}
+
+/** Perfis de plataforma: podem entrar sem empresa (módulos operacionais ainda exigem empresa). */
+function isPlatformRoleName(role?: string | null): boolean {
+  const r = String(role ?? "").toUpperCase();
+  return r === "SUPER_ADMIN" || r === "TI";
 }
 
 function toUser(u: DbUser): User {
@@ -46,6 +53,8 @@ interface AuthContextValue {
   companyValid: boolean;
   companyName: string | null;
   companyMessage: string | null;
+  /** SUPER_ADMIN/TI: entram sem empresa, mas módulos operacionais ainda exigem empresa. */
+  platformAccess: boolean;
   attempts: number;
   lockedUntil: number | null;
   login: (email: string, password: string, remember: boolean) => Promise<LoginResult>;
@@ -73,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [companyValid, setCompanyValid] = useState(true);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [companyMessage, setCompanyMessage] = useState<string | null>(null);
+  const [platformAccess, setPlatformAccess] = useState(false);
 
   // Hidratação: pergunta ao backend quem está logado pelo cookie.
   useEffect(() => {
@@ -91,8 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled && data.user) {
           setUser(toUser(data.user));
           const valid = data.user.company_valid !== false;
+          const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
           setCompanyValid(valid);
           setCompanyName(data.user.company_name ?? null);
+          setPlatformAccess(platform);
           setCompanyMessage(valid ? null : data.company_message ?? NO_COMPANY_MESSAGE);
         }
       } catch {
@@ -219,8 +231,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const u = toUser(data.user);
         setUser(u);
         const valid = data.user.company_valid !== false;
+        const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
         setCompanyValid(valid);
         setCompanyName(data.user.company_name ?? null);
+        setPlatformAccess(platform);
         setCompanyMessage(valid ? null : NO_COMPANY_MESSAGE);
         setAttempts(0);
         setLockedUntil(null);
@@ -252,6 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCompanyValid(true);
     setCompanyName(null);
     setCompanyMessage(null);
+    setPlatformAccess(false);
     fetch("/api/auth/me?action=logout", {
       method: "POST",
       credentials: "include",
@@ -307,6 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     companyValid,
     companyName,
     companyMessage,
+    platformAccess,
     attempts,
     lockedUntil,
     login,

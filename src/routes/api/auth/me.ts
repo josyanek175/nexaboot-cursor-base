@@ -55,12 +55,25 @@ export const Route = createFileRoute("/api/auth/me")({
         // para bloquear os módulos operacionais quando não há empresa válida.
         const company = await getCurrentUserCompanyInfo();
 
+        // SUPER_ADMIN e TI têm acesso de PLATAFORMA: podem entrar mesmo sem
+        // empresa, mas os módulos operacionais continuam exigindo empresa válida.
+        const roleUpper = String(u.role || "").toUpperCase();
+        const platformAccess = roleUpper === "SUPER_ADMIN" || roleUpper === "TI";
+
+        // Mensagem conforme o perfil quando não há empresa válida.
+        const companyMessage = company.companyValid
+          ? null
+          : platformAccess
+            ? "Selecione uma empresa para acessar este módulo."
+            : NO_COMPANY_MESSAGE;
+
         console.log("[ME_OK]", {
           userId: u.id,
           email: u.email,
           tenant_id: u.tenant_id,
           company_id: company.companyId,
           company_valid: company.companyValid,
+          platform_access: platformAccess,
         });
         return Response.json({
           user: {
@@ -72,8 +85,9 @@ export const Route = createFileRoute("/api/auth/me")({
             company_id: company.companyId,
             company_name: company.companyName,
             company_valid: company.companyValid,
+            platform_access: platformAccess,
           },
-          ...(company.companyValid ? {} : { company_message: NO_COMPANY_MESSAGE }),
+          ...(companyMessage ? { company_message: companyMessage } : {}),
         });
       },
       POST: async ({ request }) => {

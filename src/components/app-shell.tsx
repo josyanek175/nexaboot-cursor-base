@@ -22,6 +22,15 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 const roleLabel = (r: Role) => ROLE_LABELS[r] ?? r;
 
+// Módulos OPERACIONAIS (dados de empresa). Sem company_id válido, SUPER_ADMIN/TI
+// veem "Selecione uma empresa..." em vez do conteúdo, evitando dados misturados.
+const OPERATIONAL_PREFIXES = ["/atendimento", "/contatos", "/canais"];
+function isOperationalPath(pathname: string): boolean {
+  return OPERATIONAL_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
+
 type NavItem = {
   to: string;
   label: string;
@@ -55,7 +64,7 @@ export function AppShell() {
 function Shell() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { user, tenant, isSuperAdmin, visibleTenants, setUserId, setTenantId } = useSession();
-  const { logout } = useAuth();
+  const { logout, companyValid } = useAuth();
   const navigate = useNavigate();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -200,7 +209,18 @@ function Shell() {
       </aside>
 
       <main className="flex-1 overflow-hidden">
-        <Outlet />
+        {isOperationalPath(pathname) && !companyValid ? (
+          <div className="grid h-full place-items-center p-6">
+            <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-sm">
+              <h1 className="text-lg font-semibold text-foreground">Empresa necessária</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Selecione uma empresa para acessar este módulo.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Outlet />
+        )}
       </main>
 
       {switcherOpen && (
