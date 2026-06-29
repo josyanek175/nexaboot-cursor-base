@@ -160,7 +160,9 @@ async function upsertConversation(
     WHERE company_id = ${companyId}::uuid
       AND whatsapp_channel_id = ${channelId}::uuid
       AND contact_id = ${contactId}::uuid
-    ORDER BY last_message_at DESC NULLS LAST, created_at DESC
+      AND status IS DISTINCT FROM 'merged'
+      AND status IS DISTINCT FROM 'archived'
+    ORDER BY (status = 'open') DESC, last_message_at DESC NULLS LAST, created_at DESC
     LIMIT 1
   `;
   if (existing[0]) {

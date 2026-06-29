@@ -1,6 +1,7 @@
 // Conexão PostgreSQL externa via DATABASE_URL.
 // Usa postgres.js. Servidor-only.
 import postgres from "postgres";
+import { normalizePhone } from "@/lib/phone";
 
 let _sql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
@@ -211,6 +212,133 @@ async function ensureContactsDedup(s: ReturnType<typeof sql>) {
   });
 }
 
+/**
+ * Consolida conversas duplicadas SEM apagar nada. Para cada
+ * (company_id, contact_id, whatsapp_channel_id) com mais de uma conversa:
+ *   - escolhe a principal (prefere 'open', depois a mais recente);
+ *   - migra as mensagens das duplicadas para a principal (preservando histórico;
+ *     mensagens com external_message_id já presente na principal permanecem na
+ *     conversa de origem para não violar a unicidade — nada é apagado);
+ *   - marca as duplicadas como status='merged';
+ *   - recalcula última mensagem/horário da principal.
+ * Deve rodar DEPOIS de ensureContactsDedup (que já aponta contact_id ao principal).
+ */
+async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
+  // Passo 0: revincular conversas SEM contact_id usando o remoteJid da última
+  // mensagem (normalizado) → contato principal por (company_id, phone).
+  const orphanConvs = await s<
+    { id: string; company_id: string; remote_jid: string | null }[]
+  >`
+    SELECT c.id, c.company_id, COALESCE(
+      m.remote_jid_a, m.remote_jid_b, m.remote_jid_c
+    ) AS remote_jid
+    FROM public.conversations c
+    JOIN LATERAL (
+      SELECT
+        raw_payload #>> '{data,key,remoteJid}'   AS remote_jid_a,
+        raw_payload #>> '{data,0,key,remoteJid}' AS remote_jid_b,
+        raw_payload #>> '{key,remoteJid}'        AS remote_jid_c
+      FROM public.messages
+      WHERE conversation_id = c.id AND raw_payload IS NOT NULL
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) m ON true
+    WHERE c.contact_id IS NULL
+      AND c.status IS DISTINCT FROM 'merged' AND c.status IS DISTINCT FROM 'archived'
+  `;
+  for (const oc of orphanConvs) {
+    const phone = normalizePhone(oc.remote_jid);
+    if (!phone) continue;
+    const ct = await s<{ id: string }[]>`
+      SELECT id FROM public.contacts
+      WHERE company_id = ${oc.company_id}::uuid AND phone = ${phone}
+        AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo'
+      ORDER BY (name_source = 'manual') DESC, created_at ASC
+      LIMIT 1
+    `;
+    if (ct[0]) {
+      await s`
+        UPDATE public.conversations
+        SET contact_id = ${ct[0].id}::uuid, updated_at = now()
+        WHERE id = ${oc.id}::uuid
+      `;
+      console.warn("[CONVERSATION_RELINKED]", { conversation: oc.id, phone, contact: ct[0].id });
+    }
+  }
+
+  const dupGroups = await s<
+    { company_id: string; contact_id: string; whatsapp_channel_id: string }[]
+  >`
+    SELECT company_id, contact_id, whatsapp_channel_id
+    FROM public.conversations
+    WHERE contact_id IS NOT NULL
+      AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
+    GROUP BY company_id, contact_id, whatsapp_channel_id
+    HAVING count(*) > 1
+  `;
+  for (const g of dupGroups) {
+    const rows = await s<{ id: string }[]>`
+      SELECT id
+      FROM public.conversations
+      WHERE company_id = ${g.company_id}::uuid
+        AND contact_id = ${g.contact_id}::uuid
+        AND whatsapp_channel_id = ${g.whatsapp_channel_id}::uuid
+        AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
+      ORDER BY (status = 'open') DESC, last_message_at DESC NULLS LAST, created_at DESC
+    `;
+    const principal = rows[0];
+    const others = rows.slice(1);
+    for (const o of others) {
+      // Migra mensagens, evitando colisão de external_message_id na principal.
+      const movedMsgs = await s<{ id: string }[]>`
+        UPDATE public.messages m
+        SET conversation_id = ${principal.id}::uuid
+        WHERE m.conversation_id = ${o.id}::uuid
+          AND (
+            m.external_message_id IS NULL
+            OR NOT EXISTS (
+              SELECT 1 FROM public.messages p
+              WHERE p.conversation_id = ${principal.id}::uuid
+                AND p.external_message_id = m.external_message_id
+            )
+          )
+        RETURNING m.id
+      `;
+      await s`
+        UPDATE public.conversations
+        SET status = 'merged', updated_at = now()
+        WHERE id = ${o.id}::uuid
+      `;
+      console.warn("[CONVERSATIONS_DEDUP_MERGED]", {
+        companyId: g.company_id,
+        contactId: g.contact_id,
+        channelId: g.whatsapp_channel_id,
+        principal: principal.id,
+        merged: o.id,
+        messagesMoved: movedMsgs.length,
+      });
+    }
+    // Recalcula última mensagem/horário da principal a partir das mensagens.
+    await s`
+      UPDATE public.conversations c
+      SET last_message_at = sub.max_at,
+          last_message = COALESCE(sub.last_text, c.last_message),
+          updated_at = now()
+      FROM (
+        SELECT
+          max(created_at) AS max_at,
+          (SELECT message_text FROM public.messages
+            WHERE conversation_id = ${principal.id}::uuid
+            ORDER BY created_at DESC LIMIT 1) AS last_text
+        FROM public.messages
+        WHERE conversation_id = ${principal.id}::uuid
+      ) sub
+      WHERE c.id = ${principal.id}::uuid
+    `;
+  }
+  console.log("[CONVERSATIONS_DEDUP_OK]", { dupGroups: dupGroups.length });
+}
+
 export async function ensureCrmSchema() {
   if (_crmReady) return _crmReady;
   _crmReady = (async () => {
@@ -341,6 +469,10 @@ export async function ensureCrmSchema() {
       // Telefone único por empresa (contatos ativos) + merge defensivo de
       // duplicados legados, sem apagar nada.
       await ensureContactsDedup(s);
+
+      // Uma conversa principal por (contato, canal). Consolida duplicadas que
+      // sobraram após apontar os contatos ao principal. Não apaga nada.
+      await ensureConversationsDedup(s);
 
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {

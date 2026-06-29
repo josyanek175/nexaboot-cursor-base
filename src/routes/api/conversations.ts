@@ -35,6 +35,9 @@ export const Route = createFileRoute("/api/conversations")({
           JOIN public.contacts ct ON ct.id = c.contact_id
           JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
           WHERE c.company_id = ${companyId}::uuid
+            AND c.status IS DISTINCT FROM 'merged'
+            AND c.status IS DISTINCT FROM 'archived'
+            AND ct.status IS DISTINCT FROM 'merged'
           ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
           LIMIT 500
         `;
