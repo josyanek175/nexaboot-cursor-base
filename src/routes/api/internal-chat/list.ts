@@ -1,12 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireCompanyId } from "@/lib/company.server";
 
 export const Route = createFileRoute("/api/internal-chat/list")({
   server: {
     handlers: {
       GET: async () => {
         await ensureSchema();
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         const uid = getSessionUserId();
         if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
         const s = sql();
@@ -33,6 +37,7 @@ export const Route = createFileRoute("/api/internal-chat/list")({
           FROM internal_chats c
           JOIN internal_chat_members mem ON mem.chat_id = c.id
           WHERE mem.user_id = ${uid}
+            AND c.company_id = ${companyId}::uuid
           ORDER BY last_message_at DESC NULLS LAST, c.created_at DESC
         `;
 

@@ -6,6 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireCompanyId } from "@/lib/company.server";
 import { saveInternalAttachment, UploadError, type SavedAttachment } from "@/lib/internal-upload.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,6 +20,9 @@ export const Route = createFileRoute("/api/internal-chat/send")({
     handlers: {
       POST: async ({ request }) => {
         await ensureSchema();
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         const uid = getSessionUserId();
         if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
 
@@ -58,8 +62,13 @@ export const Route = createFileRoute("/api/internal-chat/send")({
         }
 
         const s = sql();
+        // Membership + chat da MESMA empresa do usuário logado.
         const member = await s`
-          SELECT 1 FROM internal_chat_members WHERE chat_id = ${chatId} AND user_id = ${uid}
+          SELECT 1
+          FROM internal_chat_members mem
+          JOIN internal_chats c ON c.id = mem.chat_id
+          WHERE mem.chat_id = ${chatId} AND mem.user_id = ${uid}
+            AND c.company_id = ${companyId}::uuid
         `;
         if (!member.length) return Response.json({ error: "forbidden" }, { status: 403 });
 

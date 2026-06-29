@@ -1,21 +1,28 @@
+// GET /api/internal-chat/users — usuários disponíveis para conversar no chat
+// interno. Isolamento oficial por company_id: lista apenas usuários da MESMA
+// empresa do usuário logado. Sem empresa válida => 403 (inclui SUPER_ADMIN/TI
+// sem empresa, pois o chat interno é operacional).
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureSchema } from "@/lib/pg.server";
-import { getSessionUserId } from "@/lib/session.server";
+import { requireCompanyId } from "@/lib/company.server";
 
 export const Route = createFileRoute("/api/internal-chat/users")({
   server: {
     handlers: {
       GET: async () => {
         await ensureSchema();
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
+
         const s = sql();
-        const me = await s`SELECT tenant_id FROM users WHERE id = ${uid}`;
-        if (!me.length) return Response.json({ error: "unauthorized" }, { status: 401 });
-        const tenantId = me[0].tenant_id;
-        const users = tenantId
-          ? await s`SELECT id, name, email, role FROM users WHERE tenant_id = ${tenantId} ORDER BY name`
-          : await s`SELECT id, name, email, role FROM users WHERE tenant_id IS NULL ORDER BY name`;
+        const users = await s`
+          SELECT id, name, email, role
+          FROM public.users
+          WHERE company_id = ${companyId}::uuid
+            AND COALESCE(active, true) = true
+          ORDER BY name
+        `;
         return Response.json({ users });
       },
     },

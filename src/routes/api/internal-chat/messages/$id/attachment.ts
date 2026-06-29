@@ -9,6 +9,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireCompanyId } from "@/lib/company.server";
 import { readAttachment } from "@/lib/internal-upload.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,6 +27,9 @@ export const Route = createFileRoute("/api/internal-chat/messages/$id/attachment
     handlers: {
       GET: async ({ params }) => {
         await ensureSchema();
+        const company = await requireCompanyId();
+        if (company instanceof Response) return company;
+        const companyId = company;
         const uid = getSessionUserId();
         if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
 
@@ -35,12 +39,13 @@ export const Route = createFileRoute("/api/internal-chat/messages/$id/attachment
         }
 
         const s = sql();
-        // Junta a mensagem com a participação do usuário no chat (autorização).
+        // Mensagem + participação do usuário + chat da MESMA empresa (autorização).
         const rows = await s`
           SELECT m.attachment_path, m.attachment_mime_type,
                  m.attachment_original_name, m.attachment_type,
                  mem.user_id AS member_id
           FROM internal_messages m
+          JOIN internal_chats c ON c.id = m.chat_id AND c.company_id = ${companyId}::uuid
           LEFT JOIN internal_chat_members mem
             ON mem.chat_id = m.chat_id AND mem.user_id = ${uid}
           WHERE m.id = ${messageId}

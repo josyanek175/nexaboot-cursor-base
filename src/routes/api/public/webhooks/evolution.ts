@@ -467,6 +467,21 @@ export async function handleEvolutionWebhookPOST(request: Request): Promise<Resp
       return new Response("Channel not found", { status: 404 });
     }
 
+    // Isolamento oficial por company_id: a empresa é SEMPRE derivada do canal
+    // (whatsapp_channels.company_id). Se o canal não tiver empresa válida, o
+    // webhook é IGNORADO — nunca cria contato/conversa/mensagem, nunca usa
+    // Empresa Padrão, nunca usa tenant_id. Retorna 200 para a Evolution não
+    // reenviar em loop.
+    if (!channel.company_id) {
+      console.warn("[WEBHOOK_CHANNEL_WITHOUT_COMPANY]", {
+        instance,
+        channelId: channel.id,
+        event,
+        note: "Canal sem empresa vinculada. Webhook ignorado.",
+      });
+      return Response.json({ ok: true, ignored: "channel_without_company" });
+    }
+
     if (event === "messages.upsert" || event === "MESSAGES_UPSERT") {
       const items = Array.isArray((body as any).data) ? (body as any).data : [(body as any).data];
       for (const item of items) if (item) await handleMessagesUpsert(channel, item, body as Json);

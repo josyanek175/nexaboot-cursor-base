@@ -680,6 +680,22 @@ export async function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS internal_notifications_user_idx ON internal_notifications(user_id, read_at);
+
+        -- Isolamento oficial por empresa (Fase B). Idempotente e NÃO destrutivo:
+        -- coluna NULL + FK; SEM NOT NULL e SEM backfill automático. Chats antigos
+        -- ficam com company_id NULL até backfill manual aprovado.
+        ALTER TABLE internal_chats ADD COLUMN IF NOT EXISTS company_id UUID;
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'internal_chats_company_id_fkey'
+          ) THEN
+            ALTER TABLE internal_chats
+              ADD CONSTRAINT internal_chats_company_id_fkey
+              FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE SET NULL;
+          END IF;
+        END$$;
+        CREATE INDEX IF NOT EXISTS idx_internal_chats_company ON internal_chats(company_id);
       `);
       console.log("[SCHEMA_CHAT_OK]");
     } catch (e) {
