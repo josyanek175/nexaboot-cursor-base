@@ -8,6 +8,11 @@ import { canManageInternalGroups } from "@/lib/current-user";
 import { useEffect, useState } from "react";
 import { users, tenants, type Role } from "@/lib/mocks";
 import { subscribeUnread, setUnread as setUnreadStore, type UnreadKey } from "@/lib/unread-store";
+import {
+  onInternalUnreadCountUpdate,
+  unlockNotificationAudio,
+  resetInternalUnreadBaseline,
+} from "@/lib/notification-sound";
 import { SessionProvider, useSession } from "@/lib/session";
 import { useAuth } from "@/lib/auth";
 
@@ -72,6 +77,19 @@ function Shell() {
 
   useEffect(() => subscribeUnread(setUnread), []);
 
+  // Destrava autoplay de áudio após o primeiro gesto do usuário (best-effort).
+  useEffect(() => {
+    const unlock = () => {
+      void unlockNotificationAudio();
+    };
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   // Polling global do contador de Comunicação Interna não lida (a cada 10s).
   // Mantém o badge do menu atualizado em qualquer página do sistema.
   useEffect(() => {
@@ -81,7 +99,11 @@ function Shell() {
         const r = await fetch("/api/internal-chat/unread-count", { credentials: "include" });
         if (!r.ok) return;
         const j = (await r.json()) as { count?: number };
-        if (!cancel) setUnreadStore("internal", j.count ?? 0);
+        if (!cancel) {
+          const count = j.count ?? 0;
+          onInternalUnreadCountUpdate(count);
+          setUnreadStore("internal", count);
+        }
       } catch {
         /* offline/sem sessão — ignora */
       }
@@ -98,6 +120,7 @@ function Shell() {
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
   const onLogout = () => {
+    resetInternalUnreadBaseline();
     logout();
     navigate({ to: "/login" });
   };

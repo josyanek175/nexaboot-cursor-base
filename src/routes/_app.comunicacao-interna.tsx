@@ -4,9 +4,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   MessageSquare, Send, Loader2, Users, AlertTriangle, Plus, X,
-  Paperclip, FileText, Download,
+  Paperclip, FileText, Download, Volume2, VolumeX,
 } from "lucide-react";
 import { setUnread as setUnreadStore } from "@/lib/unread-store";
+import {
+  getNotificationSoundsEnabled,
+  setNotificationSoundsEnabled,
+  subscribeNotificationSoundsEnabled,
+  onInternalUnreadCountUpdate,
+} from "@/lib/notification-sound";
 
 // Mantém em sincronia com src/lib/internal-upload.server.ts
 const ACCEPT = ".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv";
@@ -103,8 +109,11 @@ function ComunicacaoInternaPage() {
 
   // Modal "Nova conversa"
   const [newOpen, setNewOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => getNotificationSoundsEnabled());
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => subscribeNotificationSoundsEnabled(setSoundEnabled), []);
 
   function clearFile() {
     setFile(null);
@@ -165,7 +174,9 @@ function ComunicacaoInternaPage() {
         if (cancel) return;
         setChats(r.chats);
         // Mantém o badge do menu lateral em sincronia com a soma das não lidas.
-        setUnreadStore("internal", r.chats.reduce((acc, c) => acc + (c.unread || 0), 0));
+        const total = r.chats.reduce((acc, c) => acc + (c.unread || 0), 0);
+        onInternalUnreadCountUpdate(total);
+        setUnreadStore("internal", total);
         setChatsError(null);
       } catch (e) {
         if (!cancel) setChatsError((e as Error).message);
@@ -216,7 +227,10 @@ function ComunicacaoInternaPage() {
     (async () => {
       try {
         const r = await jpost<{ count: number }>("/api/internal-chat/mark-read", { chatId: activeId });
-        if (!cancel) setUnreadStore("internal", r.count);
+        if (!cancel) {
+          onInternalUnreadCountUpdate(r.count);
+          setUnreadStore("internal", r.count);
+        }
         if (!cancel) reloadChats(); // zera o contador do chat aberto na lista
       } catch {
         /* ignore */
@@ -331,13 +345,25 @@ function ComunicacaoInternaPage() {
             </h2>
             <p className="truncate text-xs text-muted-foreground">Olá, {me.name}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setNewOpen(true)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
-          >
-            <Plus className="h-3.5 w-3.5" /> Nova
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setNotificationSoundsEnabled(!soundEnabled)}
+              className="rounded-md p-2 text-muted-foreground hover:bg-accent"
+              title={soundEnabled ? "Desativar som de notificação" : "Ativar som de notificação"}
+              aria-pressed={soundEnabled}
+              aria-label={soundEnabled ? "Desativar som de notificação" : "Ativar som de notificação"}
+            >
+              {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+            >
+              <Plus className="h-3.5 w-3.5" /> Nova
+            </button>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {chatsLoading && chats.length === 0 ? (
