@@ -55,6 +55,8 @@ interface AuthContextValue {
   companyMessage: string | null;
   /** SUPER_ADMIN/TI: entram sem empresa, mas módulos operacionais ainda exigem empresa. */
   platformAccess: boolean;
+  /** company_id do usuário logado (quando válido). */
+  companyId: string | null;
   attempts: number;
   lockedUntil: number | null;
   login: (email: string, password: string, remember: boolean) => Promise<LoginResult>;
@@ -83,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [companyMessage, setCompanyMessage] = useState<string | null>(null);
   const [platformAccess, setPlatformAccess] = useState(false);
+  const [companyId, setCompanyId] = useState<string | null>(null);
 
   // Hidratação: pergunta ao backend quem está logado pelo cookie.
   useEffect(() => {
@@ -104,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
           setCompanyValid(valid);
           setCompanyName(data.user.company_name ?? null);
+          setCompanyId(data.user.company_id ?? null);
           setPlatformAccess(platform);
           setCompanyMessage(valid ? null : data.company_message ?? NO_COMPANY_MESSAGE);
         }
@@ -234,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
         setCompanyValid(valid);
         setCompanyName(data.user.company_name ?? null);
+        setCompanyId(data.user.company_id ?? null);
         setPlatformAccess(platform);
         setCompanyMessage(valid ? null : NO_COMPANY_MESSAGE);
         setAttempts(0);
@@ -265,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setCompanyValid(true);
     setCompanyName(null);
+    setCompanyId(null);
     setCompanyMessage(null);
     setPlatformAccess(false);
     fetch("/api/auth/me?action=logout", {
@@ -323,6 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     companyName,
     companyMessage,
     platformAccess,
+    companyId,
     attempts,
     lockedUntil,
     login,

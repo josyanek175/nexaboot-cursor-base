@@ -18,6 +18,7 @@ import { Route as ApiUsersRouteImport } from './routes/api/users'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
 import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
 import { Route as ApiContactsRouteImport } from './routes/api/contacts'
+import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
 import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
 import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
 import { Route as AppLogsRouteImport } from './routes/_app.logs'
@@ -48,6 +49,7 @@ import { Route as ApiDebugCurrentUserRouteImport } from './routes/api/debug/curr
 import { Route as ApiDebugColsRouteImport } from './routes/api/debug/cols'
 import { Route as ApiConversationsStartRouteImport } from './routes/api/conversations/start'
 import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
+import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
@@ -110,6 +112,11 @@ const ApiConversationsRoute = ApiConversationsRouteImport.update({
 const ApiContactsRoute = ApiContactsRouteImport.update({
   id: '/api/contacts',
   path: '/api/contacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCompaniesRoute = ApiCompaniesRouteImport.update({
+  id: '/api/companies',
+  path: '/api/companies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAttendantsRoute = ApiAttendantsRouteImport.update({
@@ -264,6 +271,11 @@ const ApiContactsIdRoute = ApiContactsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiContactsRoute,
 } as any)
+const ApiCompaniesIdRoute = ApiCompaniesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiCompaniesRoute,
+} as any)
 const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
   id: '/api/auth/register',
   path: '/api/auth/register',
@@ -387,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
@@ -398,6 +411,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/companies/$id': typeof ApiCompaniesIdRoute
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
@@ -446,6 +460,7 @@ export interface FileRoutesByTo {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
@@ -457,6 +472,7 @@ export interface FileRoutesByTo {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/companies/$id': typeof ApiCompaniesIdRoute
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
@@ -507,6 +523,7 @@ export interface FileRoutesById {
   '/_app/logs': typeof AppLogsRoute
   '/_app/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
@@ -518,6 +535,7 @@ export interface FileRoutesById {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/companies/$id': typeof ApiCompaniesIdRoute
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
@@ -568,6 +586,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/attendants'
+    | '/api/companies'
     | '/api/contacts'
     | '/api/conversations'
     | '/api/messages'
@@ -579,6 +598,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
     | '/api/debug/cols'
@@ -627,6 +647,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/attendants'
+    | '/api/companies'
     | '/api/contacts'
     | '/api/conversations'
     | '/api/messages'
@@ -638,6 +659,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
     | '/api/debug/cols'
@@ -687,6 +709,7 @@ export interface FileRouteTypes {
     | '/_app/logs'
     | '/_app/usuarios'
     | '/api/attendants'
+    | '/api/companies'
     | '/api/contacts'
     | '/api/conversations'
     | '/api/messages'
@@ -698,6 +721,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
     | '/api/debug/cols'
@@ -737,6 +761,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
+  ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRouteWithChildren
   ApiMessagesRoute: typeof ApiMessagesRouteWithChildren
@@ -829,6 +854,13 @@ declare module '@tanstack/react-router' {
       path: '/api/contacts'
       fullPath: '/api/contacts'
       preLoaderRoute: typeof ApiContactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/companies': {
+      id: '/api/companies'
+      path: '/api/companies'
+      fullPath: '/api/companies'
+      preLoaderRoute: typeof ApiCompaniesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/attendants': {
@@ -1041,6 +1073,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiContactsIdRouteImport
       parentRoute: typeof ApiContactsRoute
     }
+    '/api/companies/$id': {
+      id: '/api/companies/$id'
+      path: '/$id'
+      fullPath: '/api/companies/$id'
+      preLoaderRoute: typeof ApiCompaniesIdRouteImport
+      parentRoute: typeof ApiCompaniesRoute
+    }
     '/api/auth/register': {
       id: '/api/auth/register'
       path: '/api/auth/register'
@@ -1207,6 +1246,18 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface ApiCompaniesRouteChildren {
+  ApiCompaniesIdRoute: typeof ApiCompaniesIdRoute
+}
+
+const ApiCompaniesRouteChildren: ApiCompaniesRouteChildren = {
+  ApiCompaniesIdRoute: ApiCompaniesIdRoute,
+}
+
+const ApiCompaniesRouteWithChildren = ApiCompaniesRoute._addFileChildren(
+  ApiCompaniesRouteChildren,
+)
+
 interface ApiContactsRouteChildren {
   ApiContactsIdRoute: typeof ApiContactsIdRoute
 }
@@ -1317,6 +1368,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
+  ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
   ApiContactsRoute: ApiContactsRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRouteWithChildren,
   ApiMessagesRoute: ApiMessagesRouteWithChildren,
