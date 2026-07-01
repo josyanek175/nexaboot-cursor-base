@@ -18,7 +18,6 @@ async function getActor() {
 
 const PatchBody = z.object({
   name: z.string().trim().min(1).max(200).optional(),
-  slug: z.string().trim().min(1).max(120).optional().nullable(),
   active: z.boolean().optional(),
 });
 
@@ -50,7 +49,7 @@ export const Route = createFileRoute("/api/companies/$id")({
         }
 
         if (!platform) {
-          if (parsed.data.active !== undefined || parsed.data.slug !== undefined) {
+          if (parsed.data.active !== undefined) {
             return Response.json({ error: "forbidden" }, { status: 403 });
           }
           if (!parsed.data.name) {
@@ -58,13 +57,8 @@ export const Route = createFileRoute("/api/companies/$id")({
           }
         }
 
-        const existing = await sql<{
-          id: string;
-          name: string;
-          slug: string | null;
-          active: boolean;
-        }[]>`
-          SELECT id, name, slug, active
+        const existing = await sql<{ id: string; name: string; active: boolean }[]>`
+          SELECT id, name, active
           FROM public.companies
           WHERE id = ${companyId}::uuid
           LIMIT 1
@@ -75,26 +69,21 @@ export const Route = createFileRoute("/api/companies/$id")({
 
         const cur = existing[0];
         const nextName = parsed.data.name ?? cur.name;
-        const nextSlug = parsed.data.slug !== undefined ? parsed.data.slug : cur.slug;
         const nextActive = parsed.data.active !== undefined ? parsed.data.active : cur.active;
 
         try {
           const rows = await sql()`
             UPDATE public.companies
             SET name = ${nextName},
-                slug = ${nextSlug},
                 active = ${nextActive},
                 updated_at = now()
             WHERE id = ${companyId}::uuid
-            RETURNING id, name, slug, active, created_at, updated_at
+            RETURNING id, name, active, created_at, updated_at
           `;
           return Response.json({ company: rows[0] });
         } catch (e) {
           const err = e as { code?: string; message?: string; detail?: string };
           console.error("[COMPANIES_PATCH_FAIL]", err);
-          if (err.code === "23505") {
-            return Response.json({ error: "slug_already_exists" }, { status: 409 });
-          }
           return Response.json(
             { error: "update_failed", detail: err.detail ?? err.message },
             { status: 500 },

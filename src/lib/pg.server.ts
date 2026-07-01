@@ -373,7 +373,6 @@ export async function ensureCrmSchema() {
         CREATE TABLE IF NOT EXISTS public.companies (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL,
-          slug TEXT UNIQUE,
           active BOOLEAN NOT NULL DEFAULT true,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

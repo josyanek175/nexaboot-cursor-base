@@ -15,6 +15,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution'
 import { Route as ApiUsersRouteImport } from './routes/api/users'
+import { Route as ApiPlansRouteImport } from './routes/api/plans'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
 import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
 import { Route as ApiContactsRouteImport } from './routes/api/contacts'
@@ -99,6 +100,11 @@ const WebhookEvolutionRoute = WebhookEvolutionRouteImport.update({
 const ApiUsersRoute = ApiUsersRouteImport.update({
   id: '/api/users',
   path: '/api/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPlansRoute = ApiPlansRouteImport.update({
+  id: '/api/plans',
+  path: '/api/plans',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMessagesRoute = ApiMessagesRouteImport.update({
@@ -416,6 +422,7 @@ export interface FileRoutesByFullPath {
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
+  '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -479,6 +486,7 @@ export interface FileRoutesByTo {
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
+  '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -544,6 +552,7 @@ export interface FileRoutesById {
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
+  '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -609,6 +618,7 @@ export interface FileRouteTypes {
     | '/api/contacts'
     | '/api/conversations'
     | '/api/messages'
+    | '/api/plans'
     | '/api/users'
     | '/webhook/evolution'
     | '/api/admin/auth-check'
@@ -672,6 +682,7 @@ export interface FileRouteTypes {
     | '/api/contacts'
     | '/api/conversations'
     | '/api/messages'
+    | '/api/plans'
     | '/api/users'
     | '/webhook/evolution'
     | '/api/admin/auth-check'
@@ -736,6 +747,7 @@ export interface FileRouteTypes {
     | '/api/contacts'
     | '/api/conversations'
     | '/api/messages'
+    | '/api/plans'
     | '/api/users'
     | '/webhook/evolution'
     | '/api/admin/auth-check'
@@ -790,6 +802,7 @@ export interface RootRouteChildren {
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRouteWithChildren
   ApiMessagesRoute: typeof ApiMessagesRouteWithChildren
+  ApiPlansRoute: typeof ApiPlansRoute
   ApiUsersRoute: typeof ApiUsersRouteWithChildren
   WebhookEvolutionRoute: typeof WebhookEvolutionRoute
   ApiAdminAuthCheckRoute: typeof ApiAdminAuthCheckRoute
@@ -859,6 +872,13 @@ declare module '@tanstack/react-router' {
       path: '/api/users'
       fullPath: '/api/users'
       preLoaderRoute: typeof ApiUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/plans': {
+      id: '/api/plans'
+      path: '/api/plans'
+      fullPath: '/api/plans'
+      preLoaderRoute: typeof ApiPlansRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/messages': {
@@ -1424,6 +1444,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiContactsRoute: ApiContactsRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRouteWithChildren,
   ApiMessagesRoute: ApiMessagesRouteWithChildren,
+  ApiPlansRoute: ApiPlansRoute,
   ApiUsersRoute: ApiUsersRouteWithChildren,
   WebhookEvolutionRoute: WebhookEvolutionRoute,
   ApiAdminAuthCheckRoute: ApiAdminAuthCheckRoute,

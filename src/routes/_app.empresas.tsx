@@ -9,7 +9,6 @@ import { pushAudit } from "@/lib/audit-log";
 type CompanyRow = {
   id: string;
   name: string;
-  slug: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -21,11 +20,26 @@ type CompanyRow = {
   whatsapp_channels_used: number;
 };
 
+type PlanOption = {
+  id: string;
+  code: string;
+  name: string;
+  max_whatsapp_channels: number;
+};
+
 type EditDraft = {
   id: string;
   name: string;
-  slug: string;
   active: boolean;
+};
+
+type CreateDraft = {
+  name: string;
+  active: boolean;
+  plan_id: string;
+  admin_name: string;
+  admin_email: string;
+  admin_password: string;
 };
 
 function formatChannelUsage(row: CompanyRow): string {
@@ -49,13 +63,26 @@ function EmpresasPage() {
   };
 
   const [items, setItems] = useState<CompanyRow[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditDraft | null>(null);
-  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState<CreateDraft | null>(null);
   const [saving, setSaving] = useState(false);
 
   const isPlatformView = user ? isPlatformRole(user.role) : false;
+
+  async function loadPlans() {
+    if (!isPlatformView) return;
+    try {
+      const res = await fetch("/api/plans", { credentials: "include" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { plans: PlanOption[] };
+      setPlans(data.plans ?? []);
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function reload() {
     setLoading(true);
@@ -90,9 +117,9 @@ function EmpresasPage() {
 
   useEffect(() => {
     reload();
+    loadPlans();
   }, []);
 
-  // Escopo definido pelo backend — não refiltrar por company_id / sidebar no cliente.
   const visible = items;
 
   function canEditCompany(t: CompanyRow): boolean {
@@ -100,7 +127,7 @@ function EmpresasPage() {
     return actor.role === "ADMIN_EMPRESA" && companyId === t.id;
   }
 
-  function openNew() {
+  async function openNew() {
     if (!canCreateTenant(actor)) {
       toast.error("Sem permissão para criar empresas");
       pushAudit({
@@ -109,8 +136,27 @@ function EmpresasPage() {
       });
       return;
     }
-    setEditing({ id: "", name: "", slug: "", active: true });
-    setOpen(true);
+    let planList = plans;
+    if (planList.length === 0) {
+      try {
+        const res = await fetch("/api/plans", { credentials: "include" });
+        if (res.ok) {
+          const data = (await res.json()) as { plans: PlanOption[] };
+          planList = data.plans ?? [];
+          setPlans(planList);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    setCreating({
+      name: "",
+      active: true,
+      plan_id: planList[0]?.id ?? "",
+      admin_name: "",
+      admin_email: "",
+      admin_password: "",
+    });
   }
 
   function openEdit(t: CompanyRow) {
@@ -122,60 +168,81 @@ function EmpresasPage() {
       });
       return;
     }
-    setEditing({
-      id: t.id,
-      name: t.name,
-      slug: t.slug ?? "",
-      active: t.active,
-    });
-    setOpen(true);
+    setEditing({ id: t.id, name: t.name, active: t.active });
   }
 
-  async function save() {
+  async function saveEdit() {
     if (!editing || saving) return;
     setSaving(true);
     try {
-      const exists = items.some((t) => t.id === editing.id);
-      if (exists) {
-        const res = await fetch(`/api/companies/${encodeURIComponent(editing.id)}`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: editing.name,
-            ...(isPlatformView ? {
-              slug: editing.slug || null,
-              active: editing.active,
-            } : {}),
-          }),
-        });
-        if (!res.ok) {
-          const j = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(j.error ?? `HTTP ${res.status}`);
-        }
-      } else {
-        const res = await fetch("/api/companies", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: editing.name,
-            slug: editing.slug || null,
-            active: editing.active,
-          }),
-        });
-        if (!res.ok) {
-          const j = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(j.error ?? `HTTP ${res.status}`);
-        }
+      const res = await fetch(`/api/companies/${encodeURIComponent(editing.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editing.name,
+          ...(isPlatformView ? { active: editing.active } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
       }
       pushAudit({
-        tenantId: editing.id || actor.tenantId, actorId: actor.id, actorName: user?.name ?? "",
+        tenantId: editing.id, actorId: actor.id, actorName: user?.name ?? "",
         targetType: "tenant", targetId: editing.id, targetName: editing.name,
-        action: exists ? "tenant.update" : "tenant.create", result: "success",
+        action: "tenant.update", result: "success",
       });
-      toast.success(exists ? "Empresa atualizada" : "Empresa criada");
-      setOpen(false);
+      toast.success("Empresa atualizada");
+      setEditing(null);
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveCreate() {
+    if (!creating || saving) return;
+    if (!creating.plan_id) {
+      toast.error("Selecione um plano");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/companies", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: creating.name,
+          active: creating.active,
+          plan_id: creating.plan_id,
+          admin: {
+            name: creating.admin_name,
+            email: creating.admin_email,
+            password: creating.admin_password,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown };
+        const msg =
+          j.error === "email_already_exists"
+            ? "E-mail do administrador já está em uso."
+            : j.error === "plan_not_found"
+              ? "Plano inválido."
+              : j.error ?? `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      pushAudit({
+        tenantId: actor.tenantId, actorId: actor.id, actorName: user?.name ?? "",
+        targetType: "tenant", targetName: creating.name,
+        action: "tenant.create", result: "success",
+      });
+      toast.success("Empresa criada com plano e administrador");
+      setCreating(null);
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -186,7 +253,7 @@ function EmpresasPage() {
 
   async function toggleStatus(t: CompanyRow) {
     if (!canSuspendTenant(actor)) {
-      toast.error("Apenas ADMIN_GERAL pode suspender empresas");
+      toast.error("Apenas perfil de plataforma pode suspender empresas");
       pushAudit({
         tenantId: t.id, actorId: actor.id, actorName: user?.name ?? "", targetType: "tenant",
         targetId: t.id, targetName: t.name, action: "permission.denied", result: "denied",
@@ -202,7 +269,7 @@ function EmpresasPage() {
         body: JSON.stringify({ active: nextActive }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const label = nextActive ? "ativo" : "suspenso";
+      const label = nextActive ? "ativo" : "inativo";
       pushAudit({
         tenantId: t.id, actorId: actor.id, actorName: user?.name ?? "", targetType: "tenant",
         targetId: t.id, targetName: t.name, action: "tenant.toggle_status", result: "success",
@@ -224,7 +291,7 @@ function EmpresasPage() {
             <h1 className="text-lg font-semibold">Empresas / Tenants</h1>
             <p className="text-xs text-muted-foreground">
               {isPlatformView
-                ? "Visão global · plano e uso de canais (public.companies)"
+                ? "Visão global · plano e uso de canais"
                 : `Sua empresa · plano e consumo (${companyId ?? "—"})`}
             </p>
           </div>
@@ -241,7 +308,7 @@ function EmpresasPage() {
 
       {!isPlatformView && (
         <div className="flex items-center gap-2 border-b border-border bg-amber-50 px-6 py-2 text-xs text-amber-800">
-          <ShieldAlert className="h-3.5 w-3.5" /> Você visualiza apenas o plano e o consumo da sua empresa. Alteração de plano é feita pela equipe NexaBoot.
+          <ShieldAlert className="h-3.5 w-3.5" /> Você visualiza apenas o plano e o consumo da sua empresa.
         </div>
       )}
 
@@ -260,18 +327,17 @@ function EmpresasPage() {
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 text-left">Nome</th>
-                  <th className="px-4 py-3 text-left">Slug</th>
                   <th className="px-4 py-3 text-left">Plano</th>
                   <th className="px-4 py-3 text-left">Canais WhatsApp</th>
                   <th className="px-4 py-3 text-left">Assinatura</th>
-                  <th className="px-4 py-3 text-left">Empresa</th>
+                  <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                       Nenhuma empresa encontrada no banco.
                     </td>
                   </tr>
@@ -284,7 +350,6 @@ function EmpresasPage() {
                   return (
                     <tr key={t.id} className="border-t border-border hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{t.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{t.slug ?? "—"}</td>
                       <td className="px-4 py-3">
                         {t.plan_name ? (
                           <span className="rounded-md bg-accent px-2 py-1 text-xs">{t.plan_name}</span>
@@ -295,7 +360,6 @@ function EmpresasPage() {
                       <td className="px-4 py-3">
                         <span
                           className={`text-xs font-medium ${atLimit ? "text-amber-700" : "text-foreground"}`}
-                          title={atLimit ? "Limite do plano atingido (bloqueio na fase 2)" : undefined}
                         >
                           {formatChannelUsage(t)}
                         </span>
@@ -306,7 +370,7 @@ function EmpresasPage() {
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1.5 text-xs ${t.active ? "text-whatsapp" : "text-destructive"}`}>
                           <span className={`h-2 w-2 rounded-full ${t.active ? "bg-whatsapp" : "bg-destructive"}`} />
-                          {t.active ? "ativo" : "suspenso"}
+                          {t.active ? "ativa" : "inativa"}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -314,7 +378,7 @@ function EmpresasPage() {
                           <button
                             disabled={!editable}
                             onClick={() => openEdit(t)}
-                            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
                             title={editable ? "Editar" : "Sem permissão"}
                           >
                             <Pencil className="h-4 w-4" />
@@ -322,8 +386,8 @@ function EmpresasPage() {
                           <button
                             disabled={!suspendable}
                             onClick={() => toggleStatus(t)}
-                            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-                            title={suspendable ? "Ativar/Suspender" : "Apenas ADMIN_GERAL"}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
+                            title={suspendable ? "Ativar/Inativar" : "Apenas plataforma"}
                           >
                             <Power className="h-4 w-4" />
                           </button>
@@ -338,51 +402,104 @@ function EmpresasPage() {
         )}
       </div>
 
-      {open && editing && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-4 text-lg font-semibold">
-              {items.some((t) => t.id === editing.id) ? "Editar empresa" : "Nova empresa"}
-            </h2>
-            <div className="space-y-3">
-              <Field label="Nome" value={editing.name} onChange={(v) => setEditing({ ...editing, name: v })} />
-              {isPlatformView && (
-                <Field label="Slug" value={editing.slug} onChange={(v) => setEditing({ ...editing, slug: v })} />
+      {editing && (
+        <Modal title="Editar empresa" onClose={() => setEditing(null)}>
+          <Field label="Nome" value={editing.name} onChange={(v) => setEditing({ ...editing, name: v })} />
+          {isPlatformView && (
+            <Select
+              label="Status"
+              value={editing.active ? "ativa" : "inativa"}
+              options={["ativa", "inativa"]}
+              onChange={(v) => setEditing({ ...editing, active: v === "ativa" })}
+            />
+          )}
+          <ModalActions
+            saving={saving}
+            onCancel={() => setEditing(null)}
+            onSave={saveEdit}
+            saveLabel="Salvar"
+          />
+        </Modal>
+      )}
+
+      {creating && (
+        <Modal title="Nova empresa" onClose={() => setCreating(null)}>
+          <Field label="Nome da empresa" value={creating.name} onChange={(v) => setCreating({ ...creating, name: v })} />
+          <Select
+            label="Status"
+            value={creating.active ? "ativa" : "inativa"}
+            options={["ativa", "inativa"]}
+            onChange={(v) => setCreating({ ...creating, active: v === "ativa" })}
+          />
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Plano contratado</span>
+            <select
+              value={creating.plan_id}
+              onChange={(e) => setCreating({ ...creating, plan_id: e.target.value })}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
+            >
+              {plans.length === 0 ? (
+                <option value="">Carregando planos…</option>
+              ) : (
+                plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} (até {p.max_whatsapp_channels} WhatsApp)
+                  </option>
+                ))
               )}
-              {isPlatformView && (
-                <Select
-                  label="Status da empresa"
-                  value={editing.active ? "ativo" : "suspenso"}
-                  options={["ativo", "suspenso"]}
-                  onChange={(v) => setEditing({ ...editing, active: v === "ativo" })}
-                />
-              )}
-              <p className="text-xs text-muted-foreground">
-                Plano e assinatura serão vinculados na próxima fase (onboarding comercial).
-              </p>
-            </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <button onClick={() => setOpen(false)} className="rounded-md px-3 py-2 text-sm hover:bg-accent">Cancelar</button>
-              <button
-                onClick={save}
-                disabled={saving}
-                className="rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
-              >
-                {saving ? "Salvando…" : "Salvar"}
-              </button>
-            </div>
-          </div>
-        </div>
+            </select>
+          </label>
+          <p className="text-xs font-medium text-muted-foreground pt-2">Administrador da empresa (ADMIN_EMPRESA)</p>
+          <Field label="Nome" value={creating.admin_name} onChange={(v) => setCreating({ ...creating, admin_name: v })} />
+          <Field label="E-mail" value={creating.admin_email} onChange={(v) => setCreating({ ...creating, admin_email: v })} />
+          <Field label="Senha inicial" type="password" value={creating.admin_password} onChange={(v) => setCreating({ ...creating, admin_password: v })} />
+          <ModalActions
+            saving={saving}
+            onCancel={() => setCreating(null)}
+            onSave={saveCreate}
+            saveLabel="Criar empresa"
+          />
+        </Modal>
       )}
     </div>
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="mb-4 text-lg font-semibold">{title}</h2>
+        <div className="space-y-3">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ModalActions({ saving, onCancel, onSave, saveLabel }: { saving: boolean; onCancel: () => void; onSave: () => void; saveLabel: string }) {
+  return (
+    <div className="mt-6 flex justify-end gap-2">
+      <button type="button" onClick={onCancel} className="rounded-md px-3 py-2 text-sm hover:bg-accent">Cancelar</button>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving}
+        className="rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+      >
+        {saving ? "Salvando…" : saveLabel}
+      </button>
+    </div>
+  );
+}
+
+function Field({
+  label, value, onChange, type = "text",
+}: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       <input
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"

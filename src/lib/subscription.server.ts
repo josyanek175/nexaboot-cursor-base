@@ -182,7 +182,6 @@ export async function listCompaniesWithPlanUsage(opts: {
   Array<{
     id: string;
     name: string;
-    slug: string | null;
     active: boolean;
     created_at: string;
     updated_at: string;
@@ -202,7 +201,6 @@ export async function listCompaniesWithPlanUsage(opts: {
     SELECT
       c.id,
       c.name,
-      c.slug,
       c.active,
       c.created_at,
       c.updated_at,
@@ -227,7 +225,6 @@ export async function listCompaniesWithPlanUsage(opts: {
   return rows as typeof rows & {
     id: string;
     name: string;
-    slug: string | null;
     active: boolean;
     created_at: string;
     updated_at: string;

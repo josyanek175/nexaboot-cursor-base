@@ -26,7 +26,6 @@ async function ensureMinimalSchema() {
     CREATE TABLE IF NOT EXISTS public.companies (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
-      slug TEXT UNIQUE,
       active BOOLEAN NOT NULL DEFAULT true,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -96,8 +95,7 @@ async function main() {
 
   console.log("3) INSERT empresa de teste + canal...");
   const [co] = await sql`
-    INSERT INTO public.companies (name, slug) VALUES ('Teste Planos', 'teste-planos')
-    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+    INSERT INTO public.companies (name) VALUES ('Teste Planos')
     RETURNING id
   `;
   const companyId = co.id;
@@ -118,7 +116,7 @@ async function main() {
   console.log("4) SELECT listCompaniesWithPlanUsage (all)...");
   const listAll = await sql`
     SELECT
-      c.id, c.name, c.slug, c.active,
+      c.id, c.name, c.active,
       p.name AS plan_name, p.code AS plan_code, p.max_whatsapp_channels,
       cs.status AS subscription_status, cs.ends_at AS subscription_ends_at,
       (SELECT COUNT(*)::int FROM public.whatsapp_channels ch
