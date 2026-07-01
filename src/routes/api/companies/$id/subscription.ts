@@ -2,13 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { getCompanyPlanUsage } from "@/lib/subscription.server";
+import { isPlatformRole } from "@/lib/platform-roles";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isPlatformRole(role: string): boolean {
-  const r = role.toUpperCase();
-  return r === "ADMIN_GERAL" || r === "SUPER_ADMIN" || r === "TI";
-}
 
 async function getActor() {
   const uid = getSessionUserId();

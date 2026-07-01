@@ -27,11 +27,7 @@ interface DbUser {
   platform_access?: boolean;
 }
 
-/** Perfis de plataforma: podem entrar sem empresa (módulos operacionais ainda exigem empresa). */
-function isPlatformRoleName(role?: string | null): boolean {
-  const r = String(role ?? "").toUpperCase();
-  return r === "SUPER_ADMIN" || r === "TI";
-}
+import { isPlatformRole as isPlatformRoleName } from "./platform-roles";
 
 function toUser(u: DbUser): User {
   return {

@@ -3,11 +3,7 @@ import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
-
-function isPlatformRole(role: string): boolean {
-  const r = role.toUpperCase();
-  return r === "ADMIN_GERAL" || r === "SUPER_ADMIN" || r === "TI";
-}
+import { isPlatformRole } from "@/lib/platform-roles";
 
 async function getActor() {
   const uid = getSessionUserId();
@@ -36,21 +32,41 @@ export const Route = createFileRoute("/api/companies")({
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
 
         const role = String(actor.role ?? "");
+
+        // Plataforma: todas as empresas (ignora company_id do usuário / sidebar).
         if (isPlatformRole(role)) {
           const rows = await listCompaniesWithPlanUsage({});
           return Response.json({ companies: rows });
         }
 
+        // Operacional: somente a empresa vinculada ao usuário.
         if (!actor.company_id) {
           return Response.json(
-            { error: "no_company", message: "Usuário sem empresa vinculada." },
+            {
+              error: "no_company",
+              message: "Usuário sem empresa vinculada. Contate o administrador.",
+            },
             { status: 403 },
           );
         }
 
-        const rows = await listCompaniesWithPlanUsage({
-          companyId: String(actor.company_id),
-        });
+        const companyId = String(actor.company_id);
+        const exists = await sql<{ id: string }[]>`
+          SELECT id FROM public.companies WHERE id = ${companyId}::uuid LIMIT 1
+        `;
+        if (!exists[0]) {
+          return Response.json(
+            {
+              error: "company_not_found",
+              message:
+                "Sua conta está vinculada a uma empresa inexistente ou removida. Contate o administrador.",
+              company_id: companyId,
+            },
+            { status: 403 },
+          );
+        }
+
+        const rows = await listCompaniesWithPlanUsage({ companyId });
         return Response.json({ companies: rows });
       },
 

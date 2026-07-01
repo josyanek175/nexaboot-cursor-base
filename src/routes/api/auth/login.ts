@@ -187,7 +187,8 @@ export const Route = createFileRoute("/api/auth/login")({
         //     válida; ver requireCompanyId);
         //   - demais perfis: login BLOQUEADO se company_id for NULL/inválido.
         const roleUpper = String(u.role || "").toUpperCase();
-        const isPlatform = roleUpper === "SUPER_ADMIN" || roleUpper === "TI";
+        const isPlatform =
+          roleUpper === "SUPER_ADMIN" || roleUpper === "TI" || roleUpper === "ADMIN_GERAL";
 
         let companyValid = false;
         let companyName: string | null = null;

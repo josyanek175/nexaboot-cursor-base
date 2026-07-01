@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Building2, Plus, Pencil, Power, ShieldAlert, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { canCreateTenant, canSuspendTenant } from "@/lib/permissions";
+import { canCreateTenant, canSuspendTenant, isPlatformRole } from "@/lib/permissions";
 import { pushAudit } from "@/lib/audit-log";
 
 type CompanyRow = {
@@ -41,7 +41,7 @@ export const Route = createFileRoute("/_app/empresas")({
 });
 
 function EmpresasPage() {
-  const { user, platformAccess, companyId } = useAuth();
+  const { user, companyId } = useAuth();
   const actor = {
     id: user?.id ?? "",
     role: user?.role ?? "ATENDENTE",
@@ -55,7 +55,7 @@ function EmpresasPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const isPlatformView = platformAccess;
+  const isPlatformView = user ? isPlatformRole(user.role) : false;
 
   async function reload() {
     setLoading(true);
@@ -68,8 +68,13 @@ function EmpresasPage() {
         return;
       }
       if (res.status === 403) {
-        const j = (await res.json().catch(() => ({}))) as { message?: string };
-        setError(j.message ?? "Sem permissão para listar empresas.");
+        const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+        setError(
+          j.message ??
+            (j.error === "company_not_found"
+              ? "Empresa vinculada à sua conta não foi encontrada."
+              : "Sem permissão para listar empresas."),
+        );
         setItems([]);
         return;
       }
@@ -87,9 +92,8 @@ function EmpresasPage() {
     reload();
   }, []);
 
-  const visible = isPlatformView
-    ? items
-    : items.filter((t) => t.id === companyId);
+  // Escopo definido pelo backend — não refiltrar por company_id / sidebar no cliente.
+  const visible = items;
 
   function canEditCompany(t: CompanyRow): boolean {
     if (isPlatformView) return true;

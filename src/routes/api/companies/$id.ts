@@ -2,11 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
-
-function isPlatformRole(role: string): boolean {
-  const r = role.toUpperCase();
-  return r === "ADMIN_GERAL" || r === "SUPER_ADMIN" || r === "TI";
-}
+import { isPlatformRole } from "@/lib/platform-roles";
 
 async function getActor() {
   const uid = getSessionUserId();

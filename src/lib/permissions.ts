@@ -2,16 +2,14 @@
 // Ver: src/lib/session.tsx para a sessão atual.
 
 import type { Role, User, Tenant } from "./mocks";
+import { isPlatformRole } from "./platform-roles";
+
+export { isPlatformRole };
 
 export interface ActingUser {
   id: string;
   role: Role;
   tenantId: string;
-}
-
-/** Perfis com visão cross-tenant (plataforma). */
-export function isPlatformRole(role: Role): boolean {
-  return role === "ADMIN_GERAL" || role === "TI";
 }
 
 /** O alvo está dentro do escopo de tenant do ator? */
@@ -65,7 +63,11 @@ export function canResetPassword(actor: ActingUser, target: User): boolean {
 
 // ─── Empresas ────────────────────────────────────────────────────────────────
 export function canCreateTenant(actor: ActingUser): boolean {
-  return actor.role === "ADMIN_GERAL" || actor.role === "TI";
+  return (
+    actor.role === "ADMIN_GERAL" ||
+    actor.role === "TI" ||
+    (actor.role as string) === "SUPER_ADMIN"
+  );
 }
 
 export function canEditTenant(actor: ActingUser, target: Tenant): boolean {
@@ -73,9 +75,13 @@ export function canEditTenant(actor: ActingUser, target: Tenant): boolean {
   return actor.role === "ADMIN_EMPRESA" && actor.tenantId === target.id;
 }
 
-/** Suspender/excluir empresa: somente ADMIN_GERAL e TI. */
+/** Suspender/excluir empresa: somente perfis de plataforma. */
 export function canSuspendTenant(actor: ActingUser): boolean {
-  return actor.role === "ADMIN_GERAL" || actor.role === "TI";
+  return (
+    actor.role === "ADMIN_GERAL" ||
+    actor.role === "TI" ||
+    (actor.role as string) === "SUPER_ADMIN"
+  );
 }
 
 // ─── Canais ──────────────────────────────────────────────────────────────────

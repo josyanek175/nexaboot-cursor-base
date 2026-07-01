@@ -58,7 +58,8 @@ export const Route = createFileRoute("/api/auth/me")({
         // SUPER_ADMIN e TI têm acesso de PLATAFORMA: podem entrar mesmo sem
         // empresa, mas os módulos operacionais continuam exigindo empresa válida.
         const roleUpper = String(u.role || "").toUpperCase();
-        const platformAccess = roleUpper === "SUPER_ADMIN" || roleUpper === "TI";
+        const platformAccess =
+          roleUpper === "SUPER_ADMIN" || roleUpper === "TI" || roleUpper === "ADMIN_GERAL";
 
         // Mensagem conforme o perfil quando não há empresa válida.
         const companyMessage = company.companyValid
