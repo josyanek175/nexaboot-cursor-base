@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
 
 function isPlatformRole(role: string): boolean {
   const r = role.toUpperCase();
@@ -36,11 +37,7 @@ export const Route = createFileRoute("/api/companies")({
 
         const role = String(actor.role ?? "");
         if (isPlatformRole(role)) {
-          const rows = await sql()`
-            SELECT id, name, slug, active, created_at, updated_at
-            FROM public.companies
-            ORDER BY name ASC
-          `;
+          const rows = await listCompaniesWithPlanUsage({});
           return Response.json({ companies: rows });
         }
 
@@ -51,12 +48,9 @@ export const Route = createFileRoute("/api/companies")({
           );
         }
 
-        const rows = await sql()`
-          SELECT id, name, slug, active, created_at, updated_at
-          FROM public.companies
-          WHERE id = ${actor.company_id}::uuid
-          LIMIT 1
-        `;
+        const rows = await listCompaniesWithPlanUsage({
+          companyId: String(actor.company_id),
+        });
         return Response.json({ companies: rows });
       },
 

@@ -2,29 +2,38 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Building2, Plus, Pencil, Power, ShieldAlert, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { type Tenant } from "@/lib/mocks";
 import { useAuth } from "@/lib/auth";
 import { canCreateTenant, canSuspendTenant } from "@/lib/permissions";
 import { pushAudit } from "@/lib/audit-log";
 
-type DbCompany = {
+type CompanyRow = {
   id: string;
   name: string;
   slug: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
+  plan_name: string | null;
+  plan_code: string | null;
+  max_whatsapp_channels: number | null;
+  subscription_status: string | null;
+  subscription_ends_at: string | null;
+  whatsapp_channels_used: number;
 };
 
-function dbToTenant(c: DbCompany): Tenant {
-  return {
-    id: c.id,
-    name: c.name,
-    cnpj: c.slug ?? "—",
-    plan: "Free",
-    status: c.active ? "ativo" : "suspenso",
-    sharedAttendance: false,
-  };
+type EditDraft = {
+  id: string;
+  name: string;
+  slug: string;
+  active: boolean;
+};
+
+function formatChannelUsage(row: CompanyRow): string {
+  const used = row.whatsapp_channels_used ?? 0;
+  if (row.max_whatsapp_channels != null) {
+    return `${used} / ${row.max_whatsapp_channels}`;
+  }
+  return `${used} / —`;
 }
 
 export const Route = createFileRoute("/_app/empresas")({
@@ -39,10 +48,10 @@ function EmpresasPage() {
     tenantId: user?.tenantId ?? "",
   };
 
-  const [items, setItems] = useState<Tenant[]>([]);
+  const [items, setItems] = useState<CompanyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Tenant | null>(null);
+  const [editing, setEditing] = useState<EditDraft | null>(null);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -65,8 +74,8 @@ function EmpresasPage() {
         return;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { companies: DbCompany[] };
-      setItems((data.companies ?? []).map(dbToTenant));
+      const data = (await res.json()) as { companies: CompanyRow[] };
+      setItems(data.companies ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -82,7 +91,7 @@ function EmpresasPage() {
     ? items
     : items.filter((t) => t.id === companyId);
 
-  function canEditCompany(t: Tenant): boolean {
+  function canEditCompany(t: CompanyRow): boolean {
     if (isPlatformView) return true;
     return actor.role === "ADMIN_EMPRESA" && companyId === t.id;
   }
@@ -96,11 +105,11 @@ function EmpresasPage() {
       });
       return;
     }
-    setEditing({ id: "", name: "", cnpj: "", plan: "Free", status: "ativo", sharedAttendance: false });
+    setEditing({ id: "", name: "", slug: "", active: true });
     setOpen(true);
   }
 
-  function openEdit(t: Tenant) {
+  function openEdit(t: CompanyRow) {
     if (!canEditCompany(t)) {
       toast.error("Sem permissão para editar esta empresa");
       pushAudit({
@@ -109,7 +118,12 @@ function EmpresasPage() {
       });
       return;
     }
-    setEditing({ ...t });
+    setEditing({
+      id: t.id,
+      name: t.name,
+      slug: t.slug ?? "",
+      active: t.active,
+    });
     setOpen(true);
   }
 
@@ -126,8 +140,8 @@ function EmpresasPage() {
           body: JSON.stringify({
             name: editing.name,
             ...(isPlatformView ? {
-              slug: editing.cnpj && editing.cnpj !== "—" ? editing.cnpj : null,
-              active: editing.status === "ativo",
+              slug: editing.slug || null,
+              active: editing.active,
             } : {}),
           }),
         });
@@ -142,8 +156,8 @@ function EmpresasPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: editing.name,
-            slug: editing.cnpj || null,
-            active: editing.status === "ativo",
+            slug: editing.slug || null,
+            active: editing.active,
           }),
         });
         if (!res.ok) {
@@ -166,7 +180,7 @@ function EmpresasPage() {
     }
   }
 
-  async function toggleStatus(t: Tenant) {
+  async function toggleStatus(t: CompanyRow) {
     if (!canSuspendTenant(actor)) {
       toast.error("Apenas ADMIN_GERAL pode suspender empresas");
       pushAudit({
@@ -175,7 +189,7 @@ function EmpresasPage() {
       });
       return;
     }
-    const nextActive = t.status !== "ativo";
+    const nextActive = !t.active;
     try {
       const res = await fetch(`/api/companies/${encodeURIComponent(t.id)}`, {
         method: "PATCH",
@@ -184,13 +198,13 @@ function EmpresasPage() {
         body: JSON.stringify({ active: nextActive }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const next: Tenant["status"] = nextActive ? "ativo" : "suspenso";
+      const label = nextActive ? "ativo" : "suspenso";
       pushAudit({
         tenantId: t.id, actorId: actor.id, actorName: user?.name ?? "", targetType: "tenant",
         targetId: t.id, targetName: t.name, action: "tenant.toggle_status", result: "success",
-        reason: `→ ${next}`,
+        reason: `→ ${label}`,
       });
-      toast.success(`Empresa ${t.name} agora está ${next}`);
+      toast.success(`Empresa ${t.name} agora está ${label}`);
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -206,8 +220,8 @@ function EmpresasPage() {
             <h1 className="text-lg font-semibold">Empresas / Tenants</h1>
             <p className="text-xs text-muted-foreground">
               {isPlatformView
-                ? "Visão global · plataforma (public.companies)"
-                : `Visão restrita à sua empresa (${companyId ?? "—"})`}
+                ? "Visão global · plano e uso de canais (public.companies)"
+                : `Sua empresa · plano e consumo (${companyId ?? "—"})`}
             </p>
           </div>
         </div>
@@ -223,7 +237,7 @@ function EmpresasPage() {
 
       {!isPlatformView && (
         <div className="flex items-center gap-2 border-b border-border bg-amber-50 px-6 py-2 text-xs text-amber-800">
-          <ShieldAlert className="h-3.5 w-3.5" /> Isolamento ativo: você só visualiza dados da empresa em que está logado.
+          <ShieldAlert className="h-3.5 w-3.5" /> Você visualiza apenas o plano e o consumo da sua empresa. Alteração de plano é feita pela equipe NexaBoot.
         </div>
       )}
 
@@ -244,38 +258,52 @@ function EmpresasPage() {
                   <th className="px-4 py-3 text-left">Nome</th>
                   <th className="px-4 py-3 text-left">Slug</th>
                   <th className="px-4 py-3 text-left">Plano</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Atendimento compartilhado</th>
+                  <th className="px-4 py-3 text-left">Canais WhatsApp</th>
+                  <th className="px-4 py-3 text-left">Assinatura</th>
+                  <th className="px-4 py-3 text-left">Empresa</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                       Nenhuma empresa encontrada no banco.
                     </td>
                   </tr>
                 ) : visible.map((t) => {
                   const editable = canEditCompany(t);
                   const suspendable = canSuspendTenant(actor);
+                  const atLimit =
+                    t.max_whatsapp_channels != null &&
+                    t.whatsapp_channels_used >= t.max_whatsapp_channels;
                   return (
                     <tr key={t.id} className="border-t border-border hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{t.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{t.cnpj}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{t.slug ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <span className="rounded-md bg-accent px-2 py-1 text-xs">{t.plan}</span>
+                        {t.plan_name ? (
+                          <span className="rounded-md bg-accent px-2 py-1 text-xs">{t.plan_name}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sem plano</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1.5 text-xs ${t.status === "ativo" ? "text-whatsapp" : "text-destructive"}`}>
-                          <span className={`h-2 w-2 rounded-full ${t.status === "ativo" ? "bg-whatsapp" : "bg-destructive"}`} />
-                          {t.status}
+                        <span
+                          className={`text-xs font-medium ${atLimit ? "text-amber-700" : "text-foreground"}`}
+                          title={atLimit ? "Limite do plano atingido (bloqueio na fase 2)" : undefined}
+                        >
+                          {formatChannelUsage(t)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        {t.sharedAttendance
-                          ? <span className="rounded bg-whatsapp/10 px-2 py-1 font-medium text-whatsapp">Sim · todos veem a fila</span>
-                          : <span className="rounded bg-muted px-2 py-1 text-muted-foreground">Não · apenas atribuídas + fila sem dono</span>}
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {t.subscription_status ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1.5 text-xs ${t.active ? "text-whatsapp" : "text-destructive"}`}>
+                          <span className={`h-2 w-2 rounded-full ${t.active ? "bg-whatsapp" : "bg-destructive"}`} />
+                          {t.active ? "ativo" : "suspenso"}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
@@ -315,20 +343,18 @@ function EmpresasPage() {
             <div className="space-y-3">
               <Field label="Nome" value={editing.name} onChange={(v) => setEditing({ ...editing, name: v })} />
               {isPlatformView && (
-                <Field label="Slug" value={editing.cnpj === "—" ? "" : editing.cnpj} onChange={(v) => setEditing({ ...editing, cnpj: v })} />
+                <Field label="Slug" value={editing.slug} onChange={(v) => setEditing({ ...editing, slug: v })} />
               )}
               {isPlatformView && (
-                <div className="grid grid-cols-2 gap-3">
-                  <Select
-                    label="Status"
-                    value={editing.status}
-                    options={["ativo", "suspenso"]}
-                    onChange={(v) => setEditing({ ...editing, status: v as Tenant["status"] })}
-                  />
-                </div>
+                <Select
+                  label="Status da empresa"
+                  value={editing.active ? "ativo" : "suspenso"}
+                  options={["ativo", "suspenso"]}
+                  onChange={(v) => setEditing({ ...editing, active: v === "ativo" })}
+                />
               )}
               <p className="text-xs text-muted-foreground">
-                Plano e atendimento compartilhado ainda não estão no banco (public.companies).
+                Plano e assinatura serão vinculados na próxima fase (onboarding comercial).
               </p>
             </div>
             <div className="mt-6 flex justify-end gap-2">

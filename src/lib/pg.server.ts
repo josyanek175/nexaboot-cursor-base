@@ -501,6 +501,9 @@ export async function ensureCrmSchema() {
       // sobraram após apontar os contatos ao principal. Não apaga nada.
       await ensureConversationsDedup(s);
 
+      // Planos comerciais + assinaturas por empresa (fase 1 — sem enforcement).
+      await ensurePlansSchema(s);
+
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {
       const err = e as { message?: string; code?: string; detail?: string };
@@ -510,6 +513,108 @@ export async function ensureCrmSchema() {
     }
   })();
   return _crmReady;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Planos comerciais e assinaturas (company_subscriptions).
+// Idempotente, não destrutivo. Seed dos 5 planos iniciais por code.
+// ───────────────────────────────────────────────────────────────────────────
+const PLAN_SEEDS = [
+  { code: "BASICO_1", name: "Plano Básico 1", max_whatsapp_channels: 1 },
+  { code: "BASICO_2", name: "Plano Básico 2", max_whatsapp_channels: 2 },
+  { code: "PRATA", name: "Plano Prata", max_whatsapp_channels: 5 },
+  { code: "GOLD", name: "Plano Gold", max_whatsapp_channels: 10 },
+  { code: "DIAMANTE", name: "Plano Diamante", max_whatsapp_channels: 20 },
+] as const;
+
+export async function ensurePlansSchema(s?: ReturnType<typeof sql>): Promise<void> {
+  const db = s ?? sql();
+  await db.unsafe(`
+    CREATE TABLE IF NOT EXISTS public.plans (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      description TEXT,
+      max_whatsapp_channels INT NOT NULL,
+      max_users INT,
+      max_messages_month INT,
+      max_campaigns_month INT,
+      allow_automations BOOLEAN NOT NULL DEFAULT false,
+      allow_internal_chat BOOLEAN NOT NULL DEFAULT true,
+      allow_api_access BOOLEAN NOT NULL DEFAULT false,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.company_subscriptions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      plan_id UUID NOT NULL REFERENCES public.plans(id) ON DELETE RESTRICT,
+      status TEXT NOT NULL DEFAULT 'active',
+      started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ends_at TIMESTAMPTZ,
+      canceled_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    -- Colunas extras idempotentes (bancos legados / CREATE TABLE parcial).
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS code TEXT;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS max_whatsapp_channels INT;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS max_users INT;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS max_messages_month INT;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS max_campaigns_month INT;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS allow_automations BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS allow_internal_chat BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS allow_api_access BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    ALTER TABLE public.plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+    ALTER TABLE public.company_subscriptions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+    ALTER TABLE public.company_subscriptions ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    ALTER TABLE public.company_subscriptions ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ;
+    ALTER TABLE public.company_subscriptions ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ;
+    ALTER TABLE public.company_subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    ALTER TABLE public.company_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+    CREATE INDEX IF NOT EXISTS idx_company_subscriptions_company
+      ON public.company_subscriptions (company_id);
+
+    CREATE INDEX IF NOT EXISTS idx_company_subscriptions_plan
+      ON public.company_subscriptions (plan_id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS company_subscriptions_one_active
+      ON public.company_subscriptions (company_id)
+      WHERE status = 'active';
+  `);
+
+  for (const p of PLAN_SEEDS) {
+    await db`
+      INSERT INTO public.plans (
+        name, code, description, max_whatsapp_channels,
+        allow_automations, allow_internal_chat, allow_api_access, active
+      )
+      VALUES (
+        ${p.name},
+        ${p.code},
+        ${`Até ${p.max_whatsapp_channels} número(s) WhatsApp`},
+        ${p.max_whatsapp_channels},
+        false,
+        true,
+        false,
+        true
+      )
+      ON CONFLICT (code) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        max_whatsapp_channels = EXCLUDED.max_whatsapp_channels,
+        updated_at = now()
+    `;
+  }
 }
 
 export async function ensureSchema() {
