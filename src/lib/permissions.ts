@@ -100,7 +100,7 @@ export function canViewCampaigns(actor: ActingUser): boolean {
 /** Criar/editar campanhas e gerenciar público. */
 export function canManageCampaigns(actor: ActingUser): boolean {
   return (
-    isPlatformRole(actor.role) ||
+    isPlatformRole(actor.role as string) ||
     actor.role === "ADMIN_EMPRESA" ||
     actor.role === "GERENTE" ||
     actor.role === "SUPERVISOR"
@@ -109,7 +109,30 @@ export function canManageCampaigns(actor: ActingUser): boolean {
 
 /** Excluir campanha em rascunho — SUPERVISOR não pode. */
 export function canDeleteCampaign(actor: ActingUser): boolean {
-  return isPlatformRole(actor.role) || actor.role === "ADMIN_EMPRESA" || actor.role === "GERENTE";
+  return (
+    isPlatformRole(actor.role as string) ||
+    actor.role === "ADMIN_EMPRESA" ||
+    actor.role === "GERENTE"
+  );
+}
+
+/** Menu e módulo Campanhas: perfil autorizado + empresa operacional válida. */
+export function canAccessCampaignsModule(actor: ActingUser, companyValid: boolean): boolean {
+  if (!canViewCampaigns(actor)) return false;
+  return companyValid;
+}
+
+/** Normaliza ActingUser a partir do auth (role real do banco, incl. SUPER_ADMIN). */
+export function actingUserFromAuth(user: {
+  id: string;
+  role: string;
+  tenantId: string;
+}): ActingUser {
+  return {
+    id: user.id,
+    role: user.role as ActingUser["role"],
+    tenantId: user.tenantId,
+  };
 }
 
 // ─── Atendimento ─────────────────────────────────────────────────────────────

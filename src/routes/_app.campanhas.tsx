@@ -3,7 +3,12 @@ import { useEffect, useState } from "react";
 import { Megaphone, Plus, Loader2, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { canViewCampaigns, canManageCampaigns, canDeleteCampaign } from "@/lib/permissions";
+import {
+  canAccessCampaignsModule,
+  canManageCampaigns,
+  canDeleteCampaign,
+  actingUserFromAuth,
+} from "@/lib/permissions";
 import { apiDelete } from "@/lib/api";
 
 type CampaignRow = {
@@ -33,18 +38,16 @@ export const Route = createFileRoute("/_app/campanhas")({
 });
 
 function CampanhasPage() {
-  const { user } = useAuth();
-  const actor = {
-    id: user?.id ?? "",
-    role: user?.role ?? "ATENDENTE",
-    tenantId: user?.tenantId ?? "",
-  };
+  const { user, companyValid, companyId, companyMessage } = useAuth();
+  const actor = user
+    ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
+    : { id: "", role: "ATENDENTE" as const, tenantId: "" };
 
   const [items, setItems] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const canView = canViewCampaigns(actor);
+  const canAccess = canAccessCampaignsModule(actor, companyValid);
   const canManage = canManageCampaigns(actor);
   const canDelete = canDeleteCampaign(actor);
 
@@ -54,7 +57,12 @@ function CampanhasPage() {
     try {
       const res = await fetch("/api/campaigns", { credentials: "include" });
       if (res.status === 403) {
-        setError("Sem permissão para acessar Campanhas.");
+        const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+        setError(
+          j.error === "no_company"
+            ? (j.message ?? "Selecione uma empresa ativa para acessar Campanhas.")
+            : "Sem permissão para acessar Campanhas.",
+        );
         setItems([]);
         return;
       }
@@ -69,18 +77,17 @@ function CampanhasPage() {
   }
 
   useEffect(() => {
-    const a = {
-      id: user?.id ?? "",
-      role: user?.role ?? "ATENDENTE",
-      tenantId: user?.tenantId ?? "",
-    };
-    if (!canViewCampaigns(a)) {
+    if (!canAccess) {
       setLoading(false);
-      setError("Sem permissão para acessar Campanhas.");
+      setError(
+        companyMessage ??
+          (companyValid ? "Sem permissão para acessar Campanhas." : "Selecione uma empresa ativa."),
+      );
       return;
     }
     reload();
-  }, [user?.id, user?.role, user?.tenantId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on identity/company change only
+  }, [user?.id, user?.role, companyId, companyValid, canAccess, companyMessage]);
 
   async function handleDelete(id: string, name: string) {
     if (!canDelete) {
@@ -97,7 +104,7 @@ function CampanhasPage() {
     }
   }
 
-  if (!canView) {
+  if (!canAccess) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <p className="text-sm text-muted-foreground">Sem permissão para acessar Campanhas.</p>

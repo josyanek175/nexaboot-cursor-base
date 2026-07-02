@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { canManageCampaigns, canViewCampaigns } from "@/lib/permissions";
+import { canManageCampaigns, actingUserFromAuth, canAccessCampaignsModule } from "@/lib/permissions";
 import { apiGet } from "@/lib/api";
 
 type Campaign = {
@@ -46,14 +46,12 @@ export const Route = createFileRoute("/_app/campanhas/$id")({
 
 function EditarCampanhaPage() {
   const { id } = Route.useParams();
-  const { user } = useAuth();
-  const actor = {
-    id: user?.id ?? "",
-    role: user?.role ?? "ATENDENTE",
-    tenantId: user?.tenantId ?? "",
-  };
-  const canView = canViewCampaigns(actor);
-  const canManage = canManageCampaigns(actor);
+  const { user, companyValid, companyId } = useAuth();
+  const actor = user
+    ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
+    : { id: "", role: "ATENDENTE" as const, tenantId: "" };
+  const canAccess = canAccessCampaignsModule(actor, companyValid);
+  const canManage = canManageCampaigns(actor) && companyValid;
 
   const [tab, setTab] = useState<"dados" | "publico">("dados");
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -115,7 +113,7 @@ function EditarCampanhaPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!canView) {
+    if (!canAccess) {
       setLoading(false);
       return;
     }
@@ -138,7 +136,7 @@ function EditarCampanhaPage() {
         setLoading(false);
       }
     })();
-  }, [canView, loadCampaign, loadAudience]);
+  }, [canAccess, loadCampaign, loadAudience, companyId]);
 
   async function handleSave() {
     if (!canManage || !isDraft) return;
@@ -244,10 +242,12 @@ function EditarCampanhaPage() {
     }
   }
 
-  if (!canView) {
+  if (!canAccess) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">Sem permissão para acessar Campanhas.</p>
+        <p className="text-sm text-muted-foreground">
+          Sem permissão ou empresa ativa necessária para acessar Campanhas.
+        </p>
       </div>
     );
   }

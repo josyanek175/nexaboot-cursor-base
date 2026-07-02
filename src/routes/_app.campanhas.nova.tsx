@@ -4,7 +4,7 @@ import { Megaphone, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
-import { canManageCampaigns } from "@/lib/permissions";
+import { canManageCampaigns, actingUserFromAuth } from "@/lib/permissions";
 
 type ChannelOption = {
   id: string;
@@ -18,14 +18,12 @@ export const Route = createFileRoute("/_app/campanhas/nova")({
 });
 
 function NovaCampanhaPage() {
-  const { user } = useAuth();
+  const { user, companyValid } = useAuth();
   const navigate = useNavigate();
-  const actor = {
-    id: user?.id ?? "",
-    role: user?.role ?? "ATENDENTE",
-    tenantId: user?.tenantId ?? "",
-  };
-  const canManage = canManageCampaigns(actor);
+  const actor = user
+    ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
+    : { id: "", role: "ATENDENTE" as const, tenantId: "" };
+  const canManage = canManageCampaigns(actor) && companyValid;
 
   const [name, setName] = useState("");
   const [messageText, setMessageText] = useState("");

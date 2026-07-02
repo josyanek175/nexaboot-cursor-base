@@ -13,6 +13,8 @@
 // NÃO mexe em tenant_id, senha, sessão ou login (isso é feito nos endpoints).
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { isPlatformRole } from "@/lib/platform-roles";
+import { getOperationalCompanyIdFromCookie } from "@/lib/operational-company.server";
 
 let _userCompanyReady: Promise<void> | null = null;
 
@@ -89,7 +91,40 @@ export async function getCurrentUserCompanyInfo(): Promise<CurrentUserCompanyInf
   if (!uid) return empty;
 
   await ensureUserCompanySchema();
+  await ensureCrmSchema();
   const s = sql();
+
+  const users = await s<
+    { id: string; role: string; company_id: string | null }[]
+  >`
+    SELECT id, role, company_id FROM public.users WHERE id = ${uid}::uuid LIMIT 1
+  `;
+  if (!users[0]) return empty;
+
+  const user = users[0];
+  const platform = isPlatformRole(user.role);
+
+  if (platform) {
+    const selectedId = getOperationalCompanyIdFromCookie(uid);
+    if (!selectedId) {
+      return { authenticated: true, companyId: null, companyName: null, companyValid: false };
+    }
+    const companies = await s<{ id: string; name: string }[]>`
+      SELECT id, name FROM public.companies
+      WHERE id = ${selectedId}::uuid AND active = true
+      LIMIT 1
+    `;
+    if (!companies[0]) {
+      return { authenticated: true, companyId: null, companyName: null, companyValid: false };
+    }
+    return {
+      authenticated: true,
+      companyId: companies[0].id,
+      companyName: companies[0].name,
+      companyValid: true,
+    };
+  }
+
   const rows = await s<
     { company_id: string | null; company_pk: string | null; company_name: string | null }[]
   >`
@@ -97,11 +132,11 @@ export async function getCurrentUserCompanyInfo(): Promise<CurrentUserCompanyInf
            c.id   AS company_pk,
            c.name AS company_name
     FROM public.users u
-    LEFT JOIN public.companies c ON c.id = u.company_id
+    LEFT JOIN public.companies c ON c.id = u.company_id AND c.active = true
     WHERE u.id = ${uid}::uuid
     LIMIT 1
   `;
-  if (!rows[0]) return empty;
+  if (!rows[0]) return { authenticated: true, companyId: null, companyName: null, companyValid: false };
 
   const companyValid = !!rows[0].company_pk;
   return {

@@ -6,7 +6,9 @@ import {
   buildClearSetCookie,
   COOKIE_NAME,
 } from "@/lib/session.server";
+import { buildOperationalCompanyClearCookie } from "@/lib/operational-company.server";
 import { getCurrentUserCompanyInfo, NO_COMPANY_MESSAGE } from "@/lib/company.server";
+import { isPlatformRole } from "@/lib/platform-roles";
 
 export const Route = createFileRoute("/api/auth/me")({
   server: {
@@ -57,9 +59,7 @@ export const Route = createFileRoute("/api/auth/me")({
 
         // SUPER_ADMIN e TI têm acesso de PLATAFORMA: podem entrar mesmo sem
         // empresa, mas os módulos operacionais continuam exigindo empresa válida.
-        const roleUpper = String(u.role || "").toUpperCase();
-        const platformAccess =
-          roleUpper === "SUPER_ADMIN" || roleUpper === "TI" || roleUpper === "ADMIN_GERAL";
+        const platformAccess = isPlatformRole(u.role);
 
         // Mensagem conforme o perfil quando não há empresa válida.
         const companyMessage = company.companyValid
@@ -95,10 +95,10 @@ export const Route = createFileRoute("/api/auth/me")({
         const url = new URL(request.url);
         if (url.searchParams.get("action") === "logout") {
           console.log("[ME_LOGOUT]");
-          return Response.json(
-            { ok: true },
-            { headers: { "Set-Cookie": buildClearSetCookie() } },
-          );
+          const headers = new Headers();
+          headers.append("Set-Cookie", buildClearSetCookie());
+          headers.append("Set-Cookie", buildOperationalCompanyClearCookie());
+          return Response.json({ ok: true }, { headers });
         }
         return Response.json({ error: "unknown_action" }, { status: 400 });
       },

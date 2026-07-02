@@ -53,6 +53,10 @@ interface AuthContextValue {
   platformAccess: boolean;
   /** company_id do usuário logado (quando válido). */
   companyId: string | null;
+  /** Recarrega /api/auth/me após trocar empresa operacional. */
+  refreshSession: () => Promise<void>;
+  /** Plataforma: define empresa operacional ativa (cookie assinado). */
+  setOperationalCompany: (companyId: string) => Promise<void>;
   attempts: number;
   lockedUntil: number | null;
   login: (email: string, password: string, remember: boolean) => Promise<LoginResult>;
@@ -83,6 +87,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [platformAccess, setPlatformAccess] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
 
+  const applyMeResponse = useCallback((data: { user: DbUser | null; company_message?: string }) => {
+    if (data.user) {
+      setUser(toUser(data.user));
+      const valid = data.user.company_valid !== false;
+      const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
+      setCompanyValid(valid);
+      setCompanyName(data.user.company_name ?? null);
+      setCompanyId(data.user.company_id ?? null);
+      setPlatformAccess(platform);
+      setCompanyMessage(valid ? null : data.company_message ?? NO_COMPANY_MESSAGE);
+    }
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    const res = await fetch("/api/auth/me", {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { user: DbUser | null; company_message?: string };
+    applyMeResponse(data);
+  }, [applyMeResponse]);
+
+  const setOperationalCompany = useCallback(
+    async (id: string) => {
+      const res = await fetch("/api/auth/operational-company", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: id }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await refreshSession();
+    },
+    [refreshSession],
+  );
+
   // Hidratação: pergunta ao backend quem está logado pelo cookie.
   useEffect(() => {
     let cancelled = false;
@@ -98,14 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           company_message?: string;
         };
         if (!cancelled && data.user) {
-          setUser(toUser(data.user));
-          const valid = data.user.company_valid !== false;
-          const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
-          setCompanyValid(valid);
-          setCompanyName(data.user.company_name ?? null);
-          setCompanyId(data.user.company_id ?? null);
-          setPlatformAccess(platform);
-          setCompanyMessage(valid ? null : data.company_message ?? NO_COMPANY_MESSAGE);
+          applyMeResponse(data);
         }
       } catch {
         /* sem sessão */
@@ -116,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyMeResponse]);
 
   const login = useCallback(
     async (email: string, password: string, _remember: boolean): Promise<LoginResult> => {
@@ -273,6 +307,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: "POST",
       credentials: "include",
     }).catch(() => {});
+    fetch("/api/auth/operational-company", { method: "DELETE", credentials: "include" }).catch(
+      () => {},
+    );
     if (current) {
       pushAudit({
         tenantId: current.tenantId,
@@ -326,6 +363,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     companyMessage,
     platformAccess,
     companyId,
+    refreshSession,
+    setOperationalCompany,
     attempts,
     lockedUntil,
     login,

@@ -56,6 +56,7 @@ import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
 import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
 import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
+import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
 import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
@@ -316,6 +317,12 @@ const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
   path: '/api/auth/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthOperationalCompanyRoute =
+  ApiAuthOperationalCompanyRouteImport.update({
+    id: '/api/auth/operational-company',
+    path: '/api/auth/operational-company',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAuthMeRoute = ApiAuthMeRouteImport.update({
   id: '/api/auth/me',
   path: '/api/auth/me',
@@ -477,6 +484,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
+  '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
@@ -548,6 +556,7 @@ export interface FileRoutesByTo {
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
+  '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
@@ -621,6 +630,7 @@ export interface FileRoutesById {
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
+  '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
@@ -694,6 +704,7 @@ export interface FileRouteTypes {
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
+    | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
     | '/api/companies/$id'
@@ -765,6 +776,7 @@ export interface FileRouteTypes {
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
+    | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
     | '/api/companies/$id'
@@ -837,6 +849,7 @@ export interface FileRouteTypes {
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
+    | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
     | '/api/companies/$id'
@@ -896,6 +909,7 @@ export interface RootRouteChildren {
   ApiAdminSeedDemoRoute: typeof ApiAdminSeedDemoRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
+  ApiAuthOperationalCompanyRoute: typeof ApiAuthOperationalCompanyRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
   ApiDebugColsRoute: typeof ApiDebugColsRoute
   ApiDebugCurrentUserRoute: typeof ApiDebugCurrentUserRoute
@@ -1245,6 +1259,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/register'
       fullPath: '/api/auth/register'
       preLoaderRoute: typeof ApiAuthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/operational-company': {
+      id: '/api/auth/operational-company'
+      path: '/api/auth/operational-company'
+      fullPath: '/api/auth/operational-company'
+      preLoaderRoute: typeof ApiAuthOperationalCompanyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/me': {
@@ -1643,6 +1664,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminSeedDemoRoute: ApiAdminSeedDemoRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
+  ApiAuthOperationalCompanyRoute: ApiAuthOperationalCompanyRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
   ApiDebugColsRoute: ApiDebugColsRoute,
   ApiDebugCurrentUserRoute: ApiDebugCurrentUserRoute,

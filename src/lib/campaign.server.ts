@@ -75,11 +75,11 @@ export async function getCampaignActor(
 
   const rows = await sql<{ id: string; role: string; tenant_id: string }[]>`
     SELECT id, role, tenant_id FROM public.users
-    WHERE id = ${uid}::uuid AND company_id = ${company}::uuid
+    WHERE id = ${uid}::uuid AND active = true
     LIMIT 1
   `;
   if (!rows[0]) {
-    return Response.json({ error: "forbidden", message: "Sem permissão." }, { status: 403 });
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
 
   const actor: ActingUser = {

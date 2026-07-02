@@ -17,9 +17,12 @@ import {
   Megaphone,
 } from "lucide-react";
 import { canManageInternalGroups } from "@/lib/current-user";
-import { canViewCampaigns } from "@/lib/permissions";
+import {
+  canAccessCampaignsModule,
+  actingUserFromAuth,
+} from "@/lib/permissions";
 import { useEffect, useState } from "react";
-import { users, tenants, type Role } from "@/lib/mocks";
+import { users, type Role } from "@/lib/mocks";
 import { subscribeUnread, setUnread as setUnreadStore, type UnreadKey } from "@/lib/unread-store";
 import {
   onInternalUnreadCountUpdate,
@@ -28,6 +31,7 @@ import {
 } from "@/lib/notification-sound";
 import { SessionProvider, useSession } from "@/lib/session";
 import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
 
 const ROLE_LABELS: Record<Role, string> = {
   ADMIN_GERAL: "Super-Admin (plataforma)",
@@ -40,8 +44,6 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 const roleLabel = (r: Role) => ROLE_LABELS[r] ?? r;
 
-// Módulos OPERACIONAIS (dados de empresa). Sem company_id válido, SUPER_ADMIN/TI
-// veem "Selecione uma empresa..." em vez do conteúdo, evitando dados misturados.
 const OPERATIONAL_PREFIXES = ["/atendimento", "/contatos", "/canais", "/campanhas"];
 function isOperationalPath(pathname: string): boolean {
   return OPERATIONAL_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -55,6 +57,8 @@ type NavItem = {
   adminOnly?: boolean;
   campaignsOnly?: boolean;
 };
+
+type CompanyOption = { id: string; name: string };
 
 const nav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -91,16 +95,48 @@ export function AppShell() {
 
 function Shell() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const { user, tenant, isSuperAdmin, visibleTenants, setUserId, setTenantId } = useSession();
-  const { logout, companyValid } = useAuth();
+  const { user, setUserId } = useSession();
+  const {
+    logout,
+    companyValid,
+    companyName,
+    companyId,
+    platformAccess,
+    setOperationalCompany,
+    user: authUser,
+  } = useAuth();
   const navigate = useNavigate();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unread, setUnread] = useState({ atendimento: 0, internal: 0 });
+  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
+
+  const actor = authUser
+    ? actingUserFromAuth({
+        id: authUser.id,
+        role: authUser.role as string,
+        tenantId: authUser.tenantId,
+      })
+    : null;
+
+  const headerCompanyLabel = companyValid
+    ? (companyName ?? "Empresa ativa")
+    : platformAccess
+      ? "Selecione uma empresa"
+      : (companyName ?? authUser?.tenantId ?? "—");
 
   useEffect(() => subscribeUnread(setUnread), []);
 
-  // Destrava autoplay de áudio após o primeiro gesto do usuário (best-effort).
+  useEffect(() => {
+    if (!platformAccess) return;
+    fetch("/api/auth/operational-company", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { companies?: CompanyOption[] } | null) => {
+        setCompanyOptions(data?.companies ?? []);
+      })
+      .catch(() => setCompanyOptions([]));
+  }, [platformAccess]);
+
   useEffect(() => {
     const unlock = () => {
       void unlockNotificationAudio();
@@ -113,8 +149,6 @@ function Shell() {
     };
   }, []);
 
-  // Polling global do contador de Comunicação Interna não lida (a cada 10s).
-  // Mantém o badge do menu atualizado em qualquer página do sistema.
   useEffect(() => {
     let cancel = false;
     const loadUnread = async () => {
@@ -128,7 +162,7 @@ function Shell() {
           setUnreadStore("internal", count);
         }
       } catch {
-        /* offline/sem sessão — ignora */
+        /* ignore */
       }
     };
     loadUnread();
@@ -139,10 +173,19 @@ function Shell() {
     };
   }, []);
 
-  // Fecha sidebar mobile automaticamente ao navegar entre páginas
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
+
+  async function onOperationalCompanyChange(nextId: string) {
+    if (!nextId) return;
+    try {
+      await setOperationalCompany(nextId);
+      toast.success("Empresa ativa atualizada");
+    } catch {
+      toast.error("Não foi possível trocar a empresa ativa");
+    }
+  }
 
   const onLogout = () => {
     resetInternalUnreadBaseline();
@@ -152,7 +195,6 @@ function Shell() {
 
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-background text-foreground">
-      {/* Botão hamburger flutuante (apenas mobile/tablet) */}
       <button
         onClick={() => setSidebarOpen(true)}
         className={`fixed top-2 left-2 z-30 grid h-9 w-9 place-items-center rounded-md border border-border bg-card/90 backdrop-blur shadow-sm text-foreground lg:hidden ${sidebarOpen ? "hidden" : ""}`}
@@ -161,7 +203,6 @@ function Shell() {
         <Menu className="h-5 w-5" />
       </button>
 
-      {/* Backdrop mobile */}
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
@@ -179,9 +220,11 @@ function Shell() {
           <div className="grid h-8 w-8 place-items-center rounded-md bg-whatsapp text-whatsapp-foreground font-bold">
             N
           </div>
-          <div className="leading-tight">
+          <div className="leading-tight min-w-0">
             <div className="text-sm font-semibold">NexaBoot</div>
-            <div className="truncate text-xs text-muted-foreground">{tenant.name}</div>
+            <div className="truncate text-xs text-muted-foreground" title={headerCompanyLabel}>
+              {headerCompanyLabel}
+            </div>
           </div>
         </div>
 
@@ -190,11 +233,8 @@ function Shell() {
             .filter((item) => !item.adminOnly || canManageInternalGroups(user.role))
             .filter((item) => {
               if (!item.campaignsOnly) return true;
-              return canViewCampaigns({
-                id: user.id,
-                role: user.role,
-                tenantId: user.tenantId,
-              });
+              if (!actor) return false;
+              return canAccessCampaignsModule(actor, companyValid);
             })
             .map((item) => {
               const { to, label, icon: Icon, badgeKey } = item;
@@ -253,19 +293,22 @@ function Shell() {
               <LogOut className="h-4 w-4" />
             </button>
           </div>
-          {isSuperAdmin && visibleTenants.length > 1 && (
+          {platformAccess && companyOptions.length > 0 && (
             <div className="mt-3">
               <label className="mb-1 block text-[10px] uppercase text-muted-foreground">
-                Empresa ativa (super-admin)
+                Empresa ativa
               </label>
               <select
-                value={tenant.id}
-                onChange={(e) => setTenantId(e.target.value)}
+                value={companyId ?? ""}
+                onChange={(e) => onOperationalCompanyChange(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs"
               >
-                {visibleTenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+                <option value="" disabled>
+                  Selecione uma empresa…
+                </option>
+                {companyOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>
@@ -280,7 +323,9 @@ function Shell() {
             <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-sm">
               <h1 className="text-lg font-semibold text-foreground">Empresa necessária</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Selecione uma empresa para acessar este módulo.
+                {platformAccess
+                  ? "Selecione uma empresa ativa no menu lateral para acessar este módulo."
+                  : "Seu usuário não está vinculado a uma empresa válida. Contate o administrador."}
               </p>
             </div>
           </div>
@@ -300,43 +345,38 @@ function Shell() {
           >
             <h3 className="text-base font-semibold">Trocar perfil de teste</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Útil para validar isolamento multitenant. Em produção será substituído por Supabase
-              Auth.
+              Útil para validar permissões. Em produção use login real.
             </p>
             <div className="mt-4 max-h-80 space-y-1 overflow-y-auto">
-              {users.map((u) => {
-                const t = tenants.find((x) => x.id === u.tenantId);
-                const active = u.id === user.id;
-                return (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      setUserId(u.id);
-                      setSwitcherOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors ${
-                      active ? "border-whatsapp bg-whatsapp/10" : "border-border hover:bg-accent"
-                    }`}
+              {users.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => {
+                    setUserId(u.id);
+                    setSwitcherOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors ${
+                    u.id === user.id
+                      ? "border-whatsapp bg-whatsapp/10"
+                      : "border-border hover:bg-accent"
+                  }`}
+                >
+                  <div
+                    className="grid h-8 w-8 place-items-center rounded-full text-xs font-semibold text-white"
+                    style={{ backgroundColor: u.avatarColor }}
                   >
-                    <div
-                      className="grid h-8 w-8 place-items-center rounded-full text-xs font-semibold text-white"
-                      style={{ backgroundColor: u.avatarColor }}
-                    >
-                      {u.name
-                        .split(" ")
-                        .map((p) => p[0])
-                        .slice(0, 2)
-                        .join("")}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{u.name}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {roleLabel(u.role)} · {t?.name}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+                    {u.name
+                      .split(" ")
+                      .map((p) => p[0])
+                      .slice(0, 2)
+                      .join("")}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{u.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{roleLabel(u.role)}</div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
