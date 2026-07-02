@@ -11,9 +11,10 @@ export function sql() {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL não configurada");
     _sql = postgres(url, {
-      ssl: url.includes("sslmode=require") || url.includes("supabase") || url.includes("neon")
-        ? "require"
-        : undefined,
+      ssl:
+        url.includes("sslmode=require") || url.includes("supabase") || url.includes("neon")
+          ? "require"
+          : undefined,
       max: 5,
       prepare: false,
     });
@@ -68,7 +69,10 @@ async function ensureNoCascadeFks(s: ReturnType<typeof sql>) {
       ADD CONSTRAINT conversations_contact_id_fkey
       FOREIGN KEY (contact_id) REFERENCES public.contacts(id) ON DELETE RESTRICT;
   `);
-  console.log("[CRM_FK_RESTRICT_OK]", { fk: "conversations.contact_id", orphansUnlinked: orphanConvCount });
+  console.log("[CRM_FK_RESTRICT_OK]", {
+    fk: "conversations.contact_id",
+    orphansUnlinked: orphanConvCount,
+  });
 
   // ── 2) messages.conversation_id ───────────────────────────────────────────
   const col = await s<{ is_nullable: string }[]>`
@@ -115,7 +119,10 @@ async function ensureNoCascadeFks(s: ReturnType<typeof sql>) {
       ADD CONSTRAINT messages_conversation_id_fkey
       FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE RESTRICT;
   `);
-  console.log("[CRM_FK_RESTRICT_OK]", { fk: "messages.conversation_id", orphansUnlinked: orphanMsgCount });
+  console.log("[CRM_FK_RESTRICT_OK]", {
+    fk: "messages.conversation_id",
+    orphansUnlinked: orphanMsgCount,
+  });
 }
 
 /**
@@ -250,9 +257,7 @@ async function ensureContactsDedup(s: ReturnType<typeof sql>) {
 async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
   // Passo 0: revincular conversas SEM contact_id usando o remoteJid da última
   // mensagem (normalizado) → contato principal por (company_id, phone).
-  const orphanConvs = await s<
-    { id: string; company_id: string; remote_jid: string | null }[]
-  >`
+  const orphanConvs = await s<{ id: string; company_id: string; remote_jid: string | null }[]>`
     SELECT c.id, c.company_id, COALESCE(
       m.remote_jid_a, m.remote_jid_b, m.remote_jid_c
     ) AS remote_jid
@@ -503,10 +508,17 @@ export async function ensureCrmSchema() {
       // Planos comerciais + assinaturas por empresa (fase 1 — sem enforcement).
       await ensurePlansSchema(s);
 
+      // Campanhas (rascunhos + público; fila de envio criada mas não usada ainda).
+      await ensureCampaignsSchema(s);
+
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {
       const err = e as { message?: string; code?: string; detail?: string };
-      console.error("[CRM_SCHEMA_FAIL]", { message: err.message, code: err.code, detail: err.detail });
+      console.error("[CRM_SCHEMA_FAIL]", {
+        message: err.message,
+        code: err.code,
+        detail: err.detail,
+      });
       _crmReady = null; // permite nova tentativa
       throw e;
     }
@@ -616,6 +628,118 @@ export async function ensurePlansSchema(s?: ReturnType<typeof sql>): Promise<voi
   }
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Campanhas (envio em massa via Evolution — fase 1: rascunhos + público).
+// Idempotente, não destrutivo. campaign_send_queue existe mas não é populada.
+// ───────────────────────────────────────────────────────────────────────────
+export async function ensureCampaignsSchema(s?: ReturnType<typeof sql>): Promise<void> {
+  const db = s ?? sql();
+  await db.unsafe(`
+    CREATE TABLE IF NOT EXISTS public.campaigns (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      whatsapp_channel_id UUID REFERENCES public.whatsapp_channels(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      message_text TEXT,
+      message_type TEXT NOT NULL DEFAULT 'text',
+      status TEXT NOT NULL DEFAULT 'draft',
+      scheduled_at TIMESTAMPTZ,
+      started_at TIMESTAMPTZ,
+      finished_at TIMESTAMPTZ,
+      send_interval_ms INT NOT NULL DEFAULT 5000,
+      total_contacts INT NOT NULL DEFAULT 0,
+      sent_count INT NOT NULL DEFAULT 0,
+      failed_count INT NOT NULL DEFAULT 0,
+      skipped_count INT NOT NULL DEFAULT 0,
+      created_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.campaign_contacts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id UUID NOT NULL REFERENCES public.campaigns(id) ON DELETE CASCADE,
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      contact_id UUID REFERENCES public.contacts(id) ON DELETE SET NULL,
+      phone TEXT NOT NULL,
+      name TEXT,
+      variables JSONB NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      skip_reason TEXT,
+      sent_at TIMESTAMPTZ,
+      provider_message_id TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.campaign_send_queue (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id UUID NOT NULL REFERENCES public.campaigns(id) ON DELETE CASCADE,
+      campaign_contact_id UUID NOT NULL REFERENCES public.campaign_contacts(id) ON DELETE CASCADE,
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      scheduled_for TIMESTAMPTZ NOT NULL DEFAULT now(),
+      attempts INT NOT NULL DEFAULT 0,
+      max_attempts INT NOT NULL DEFAULT 3,
+      locked_at TIMESTAMPTZ,
+      locked_by TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.campaign_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id UUID NOT NULL REFERENCES public.campaigns(id) ON DELETE CASCADE,
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      campaign_contact_id UUID REFERENCES public.campaign_contacts(id) ON DELETE SET NULL,
+      event_type TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}',
+      created_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_campaigns_company
+      ON public.campaigns (company_id);
+
+    CREATE INDEX IF NOT EXISTS idx_campaigns_company_status
+      ON public.campaigns (company_id, status);
+
+    CREATE INDEX IF NOT EXISTS idx_campaigns_company_created
+      ON public.campaigns (company_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_contacts_campaign
+      ON public.campaign_contacts (campaign_id);
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_contacts_campaign_status
+      ON public.campaign_contacts (campaign_id, status);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS campaign_contacts_campaign_phone_uniq
+      ON public.campaign_contacts (campaign_id, phone);
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_queue_campaign
+      ON public.campaign_send_queue (campaign_id);
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_queue_company
+      ON public.campaign_send_queue (company_id);
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_queue_pending
+      ON public.campaign_send_queue (status, scheduled_for)
+      WHERE status = 'pending';
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_events_campaign
+      ON public.campaign_events (campaign_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_events_company
+      ON public.campaign_events (company_id);
+
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+    CREATE INDEX IF NOT EXISTS idx_campaigns_company_active
+      ON public.campaigns (company_id, created_at DESC)
+      WHERE deleted_at IS NULL;
+  `);
+}
+
 export async function ensureSchema() {
   if (_schemaReady) return _schemaReady;
   _schemaReady = (async () => {
@@ -706,7 +830,6 @@ export async function ensureSchema() {
         usersTable: "public.users",
         sampleCount: probe.length,
       });
-
     } catch (e) {
       const err = e as { message?: string; code?: string; detail?: string };
       console.error("[SCHEMA_MIGRATION_FAIL]", {

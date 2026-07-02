@@ -20,6 +20,7 @@ import { Route as ApiMessagesRouteImport } from './routes/api/messages'
 import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
 import { Route as ApiContactsRouteImport } from './routes/api/contacts'
 import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
+import { Route as ApiCampaignsRouteImport } from './routes/api/campaigns'
 import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
 import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
 import { Route as AppLogsRouteImport } from './routes/_app.logs'
@@ -30,6 +31,7 @@ import { Route as AppContatosRouteImport } from './routes/_app.contatos'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
 import { Route as AppComunicacaoInternaRouteImport } from './routes/_app.comunicacao-interna'
 import { Route as AppCanaisRouteImport } from './routes/_app.canais'
+import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
 import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app.atendimento'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
@@ -52,12 +54,15 @@ import { Route as ApiDebugColsRouteImport } from './routes/api/debug/cols'
 import { Route as ApiConversationsStartRouteImport } from './routes/api/conversations/start'
 import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
 import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
+import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
 import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
 import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
+import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
+import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
 import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
 import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
@@ -66,12 +71,14 @@ import { Route as ApiConversationsIdReadRouteImport } from './routes/api/convers
 import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
 import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
 import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
+import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
 import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
 import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
 import { Route as ApiEvolutionChannelsIdStatusRouteImport } from './routes/api/evolution/channels/$id/status'
 import { Route as ApiEvolutionChannelsIdQrcodeRouteImport } from './routes/api/evolution/channels/$id/qrcode'
 import { Route as ApiEvolutionChannelsIdDisconnectRouteImport } from './routes/api/evolution/channels/$id/disconnect'
 import { Route as ApiEvolutionChannelsIdConnectRouteImport } from './routes/api/evolution/channels/$id/connect'
+import { Route as ApiCampaignsIdContactsContactRowIdRouteImport } from './routes/api/campaigns/$id/contacts/$contactRowId'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -127,6 +134,11 @@ const ApiCompaniesRoute = ApiCompaniesRouteImport.update({
   path: '/api/companies',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCampaignsRoute = ApiCampaignsRouteImport.update({
+  id: '/api/campaigns',
+  path: '/api/campaigns',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAttendantsRoute = ApiAttendantsRouteImport.update({
   id: '/api/attendants',
   path: '/api/attendants',
@@ -175,6 +187,11 @@ const AppComunicacaoInternaRoute = AppComunicacaoInternaRouteImport.update({
 const AppCanaisRoute = AppCanaisRouteImport.update({
   id: '/canais',
   path: '/canais',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCampanhasRoute = AppCampanhasRouteImport.update({
+  id: '/campanhas',
+  path: '/campanhas',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAutomacoesRoute = AppAutomacoesRouteImport.update({
@@ -289,6 +306,11 @@ const ApiCompaniesIdRoute = ApiCompaniesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiCompaniesRoute,
 } as any)
+const ApiCampaignsIdRoute = ApiCampaignsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiCampaignsRoute,
+} as any)
 const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
   id: '/api/auth/register',
   path: '/api/auth/register',
@@ -318,6 +340,16 @@ const ApiAdminAuthCheckRoute = ApiAdminAuthCheckRouteImport.update({
   id: '/api/admin/auth-check',
   path: '/api/admin/auth-check',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
+  id: '/nova',
+  path: '/nova',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
+const AppCampanhasIdRoute = AppCampanhasIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppCampanhasRoute,
 } as any)
 const ApiPublicWebhooksEvolutionRoute =
   ApiPublicWebhooksEvolutionRouteImport.update({
@@ -365,6 +397,11 @@ const ApiCompaniesIdSubscriptionRoute =
     path: '/subscription',
     getParentRoute: () => ApiCompaniesIdRoute,
   } as any)
+const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
 const ApiMessagesSendMediaEvolutionRoute =
   ApiMessagesSendMediaEvolutionRouteImport.update({
     id: '/send/media/evolution',
@@ -401,6 +438,12 @@ const ApiEvolutionChannelsIdConnectRoute =
     path: '/connect',
     getParentRoute: () => ApiEvolutionChannelsIdRoute,
   } as any)
+const ApiCampaignsIdContactsContactRowIdRoute =
+  ApiCampaignsIdContactsContactRowIdRouteImport.update({
+    id: '/$contactRowId',
+    path: '/$contactRowId',
+    getParentRoute: () => ApiCampaignsIdContactsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -408,6 +451,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
+  '/campanhas': typeof AppCampanhasRouteWithChildren
   '/canais': typeof AppCanaisRoute
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
@@ -418,6 +462,7 @@ export interface FileRoutesByFullPath {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
@@ -425,12 +470,15 @@ export interface FileRoutesByFullPath {
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
+  '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
@@ -451,6 +499,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -459,6 +508,7 @@ export interface FileRoutesByFullPath {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
   '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
@@ -472,6 +522,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
+  '/campanhas': typeof AppCampanhasRouteWithChildren
   '/canais': typeof AppCanaisRoute
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
@@ -482,6 +533,7 @@ export interface FileRoutesByTo {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
@@ -489,12 +541,15 @@ export interface FileRoutesByTo {
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
+  '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
@@ -515,6 +570,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -523,6 +579,7 @@ export interface FileRoutesByTo {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
   '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
@@ -538,6 +595,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/_app/atendimento': typeof AppAtendimentoRoute
   '/_app/automacoes': typeof AppAutomacoesRoute
+  '/_app/campanhas': typeof AppCampanhasRouteWithChildren
   '/_app/canais': typeof AppCanaisRoute
   '/_app/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
@@ -548,6 +606,7 @@ export interface FileRoutesById {
   '/_app/logs': typeof AppLogsRoute
   '/_app/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
@@ -555,12 +614,15 @@ export interface FileRoutesById {
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
+  '/_app/campanhas/$id': typeof AppCampanhasIdRoute
+  '/_app/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
@@ -581,6 +643,7 @@ export interface FileRoutesById {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -589,6 +652,7 @@ export interface FileRoutesById {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
   '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
@@ -604,6 +668,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/atendimento'
     | '/automacoes'
+    | '/campanhas'
     | '/canais'
     | '/comunicacao-interna'
     | '/configuracoes'
@@ -614,6 +679,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/attendants'
+    | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
     | '/api/conversations'
@@ -621,12 +687,15 @@ export interface FileRouteTypes {
     | '/api/plans'
     | '/api/users'
     | '/webhook/evolution'
+    | '/campanhas/$id'
+    | '/campanhas/nova'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/campaigns/$id'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
@@ -647,6 +716,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/api/campaigns/$id/contacts'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
@@ -655,6 +725,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
     | '/api/evolution/channels/$id/qrcode'
@@ -668,6 +739,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/atendimento'
     | '/automacoes'
+    | '/campanhas'
     | '/canais'
     | '/comunicacao-interna'
     | '/configuracoes'
@@ -678,6 +750,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/attendants'
+    | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
     | '/api/conversations'
@@ -685,12 +758,15 @@ export interface FileRouteTypes {
     | '/api/plans'
     | '/api/users'
     | '/webhook/evolution'
+    | '/campanhas/$id'
+    | '/campanhas/nova'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/campaigns/$id'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
@@ -711,6 +787,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/api/campaigns/$id/contacts'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
@@ -719,6 +796,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
     | '/api/evolution/channels/$id/qrcode'
@@ -733,6 +811,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/_app/atendimento'
     | '/_app/automacoes'
+    | '/_app/campanhas'
     | '/_app/canais'
     | '/_app/comunicacao-interna'
     | '/_app/configuracoes'
@@ -743,6 +822,7 @@ export interface FileRouteTypes {
     | '/_app/logs'
     | '/_app/usuarios'
     | '/api/attendants'
+    | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
     | '/api/conversations'
@@ -750,12 +830,15 @@ export interface FileRouteTypes {
     | '/api/plans'
     | '/api/users'
     | '/webhook/evolution'
+    | '/_app/campanhas/$id'
+    | '/_app/campanhas/nova'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/campaigns/$id'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
@@ -776,6 +859,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/api/campaigns/$id/contacts'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
@@ -784,6 +868,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
     | '/api/evolution/channels/$id/qrcode'
@@ -798,6 +883,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
+  ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRouteWithChildren
@@ -909,6 +995,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompaniesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/campaigns': {
+      id: '/api/campaigns'
+      path: '/api/campaigns'
+      fullPath: '/api/campaigns'
+      preLoaderRoute: typeof ApiCampaignsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/attendants': {
       id: '/api/attendants'
       path: '/api/attendants'
@@ -977,6 +1070,13 @@ declare module '@tanstack/react-router' {
       path: '/canais'
       fullPath: '/canais'
       preLoaderRoute: typeof AppCanaisRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/campanhas': {
+      id: '/_app/campanhas'
+      path: '/campanhas'
+      fullPath: '/campanhas'
+      preLoaderRoute: typeof AppCampanhasRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/automacoes': {
@@ -1133,6 +1233,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompaniesIdRouteImport
       parentRoute: typeof ApiCompaniesRoute
     }
+    '/api/campaigns/$id': {
+      id: '/api/campaigns/$id'
+      path: '/$id'
+      fullPath: '/api/campaigns/$id'
+      preLoaderRoute: typeof ApiCampaignsIdRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
     '/api/auth/register': {
       id: '/api/auth/register'
       path: '/api/auth/register'
@@ -1174,6 +1281,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/admin/auth-check'
       preLoaderRoute: typeof ApiAdminAuthCheckRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/campanhas/nova': {
+      id: '/_app/campanhas/nova'
+      path: '/nova'
+      fullPath: '/campanhas/nova'
+      preLoaderRoute: typeof AppCampanhasNovaRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
+    '/_app/campanhas/$id': {
+      id: '/_app/campanhas/$id'
+      path: '/$id'
+      fullPath: '/campanhas/$id'
+      preLoaderRoute: typeof AppCampanhasIdRouteImport
+      parentRoute: typeof AppCampanhasRoute
     }
     '/api/public/webhooks/evolution': {
       id: '/api/public/webhooks/evolution'
@@ -1231,6 +1352,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompaniesIdSubscriptionRouteImport
       parentRoute: typeof ApiCompaniesIdRoute
     }
+    '/api/campaigns/$id/contacts': {
+      id: '/api/campaigns/$id/contacts'
+      path: '/contacts'
+      fullPath: '/api/campaigns/$id/contacts'
+      preLoaderRoute: typeof ApiCampaignsIdContactsRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
     '/api/messages/send/media/evolution': {
       id: '/api/messages/send/media/evolution'
       path: '/send/media/evolution'
@@ -1273,12 +1401,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiEvolutionChannelsIdConnectRouteImport
       parentRoute: typeof ApiEvolutionChannelsIdRoute
     }
+    '/api/campaigns/$id/contacts/$contactRowId': {
+      id: '/api/campaigns/$id/contacts/$contactRowId'
+      path: '/$contactRowId'
+      fullPath: '/api/campaigns/$id/contacts/$contactRowId'
+      preLoaderRoute: typeof ApiCampaignsIdContactsContactRowIdRouteImport
+      parentRoute: typeof ApiCampaignsIdContactsRoute
+    }
   }
 }
+
+interface AppCampanhasRouteChildren {
+  AppCampanhasIdRoute: typeof AppCampanhasIdRoute
+  AppCampanhasNovaRoute: typeof AppCampanhasNovaRoute
+}
+
+const AppCampanhasRouteChildren: AppCampanhasRouteChildren = {
+  AppCampanhasIdRoute: AppCampanhasIdRoute,
+  AppCampanhasNovaRoute: AppCampanhasNovaRoute,
+}
+
+const AppCampanhasRouteWithChildren = AppCampanhasRoute._addFileChildren(
+  AppCampanhasRouteChildren,
+)
 
 interface AppRouteChildren {
   AppAtendimentoRoute: typeof AppAtendimentoRoute
   AppAutomacoesRoute: typeof AppAutomacoesRoute
+  AppCampanhasRoute: typeof AppCampanhasRouteWithChildren
   AppCanaisRoute: typeof AppCanaisRoute
   AppComunicacaoInternaRoute: typeof AppComunicacaoInternaRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
@@ -1293,6 +1443,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAtendimentoRoute: AppAtendimentoRoute,
   AppAutomacoesRoute: AppAutomacoesRoute,
+  AppCampanhasRoute: AppCampanhasRouteWithChildren,
   AppCanaisRoute: AppCanaisRoute,
   AppComunicacaoInternaRoute: AppComunicacaoInternaRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,
@@ -1305,6 +1456,45 @@ const AppRouteChildren: AppRouteChildren = {
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
+interface ApiCampaignsIdContactsRouteChildren {
+  ApiCampaignsIdContactsContactRowIdRoute: typeof ApiCampaignsIdContactsContactRowIdRoute
+}
+
+const ApiCampaignsIdContactsRouteChildren: ApiCampaignsIdContactsRouteChildren =
+  {
+    ApiCampaignsIdContactsContactRowIdRoute:
+      ApiCampaignsIdContactsContactRowIdRoute,
+  }
+
+const ApiCampaignsIdContactsRouteWithChildren =
+  ApiCampaignsIdContactsRoute._addFileChildren(
+    ApiCampaignsIdContactsRouteChildren,
+  )
+
+interface ApiCampaignsIdRouteChildren {
+  ApiCampaignsIdContactsRoute: typeof ApiCampaignsIdContactsRouteWithChildren
+}
+
+const ApiCampaignsIdRouteChildren: ApiCampaignsIdRouteChildren = {
+  ApiCampaignsIdContactsRoute: ApiCampaignsIdContactsRouteWithChildren,
+}
+
+const ApiCampaignsIdRouteWithChildren = ApiCampaignsIdRoute._addFileChildren(
+  ApiCampaignsIdRouteChildren,
+)
+
+interface ApiCampaignsRouteChildren {
+  ApiCampaignsIdRoute: typeof ApiCampaignsIdRouteWithChildren
+}
+
+const ApiCampaignsRouteChildren: ApiCampaignsRouteChildren = {
+  ApiCampaignsIdRoute: ApiCampaignsIdRouteWithChildren,
+}
+
+const ApiCampaignsRouteWithChildren = ApiCampaignsRoute._addFileChildren(
+  ApiCampaignsRouteChildren,
+)
 
 interface ApiCompaniesIdRouteChildren {
   ApiCompaniesIdSubscriptionRoute: typeof ApiCompaniesIdSubscriptionRoute
@@ -1440,6 +1630,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
+  ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
   ApiContactsRoute: ApiContactsRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRouteWithChildren,

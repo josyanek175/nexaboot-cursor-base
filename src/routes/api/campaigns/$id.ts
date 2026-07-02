@@ -1,0 +1,82 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
+import { ensureCrmSchema } from "@/lib/pg.server";
+import {
+  getCampaignActor,
+  getCampaignDetail,
+  updateCampaign,
+  deleteCampaign,
+} from "@/lib/campaign.server";
+
+const PatchBody = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  message_text: z.string().trim().max(4000).optional().nullable(),
+  whatsapp_channel_id: z.string().uuid().optional().nullable(),
+  send_interval_ms: z.number().int().min(1000).max(600000).optional(),
+});
+
+export const Route = createFileRoute("/api/campaigns/$id")({
+  server: {
+    handlers: {
+      GET: async ({ params }) => {
+        await ensureCrmSchema();
+        const ctx = await getCampaignActor("view");
+        if (ctx instanceof Response) return ctx;
+
+        const campaign = await getCampaignDetail(ctx.companyId, params.id);
+        if (!campaign) return Response.json({ error: "not_found" }, { status: 404 });
+        return Response.json({ campaign });
+      },
+
+      PATCH: async ({ params, request }) => {
+        await ensureCrmSchema();
+        const ctx = await getCampaignActor("manage");
+        if (ctx instanceof Response) return ctx;
+
+        const json = await request.json().catch(() => null);
+        const parsed = PatchBody.safeParse(json);
+        if (!parsed.success) {
+          return Response.json(
+            { error: "invalid_input", detail: parsed.error.flatten() },
+            { status: 400 },
+          );
+        }
+
+        try {
+          const campaign = await updateCampaign(ctx.companyId, params.id, ctx.userId, parsed.data);
+          if (!campaign) return Response.json({ error: "not_found" }, { status: 404 });
+          return Response.json({ campaign });
+        } catch (e) {
+          const msg = (e as Error).message;
+          if (msg === "not_draft") {
+            return Response.json({ error: "not_draft" }, { status: 409 });
+          }
+          if (msg === "invalid_channel") {
+            return Response.json({ error: "invalid_channel" }, { status: 400 });
+          }
+          console.error("[CAMPAIGNS_PATCH_FAIL]", e);
+          return Response.json({ error: "update_failed" }, { status: 500 });
+        }
+      },
+
+      DELETE: async ({ params }) => {
+        await ensureCrmSchema();
+        const ctx = await getCampaignActor("delete");
+        if (ctx instanceof Response) return ctx;
+
+        try {
+          const ok = await deleteCampaign(ctx.companyId, params.id, ctx.userId);
+          if (!ok) return Response.json({ error: "not_found" }, { status: 404 });
+          return Response.json({ ok: true });
+        } catch (e) {
+          const msg = (e as Error).message;
+          if (msg === "not_draft") {
+            return Response.json({ error: "not_draft" }, { status: 409 });
+          }
+          console.error("[CAMPAIGNS_DELETE_FAIL]", e);
+          return Response.json({ error: "delete_failed" }, { status: 500 });
+        }
+      },
+    },
+  },
+});

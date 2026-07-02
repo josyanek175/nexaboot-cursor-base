@@ -1,10 +1,23 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard, MessagesSquare, Users, Building2, Smartphone,
-  Workflow, MessageCircleMore, Contact2, Settings, ScrollText, LogOut,
-  UserCog, Menu, UsersRound,
+  LayoutDashboard,
+  MessagesSquare,
+  Users,
+  Building2,
+  Smartphone,
+  Workflow,
+  MessageCircleMore,
+  Contact2,
+  Settings,
+  ScrollText,
+  LogOut,
+  UserCog,
+  Menu,
+  UsersRound,
+  Megaphone,
 } from "lucide-react";
 import { canManageInternalGroups } from "@/lib/current-user";
+import { canViewCampaigns } from "@/lib/permissions";
 import { useEffect, useState } from "react";
 import { users, tenants, type Role } from "@/lib/mocks";
 import { subscribeUnread, setUnread as setUnreadStore, type UnreadKey } from "@/lib/unread-store";
@@ -29,11 +42,9 @@ const roleLabel = (r: Role) => ROLE_LABELS[r] ?? r;
 
 // Módulos OPERACIONAIS (dados de empresa). Sem company_id válido, SUPER_ADMIN/TI
 // veem "Selecione uma empresa..." em vez do conteúdo, evitando dados misturados.
-const OPERATIONAL_PREFIXES = ["/atendimento", "/contatos", "/canais"];
+const OPERATIONAL_PREFIXES = ["/atendimento", "/contatos", "/canais", "/campanhas"];
 function isOperationalPath(pathname: string): boolean {
-  return OPERATIONAL_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(p + "/"),
-  );
+  return OPERATIONAL_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
 type NavItem = {
@@ -42,14 +53,26 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   badgeKey?: UnreadKey;
   adminOnly?: boolean;
+  campaignsOnly?: boolean;
 };
 
 const nav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/atendimento", label: "Atendimento", icon: MessagesSquare, badgeKey: "atendimento" as UnreadKey },
-  { to: "/comunicacao-interna", label: "Comunicação Interna", icon: MessageCircleMore, badgeKey: "internal" as UnreadKey },
+  {
+    to: "/atendimento",
+    label: "Atendimento",
+    icon: MessagesSquare,
+    badgeKey: "atendimento" as UnreadKey,
+  },
+  {
+    to: "/comunicacao-interna",
+    label: "Comunicação Interna",
+    icon: MessageCircleMore,
+    badgeKey: "internal" as UnreadKey,
+  },
   { to: "/grupos-internos", label: "Grupos Internos", icon: UsersRound, adminOnly: true },
   { to: "/contatos", label: "Contatos", icon: Contact2 },
+  { to: "/campanhas", label: "Campanhas", icon: Megaphone, campaignsOnly: true },
   { to: "/empresas", label: "Empresas", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/canais", label: "Canais WhatsApp", icon: Smartphone },
@@ -117,7 +140,9 @@ function Shell() {
   }, []);
 
   // Fecha sidebar mobile automaticamente ao navegar entre páginas
-  useEffect(() => { setSidebarOpen(false); }, [pathname]);
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   const onLogout = () => {
     resetInternalUnreadBaseline();
@@ -151,7 +176,9 @@ function Shell() {
         }`}
       >
         <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
-          <div className="grid h-8 w-8 place-items-center rounded-md bg-whatsapp text-whatsapp-foreground font-bold">N</div>
+          <div className="grid h-8 w-8 place-items-center rounded-md bg-whatsapp text-whatsapp-foreground font-bold">
+            N
+          </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold">NexaBoot</div>
             <div className="truncate text-xs text-muted-foreground">{tenant.name}</div>
@@ -161,6 +188,14 @@ function Shell() {
         <nav className="flex-1 overflow-y-auto p-2">
           {nav
             .filter((item) => !item.adminOnly || canManageInternalGroups(user.role))
+            .filter((item) => {
+              if (!item.campaignsOnly) return true;
+              return canViewCampaigns({
+                id: user.id,
+                role: user.role,
+                tenantId: user.tenantId,
+              });
+            })
             .map((item) => {
               const { to, label, icon: Icon, badgeKey } = item;
               const count = badgeKey ? unread[badgeKey] : 0;
@@ -193,7 +228,11 @@ function Shell() {
               className="grid h-9 w-9 place-items-center rounded-full text-sm font-semibold text-white"
               style={{ backgroundColor: user.avatarColor }}
             >
-              {user.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+              {user.name
+                .split(" ")
+                .map((p) => p[0])
+                .slice(0, 2)
+                .join("")}
             </div>
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-sm font-medium">{user.name}</div>
@@ -216,14 +255,18 @@ function Shell() {
           </div>
           {isSuperAdmin && visibleTenants.length > 1 && (
             <div className="mt-3">
-              <label className="mb-1 block text-[10px] uppercase text-muted-foreground">Empresa ativa (super-admin)</label>
+              <label className="mb-1 block text-[10px] uppercase text-muted-foreground">
+                Empresa ativa (super-admin)
+              </label>
               <select
                 value={tenant.id}
                 onChange={(e) => setTenantId(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs"
               >
                 {visibleTenants.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -247,11 +290,18 @@ function Shell() {
       </main>
 
       {switcherOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setSwitcherOpen(false)}>
-          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+          onClick={() => setSwitcherOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-base font-semibold">Trocar perfil de teste</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Útil para validar isolamento multitenant. Em produção será substituído por Supabase Auth.
+              Útil para validar isolamento multitenant. Em produção será substituído por Supabase
+              Auth.
             </p>
             <div className="mt-4 max-h-80 space-y-1 overflow-y-auto">
               {users.map((u) => {
@@ -272,11 +322,17 @@ function Shell() {
                       className="grid h-8 w-8 place-items-center rounded-full text-xs font-semibold text-white"
                       style={{ backgroundColor: u.avatarColor }}
                     >
-                      {u.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+                      {u.name
+                        .split(" ")
+                        .map((p) => p[0])
+                        .slice(0, 2)
+                        .join("")}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">{u.name}</div>
-                      <div className="truncate text-xs text-muted-foreground">{roleLabel(u.role)} · {t?.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {roleLabel(u.role)} · {t?.name}
+                      </div>
                     </div>
                   </button>
                 );
