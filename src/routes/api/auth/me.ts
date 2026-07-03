@@ -7,7 +7,7 @@ import {
   COOKIE_NAME,
 } from "@/lib/session.server";
 import { buildOperationalCompanyClearCookie } from "@/lib/operational-company.server";
-import { getCurrentUserCompanyInfo, NO_COMPANY_MESSAGE } from "@/lib/company.server";
+import { getCurrentUserCompanyInfo, NO_COMPANY_MESSAGE, PLATFORM_NO_COMPANY_MESSAGE } from "@/lib/company.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 import { buildAuthUserResponse } from "@/lib/auth-user";
 
@@ -56,7 +56,7 @@ export const Route = createFileRoute("/api/auth/me")({
 
         // Empresa (isolamento oficial por company_id). O front usa company_valid
         // para bloquear os módulos operacionais quando não há empresa válida.
-        const company = await getCurrentUserCompanyInfo();
+        const company = await getCurrentUserCompanyInfo(uid);
 
         // SUPER_ADMIN e TI têm acesso de PLATAFORMA: podem entrar mesmo sem
         // empresa, mas os módulos operacionais continuam exigindo empresa válida.
@@ -66,7 +66,7 @@ export const Route = createFileRoute("/api/auth/me")({
         const companyMessage = company.companyValid
           ? null
           : platformAccess
-            ? "Selecione uma empresa para acessar este módulo."
+            ? PLATFORM_NO_COMPANY_MESSAGE
             : NO_COMPANY_MESSAGE;
 
         console.log("[ME_OK]", {

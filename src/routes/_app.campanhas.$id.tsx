@@ -44,6 +44,20 @@ export const Route = createFileRoute("/_app/campanhas/$id")({
   component: EditarCampanhaPage,
 });
 
+function campaignApiMessage(status: number, body: { error?: string; message?: string }): string {
+  if (status === 401) return "Sessão expirada. Faça login novamente.";
+  if (status === 403) {
+    if (body.error === "no_company") {
+      return body.message ?? "Selecione uma empresa para gerenciar campanhas.";
+    }
+    if (body.error === "forbidden") {
+      return body.message ?? "Seu perfil não tem permissão para acessar Campanhas.";
+    }
+    return body.message ?? "Sem permissão para acessar Campanhas.";
+  }
+  return body.message ?? "Não foi possível carregar a campanha.";
+}
+
 function EditarCampanhaPage() {
   const { id } = Route.useParams();
   const { user, companyValid, companyId } = useAuth();
@@ -80,8 +94,14 @@ function EditarCampanhaPage() {
   const CHANNEL_UNAVAILABLE_MSG =
     "O canal selecionado não está mais disponível. Escolha outro canal antes de enviar.";
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadCampaign = useCallback(async () => {
     const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, { credentials: "include" });
+    if (res.status === 401 || res.status === 403) {
+      const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      throw new Error(campaignApiMessage(res.status, j));
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as { campaign: Campaign };
     setCampaign(data.campaign);
@@ -118,6 +138,7 @@ function EditarCampanhaPage() {
       return;
     }
     (async () => {
+      setLoadError(null);
       try {
         await loadCampaign();
         const chRes = await fetch("/api/evolution/channels", { credentials: "include" });
@@ -131,7 +152,9 @@ function EditarCampanhaPage() {
         }
         await loadAudience();
       } catch (e) {
-        toast.error((e as Error).message);
+        const msg = (e as Error).message;
+        setLoadError(msg);
+        toast.error(msg);
       } finally {
         setLoading(false);
       }
@@ -263,7 +286,9 @@ function EditarCampanhaPage() {
   if (!campaign) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">Campanha não encontrada.</p>
+        <p className="text-sm text-muted-foreground">
+          {loadError ?? "Campanha não encontrada."}
+        </p>
       </div>
     );
   }

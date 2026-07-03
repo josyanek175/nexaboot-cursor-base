@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_app/campanhas/nova")({
 });
 
 function campaignApiError(status: number, body: { error?: string; message?: string }): string {
-  if (status === 401) return "Sua sessão expirou. Faça login novamente.";
+  if (status === 401) return "Sessão expirada. Faça login novamente.";
   if (status === 403) {
     if (body.error === "no_company") {
       return body.message ?? "Selecione uma empresa ativa antes de criar campanha.";
@@ -54,7 +54,7 @@ function NovaCampanhaPage() {
     fetch("/api/evolution/channels", { credentials: "include" })
       .then(async (r) => {
         if (r.status === 401) {
-          setChannelsError("Sua sessão expirou. Faça login novamente.");
+          setChannelsError("Sessão expirada. Faça login novamente.");
           return { channels: [] as ChannelOption[] };
         }
         if (r.status === 403) {

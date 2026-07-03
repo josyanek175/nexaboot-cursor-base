@@ -37,6 +37,20 @@ export const Route = createFileRoute("/_app/campanhas")({
   component: CampanhasPage,
 });
 
+function campaignApiMessage(status: number, body: { error?: string; message?: string }): string {
+  if (status === 401) return "Sessão expirada. Faça login novamente.";
+  if (status === 403) {
+    if (body.error === "no_company") {
+      return body.message ?? "Selecione uma empresa para gerenciar campanhas.";
+    }
+    if (body.error === "forbidden") {
+      return body.message ?? "Seu perfil não tem permissão para acessar Campanhas.";
+    }
+    return body.message ?? "Sem permissão para acessar Campanhas.";
+  }
+  return body.message ?? "Não foi possível carregar as campanhas.";
+}
+
 function CampanhasPage() {
   const { user, companyValid, companyId, companyMessage } = useAuth();
   const actor = user
@@ -56,17 +70,22 @@ function CampanhasPage() {
     setError(null);
     try {
       const res = await fetch("/api/campaigns", { credentials: "include" });
-      if (res.status === 403) {
+      if (res.status === 401) {
         const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-        setError(
-          j.error === "no_company"
-            ? (j.message ?? "Selecione uma empresa ativa para acessar Campanhas.")
-            : "Sem permissão para acessar Campanhas.",
-        );
+        setError(campaignApiMessage(401, j));
         setItems([]);
         return;
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (res.status === 403) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+        setError(campaignApiMessage(403, j));
+        setItems([]);
+        return;
+      }
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(j.message ?? `HTTP ${res.status}`);
+      }
       const data = (await res.json()) as { campaigns: CampaignRow[] };
       setItems(data.campaigns ?? []);
     } catch (e) {

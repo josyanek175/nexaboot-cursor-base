@@ -1,8 +1,13 @@
 // Campanhas — lógica server-side (fase 1: rascunhos + público).
 // Isolamento estrito por company_id. Sem envio WhatsApp nesta fase.
 import { sql } from "@/lib/pg.server";
-import { requireCompanyId } from "@/lib/company.server";
+import {
+  getCurrentUserCompanyInfo,
+  NO_COMPANY_MESSAGE,
+  PLATFORM_NO_COMPANY_MESSAGE,
+} from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { isPlatformRole } from "@/lib/platform-roles";
 import {
   canViewCampaigns,
   canManageCampaigns,
@@ -67,38 +72,66 @@ const CAMPAIGN_SELECT = `
 export async function getCampaignActor(
   mode: "view" | "manage" | "delete",
 ): Promise<ActorContext | Response> {
-  const company = await requireCompanyId();
-  if (company instanceof Response) return company;
-
+  // Mesma ordem de /api/auth/me: uma leitura do cookie, depois empresa por company_id.
   const uid = getSessionUserId();
-  if (!uid) return Response.json({ error: "unauthenticated" }, { status: 401 });
-
-  const rows = await sql<{ id: string; role: string; tenant_id: string }[]>`
-    SELECT id, role, tenant_id FROM public.users
-    WHERE id = ${uid}::uuid AND active = true
-    LIMIT 1
-  `;
-  if (!rows[0]) {
+  if (!uid) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
 
+  const rows = await sql<{ id: string; role: string; tenant_id: string; active: boolean | null }[]>`
+    SELECT id, role, tenant_id, active FROM public.users
+    WHERE id = ${uid}
+    LIMIT 1
+  `;
+  const u = rows[0];
+  if (!u) {
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  if (u.active === false) {
+    return Response.json(
+      { error: "user_inactive", message: "Usuário inativo." },
+      { status: 403 },
+    );
+  }
+
+  const companyInfo = await getCurrentUserCompanyInfo(uid);
+  if (!companyInfo.companyValid || !companyInfo.companyId) {
+    const platform = isPlatformRole(u.role);
+    return Response.json(
+      {
+        error: "no_company",
+        message: platform ? PLATFORM_NO_COMPANY_MESSAGE : NO_COMPANY_MESSAGE,
+      },
+      { status: 403 },
+    );
+  }
+
   const actor: ActingUser = {
-    id: String(rows[0].id),
-    role: rows[0].role as ActingUser["role"],
-    tenantId: String(rows[0].tenant_id ?? ""),
+    id: String(u.id),
+    role: u.role as ActingUser["role"],
+    tenantId: String(u.tenant_id ?? ""),
   };
 
   if (mode === "view" && !canViewCampaigns(actor)) {
-    return Response.json({ error: "forbidden" }, { status: 403 });
+    return Response.json(
+      { error: "forbidden", message: "Seu perfil não tem permissão para acessar Campanhas." },
+      { status: 403 },
+    );
   }
   if (mode === "manage" && !canManageCampaigns(actor)) {
-    return Response.json({ error: "forbidden" }, { status: 403 });
+    return Response.json(
+      { error: "forbidden", message: "Seu perfil não tem permissão para gerenciar Campanhas." },
+      { status: 403 },
+    );
   }
   if (mode === "delete" && !canDeleteCampaign(actor)) {
-    return Response.json({ error: "forbidden" }, { status: 403 });
+    return Response.json(
+      { error: "forbidden", message: "Seu perfil não tem permissão para excluir campanhas." },
+      { status: 403 },
+    );
   }
 
-  return { companyId: company, userId: uid, actor };
+  return { companyId: companyInfo.companyId, userId: uid, actor };
 }
 
 export async function validateEvolutionChannel(
@@ -110,8 +143,6 @@ export async function validateEvolutionChannel(
     WHERE id = ${channelId}::uuid
       AND company_id = ${companyId}::uuid
       AND lower(channel_type) = 'evolution'
-      AND deleted_at IS NULL
-      AND active = true
     LIMIT 1
   `;
   if (!rows[0]) return { ok: false, error: "invalid_channel" };
@@ -186,8 +217,6 @@ export async function listCampaigns(companyId: string, status?: string): Promise
         LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
           AND ch.company_id = c.company_id
           AND lower(ch.channel_type) = 'evolution'
-          AND ch.deleted_at IS NULL
-          AND ch.active = true
         WHERE c.company_id = ${companyId}::uuid
           AND c.deleted_at IS NULL
           AND c.status = ${status}
@@ -199,8 +228,6 @@ export async function listCampaigns(companyId: string, status?: string): Promise
         LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
           AND ch.company_id = c.company_id
           AND lower(ch.channel_type) = 'evolution'
-          AND ch.deleted_at IS NULL
-          AND ch.active = true
         WHERE c.company_id = ${companyId}::uuid
           AND c.deleted_at IS NULL
         ORDER BY c.created_at DESC
@@ -218,8 +245,6 @@ export async function getCampaignById(
     LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
       AND ch.company_id = c.company_id
       AND lower(ch.channel_type) = 'evolution'
-      AND ch.deleted_at IS NULL
-      AND ch.active = true
     WHERE c.id = ${campaignId}::uuid
       AND c.company_id = ${companyId}::uuid
       AND c.deleted_at IS NULL

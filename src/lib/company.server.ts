@@ -67,6 +67,10 @@ export async function ensureUserCompanySchema(): Promise<void> {
 export interface CurrentUserCompanyInfo {
   /** Há sessão válida e o usuário existe em public.users. */
   authenticated: boolean;
+  /** ID do usuário quando autenticado. */
+  userId: string | null;
+  /** Role do usuário (quando autenticado). */
+  role: string | null;
   /** company_id apenas quando a empresa é válida; caso contrário null. */
   companyId: string | null;
   /** Nome da empresa válida; caso contrário null. */
@@ -75,31 +79,48 @@ export interface CurrentUserCompanyInfo {
   companyValid: boolean;
 }
 
+export const PLATFORM_NO_COMPANY_MESSAGE =
+  "Selecione uma empresa para gerenciar campanhas.";
+
 /**
  * Resolve a empresa do usuário logado, validando contra public.companies.
- * NUNCA cria empresa padrão e NUNCA auto-atribui empresa.
+ * Passe `userId` quando a sessão já foi lida (evita reler o cookie na mesma request).
  */
-export async function getCurrentUserCompanyInfo(): Promise<CurrentUserCompanyInfo> {
+export async function getCurrentUserCompanyInfo(
+  userId?: string | null,
+): Promise<CurrentUserCompanyInfo> {
   const empty: CurrentUserCompanyInfo = {
     authenticated: false,
+    userId: null,
+    role: null,
     companyId: null,
     companyName: null,
     companyValid: false,
   };
 
-  const uid = getSessionUserId();
+  const uid = userId ?? getSessionUserId();
   if (!uid) return empty;
+
+  // Cookie/sessão resolvida: autenticado na camada de sessão (igual /api/auth/me).
+  const sessionBase: CurrentUserCompanyInfo = {
+    authenticated: true,
+    userId: uid,
+    role: null,
+    companyId: null,
+    companyName: null,
+    companyValid: false,
+  };
 
   await ensureUserCompanySchema();
   await ensureCrmSchema();
   const s = sql();
 
-  const users = await s<
-    { id: string; role: string; company_id: string | null }[]
-  >`
-    SELECT id, role, company_id FROM public.users WHERE id = ${uid}::uuid LIMIT 1
+  const users = await s<{ id: string; role: string; company_id: string | null }[]>`
+    SELECT id, role, company_id FROM public.users WHERE id = ${uid} LIMIT 1
   `;
-  if (!users[0]) return empty;
+  if (!users[0]) {
+    return sessionBase;
+  }
 
   const user = users[0];
   const platform = isPlatformRole(user.role);
@@ -107,7 +128,14 @@ export async function getCurrentUserCompanyInfo(): Promise<CurrentUserCompanyInf
   if (platform) {
     const selectedId = getOperationalCompanyIdFromCookie(uid);
     if (!selectedId) {
-      return { authenticated: true, companyId: null, companyName: null, companyValid: false };
+      return {
+        authenticated: true,
+        userId: uid,
+        role: user.role,
+        companyId: null,
+        companyName: null,
+        companyValid: false,
+      };
     }
     const companies = await s<{ id: string; name: string }[]>`
       SELECT id, name FROM public.companies
@@ -115,10 +143,19 @@ export async function getCurrentUserCompanyInfo(): Promise<CurrentUserCompanyInf
       LIMIT 1
     `;
     if (!companies[0]) {
-      return { authenticated: true, companyId: null, companyName: null, companyValid: false };
+      return {
+        authenticated: true,
+        userId: uid,
+        role: user.role,
+        companyId: null,
+        companyName: null,
+        companyValid: false,
+      };
     }
     return {
       authenticated: true,
+      userId: uid,
+      role: user.role,
       companyId: companies[0].id,
       companyName: companies[0].name,
       companyValid: true,
@@ -133,14 +170,25 @@ export async function getCurrentUserCompanyInfo(): Promise<CurrentUserCompanyInf
            c.name AS company_name
     FROM public.users u
     LEFT JOIN public.companies c ON c.id = u.company_id AND c.active = true
-    WHERE u.id = ${uid}::uuid
+    WHERE u.id = ${uid}
     LIMIT 1
   `;
-  if (!rows[0]) return { authenticated: true, companyId: null, companyName: null, companyValid: false };
+  if (!rows[0]) {
+    return {
+      authenticated: true,
+      userId: uid,
+      role: user.role,
+      companyId: null,
+      companyName: null,
+      companyValid: false,
+    };
+  }
 
   const companyValid = !!rows[0].company_pk;
   return {
     authenticated: true,
+    userId: uid,
+    role: user.role,
     companyId: companyValid ? rows[0].company_id : null,
     companyName: companyValid ? rows[0].company_name : null,
     companyValid,
@@ -169,14 +217,19 @@ export async function getCurrentUserCompanyId(): Promise<string | null> {
  *   if (company instanceof Response) return company;
  *   const companyId = company;
  */
-export async function requireCompanyId(): Promise<string | Response> {
-  const info = await getCurrentUserCompanyInfo();
-  if (!info.authenticated) {
+export async function requireCompanyId(userId?: string | null): Promise<string | Response> {
+  const uid = userId ?? getSessionUserId();
+  if (!uid) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
+  const info = await getCurrentUserCompanyInfo(uid);
   if (!info.companyValid || !info.companyId) {
+    const platform = isPlatformRole(info.role);
     return Response.json(
-      { error: "no_company", message: NO_COMPANY_MESSAGE },
+      {
+        error: "no_company",
+        message: platform ? PLATFORM_NO_COMPANY_MESSAGE : NO_COMPANY_MESSAGE,
+      },
       { status: 403 },
     );
   }
