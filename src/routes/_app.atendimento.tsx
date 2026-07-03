@@ -447,14 +447,20 @@ function AtendimentoPage() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [msgsError, setMsgsError] = useState<string | null>(null);
 
-  const [selectedId, setSelectedId] = useState<string>("");
+  const initialConversationId =
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("c") ?? "")
+      : "";
+  const [selectedId, setSelectedId] = useState<string>(initialConversationId);
   const [statusFilter, setStatusFilter] = useState<Status>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "groups" | "individuals">("individuals");
   const [search, setSearch] = useState("");
   const [showDetails, setShowDetails] = useState(true);
-  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [mobileView, setMobileView] = useState<"list" | "chat">(
+    initialConversationId ? "chat" : "list",
+  );
   const [draft, setDraft] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
   // Envio real de mídia (imagem/áudio) via input de arquivo escondido.
