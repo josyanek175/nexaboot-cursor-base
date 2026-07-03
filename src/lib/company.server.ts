@@ -207,65 +207,6 @@ export async function getCurrentUserCompanyId(): Promise<string | null> {
   return info.companyId;
 }
 
-export type OperationalAuthContext = {
-  userId: string;
-  companyId: string;
-  role: string;
-  tenantId: string;
-};
-
-/**
- * Sessão + empresa em uma única leitura de cookie.
- * Mesma base usada por /api/evolution/channels (requireCompanyId) e Campanhas.
- * ADMIN_EMPRESA/GERENTE/SUPERVISOR: users.company_id.
- * SUPER_ADMIN/ADMIN_GERAL/TI: cookie de empresa operacional.
- */
-export async function requireOperationalAuth(
-  userId?: string | null,
-): Promise<OperationalAuthContext | Response> {
-  const uid = userId ?? getSessionUserId();
-  if (!uid) {
-    return Response.json({ error: "unauthenticated" }, { status: 401 });
-  }
-
-  const info = await getCurrentUserCompanyInfo(uid);
-  if (!info.companyValid || !info.companyId) {
-    const platform = isPlatformRole(info.role);
-    return Response.json(
-      {
-        error: "no_company",
-        message: platform ? PLATFORM_NO_COMPANY_MESSAGE : NO_COMPANY_MESSAGE,
-      },
-      { status: 403 },
-    );
-  }
-
-  if (!info.role) {
-    return Response.json({ error: "unauthenticated" }, { status: 401 });
-  }
-
-  const rows = await sql<{ tenant_id: string; active: boolean | null }[]>`
-    SELECT tenant_id, active FROM public.users WHERE id = ${uid} LIMIT 1
-  `;
-  const u = rows[0];
-  if (!u) {
-    return Response.json({ error: "unauthenticated" }, { status: 401 });
-  }
-  if (u.active === false) {
-    return Response.json(
-      { error: "user_inactive", message: "Usuário inativo." },
-      { status: 403 },
-    );
-  }
-
-  return {
-    userId: uid,
-    companyId: info.companyId,
-    role: info.role,
-    tenantId: String(u.tenant_id ?? ""),
-  };
-}
-
 /**
  * Helper seguro para handlers de API operacionais.
  * Retorna o companyId (string) quando há empresa válida, ou uma Response
@@ -277,7 +218,20 @@ export async function requireOperationalAuth(
  *   const companyId = company;
  */
 export async function requireCompanyId(userId?: string | null): Promise<string | Response> {
-  const auth = await requireOperationalAuth(userId);
-  if (auth instanceof Response) return auth;
-  return auth.companyId;
+  const uid = userId ?? getSessionUserId();
+  if (!uid) {
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  const info = await getCurrentUserCompanyInfo(uid);
+  if (!info.companyValid || !info.companyId) {
+    const platform = isPlatformRole(info.role);
+    return Response.json(
+      {
+        error: "no_company",
+        message: platform ? PLATFORM_NO_COMPANY_MESSAGE : NO_COMPANY_MESSAGE,
+      },
+      { status: 403 },
+    );
+  }
+  return info.companyId;
 }

@@ -1,7 +1,8 @@
 // Campanhas — lógica server-side (fase 1: rascunhos + público).
 // Isolamento estrito por company_id. Sem envio WhatsApp nesta fase.
 import { sql } from "@/lib/pg.server";
-import { requireOperationalAuth } from "@/lib/company.server";
+import { requireCompanyId } from "@/lib/company.server";
+import { getSessionUserId } from "@/lib/session.server";
 import {
   canViewCampaigns,
   canManageCampaigns,
@@ -66,32 +67,68 @@ const CAMPAIGN_SELECT = `
 export async function getCampaignActor(
   mode: "view" | "manage" | "delete",
 ): Promise<ActorContext | Response> {
-  // Mesma base de /api/evolution/channels: requireOperationalAuth → requireCompanyId.
-  const auth = await requireOperationalAuth();
-  if (auth instanceof Response) {
+  // Auth isolada de Campanhas: mesma resolução de empresa que /api/evolution/channels,
+  // com uid lido uma vez (requireCompanyId(uid) não relê o cookie).
+  const uid = getSessionUserId();
+  if (!uid) {
     console.log("[CAMPAIGNS_AUTH_DEBUG]", {
       ok: false,
-      stage: "requireOperationalAuth",
-      status: auth.status,
+      stage: "session",
       mode,
-      authVersion: "campaigns-auth-v3",
+      authVersion: "campaigns-auth-v4",
     });
-    return auth;
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  const companyId = await requireCompanyId(uid);
+  if (companyId instanceof Response) {
+    console.log("[CAMPAIGNS_AUTH_DEBUG]", {
+      ok: false,
+      stage: "requireCompanyId",
+      userId: uid,
+      status: companyId.status,
+      mode,
+      authVersion: "campaigns-auth-v4",
+    });
+    return companyId;
+  }
+
+  const rows = await sql<{ id: string; role: string; tenant_id: string; active: boolean | null }[]>`
+    SELECT id, role, tenant_id, active FROM public.users
+    WHERE id = ${uid}
+    LIMIT 1
+  `;
+  const u = rows[0];
+  if (!u) {
+    console.log("[CAMPAIGNS_AUTH_DEBUG]", {
+      ok: false,
+      stage: "user_row",
+      userId: uid,
+      mode,
+      authVersion: "campaigns-auth-v4",
+    });
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  if (u.active === false) {
+    return Response.json(
+      { error: "user_inactive", message: "Usuário inativo." },
+      { status: 403 },
+    );
   }
 
   console.log("[CAMPAIGNS_AUTH_DEBUG]", {
     ok: true,
-    userId: auth.userId,
-    role: auth.role,
-    companyId: auth.companyId,
+    userId: uid,
+    role: u.role,
+    companyId,
     mode,
-    authVersion: "campaigns-auth-v3",
+    authVersion: "campaigns-auth-v4",
   });
 
   const actor: ActingUser = {
-    id: auth.userId,
-    role: auth.role as ActingUser["role"],
-    tenantId: auth.tenantId,
+    id: String(u.id),
+    role: u.role as ActingUser["role"],
+    tenantId: String(u.tenant_id ?? ""),
   };
 
   if (mode === "view" && !canViewCampaigns(actor)) {
@@ -113,7 +150,7 @@ export async function getCampaignActor(
     );
   }
 
-  return { companyId: auth.companyId, userId: auth.userId, actor };
+  return { companyId, userId: uid, actor };
 }
 
 export async function validateEvolutionChannel(
