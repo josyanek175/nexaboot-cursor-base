@@ -34,7 +34,8 @@ type MessageType =
   | "internal"
   | "reaction"
   | "contact"
-  | "contacts";
+  | "contacts"
+  | "system";
 type MessageDirection = "in" | "out";
 type MessageStatus = "sent" | "delivered" | "read" | "error";
 type ChannelStatus = "connected" | "connecting" | "qrcode" | "disconnected" | "error";
@@ -71,6 +72,8 @@ interface Conversation {
   status: ConversationStatus;
   unreadCount: number;
   assignedTo?: string;
+  assignedUserName?: string;
+  isMine?: boolean;
   lastMessageAt: string;
   tags: string[];
 }
@@ -271,6 +274,9 @@ function upsertRealUser(u: any, tenantId: string): AttUser {
   return user;
 }
 function transformApiConversation(c: any, tenantId: string): Conversation {
+  const assignedTo = c.assigned_user_id ?? undefined;
+  const assignedUserName =
+    c.assigned_user_name || c.assigned_user_email || undefined;
   return {
     id: c.id,
     tenantId,
@@ -278,10 +284,21 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
     contactId: c.contact_id,
     status: mapApiStatus(c.status),
     unreadCount: typeof c.unread_count === "number" ? c.unread_count : 0,
-    assignedTo: c.assigned_user_id ?? undefined,
+    assignedTo,
+    assignedUserName: assignedTo ? assignedUserName : undefined,
+    isMine: c.is_mine === true,
     lastMessageAt: c.last_message_at ?? new Date().toISOString(),
     tags: [],
   };
+}
+
+function responsibleLabel(conv: Conversation, currentUserId?: string): string {
+  if (!conv.assignedTo) return "Sem responsável";
+  if (conv.isMine || (currentUserId && conv.assignedTo === currentUserId)) {
+    return "Responsável: Você";
+  }
+  const name = conv.assignedUserName || getUser(conv.assignedTo)?.name;
+  return name ? `Responsável: ${name}` : "Responsável: Atendente";
 }
 function transformApiMessage(m: any, conversationId: string): Message {
   const mediaType = m.media_type ?? m.mediaType ?? undefined;
@@ -319,9 +336,13 @@ function transformApiMessage(m: any, conversationId: string): Message {
     rawType === "internal" ||
     rawType === "reaction" ||
     rawType === "contact" ||
-    rawType === "contacts"
+    rawType === "contacts" ||
+    rawType === "system"
       ? (rawType as MessageType)
       : "text";
+  if (String(m.direction || "").toLowerCase() === "system") {
+    type = "system";
+  }
   let sharedContacts: SharedContact[] | undefined;
 
   if (type === "contact" || type === "contacts") {
@@ -447,6 +468,9 @@ function AtendimentoPage() {
 
   // Snapshot anterior para detectar mensagens novas no polling.
   const prevConvsRef = useRef<Map<string, string>>(new Map());
+  // Notificações de transferência: evita toast repetido no polling.
+  const seenAttendanceNotifs = useRef<Set<string>>(new Set());
+  const attendanceNotifsBootstrapped = useRef(false);
   const selectedIdRef = useRef<string>("");
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   // Scroll automático para o fim do chat ao chegar/enviar mensagem.
@@ -616,10 +640,22 @@ function AtendimentoPage() {
   const assumeSelf = async () => {
     if (!selected) return;
     try {
-      await apiPost(`/conversations/${encodeURIComponent(selected.id)}/assume`, {
-        user_id: actor.id,
+      const res = await apiPost(`/conversations/${encodeURIComponent(selected.id)}/assume`, {});
+      patchConv(selected.id, {
+        assignedTo: res.assigned_user_id ?? actor.id,
+        assignedUserName: res.assigned_user_name ?? user.name,
+        isMine: true,
+        status: "open",
       });
-      patchConv(selected.id, { assignedTo: actor.id, status: "open" });
+      upsertRealUser(
+        {
+          id: res.assigned_user_id ?? actor.id,
+          name: res.assigned_user_name ?? user.name,
+          email: res.assigned_user_email,
+          role: session.role,
+        },
+        session.tenantId,
+      );
       pushAudit({
         tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
         targetType: "conversation", targetId: selected.id,
@@ -627,10 +663,67 @@ function AtendimentoPage() {
       });
       log(selected.id, `${user.name} assumiu o atendimento`);
       toast.success("Atendimento assumido");
+      await reloadConversations({ silent: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao assumir atendimento");
     }
   };
+
+  // Polling de notificações de transferência (a cada 12s).
+  useEffect(() => {
+    let cancelled = false;
+    async function pollAttendanceNotifications() {
+      try {
+        const data = await apiGet("/attendance/notifications?unread=1");
+        if (cancelled) return;
+        const list: any[] = Array.isArray(data?.notifications) ? data.notifications : [];
+        if (!attendanceNotifsBootstrapped.current) {
+          for (const n of list) {
+            if (n?.id) seenAttendanceNotifs.current.add(String(n.id));
+          }
+          attendanceNotifsBootstrapped.current = true;
+          return;
+        }
+        for (const n of list) {
+          const id = String(n?.id ?? "");
+          if (!id || seenAttendanceNotifs.current.has(id)) continue;
+          seenAttendanceNotifs.current.add(id);
+          const convId = n.conversation_id as string | undefined;
+          toast.info(n.title || "Você recebeu um atendimento", {
+            description: n.body || undefined,
+            action: convId
+              ? {
+                  label: "Abrir",
+                  onClick: () => {
+                    setSelectedId(convId);
+                    setMobileView("chat");
+                    apiPost("/attendance/notifications", { conversationId: convId }).catch(() => {});
+                    reloadConversations({ silent: true });
+                  },
+                }
+              : undefined,
+          });
+          // Atualiza lista para refletir a conversa transferida.
+          reloadConversations({ silent: true });
+        }
+      } catch {
+        // silencioso — não interrompe o atendimento
+      }
+    }
+    pollAttendanceNotifications();
+    const id = setInterval(pollAttendanceNotifications, 12_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.userId]);
+
+  // Ao abrir uma conversa, marca notificações dela como lidas.
+  useEffect(() => {
+    if (!selectedId) return;
+    apiPost("/attendance/notifications", { conversationId: selectedId }).catch(() => {});
+  }, [selectedId]);
 
   // Preparação para Realtime (stub) — apenas demonstra ciclo de vida.
   useEffect(() => {
@@ -874,8 +967,20 @@ function AtendimentoPage() {
     appendMsg(selected.id, optimistic);
 
     if (!selected.assignedTo) {
-      patchConv(selected.id, { assignedTo: actor.id, status: "open" });
-      log(selected.id, `${user.name} assumiu a conversa ao responder`);
+      // Assumir de verdade no backend (não só no estado local).
+      apiPost(`/conversations/${encodeURIComponent(selected.id)}/assume`, {})
+        .then((res) => {
+          patchConv(selected.id, {
+            assignedTo: res.assigned_user_id ?? actor.id,
+            assignedUserName: res.assigned_user_name ?? user.name,
+            isMine: true,
+            status: "open",
+          });
+          log(selected.id, `${user.name} assumiu a conversa ao responder`);
+        })
+        .catch(() => {
+          /* envio segue mesmo se assume falhar */
+        });
     }
     setDraft("");
 
@@ -986,45 +1091,48 @@ function AtendimentoPage() {
     });
     log(selected.id, `Adicionou nota interna: "${text}"`);
   }
-  function assignTo(userId: string) {
-    if (!selected) return;
-    const u = getUser(userId);
-    // Validação de tenant — não permitir atribuir a um usuário de outra empresa.
-    if (u && u.tenantId !== selected.tenantId) {
-      pushAudit({
-        tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
-        targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
-        action: "conversation.assign", result: "denied", reason: "cross-tenant assignment",
-      });
-      return;
-    }
-    patchConv(selected.id, { assignedTo: userId, status: selected.status === "waiting" ? "open" : selected.status });
-    pushAudit({
-      tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
-      targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
-      action: "conversation.assign", result: "success", reason: u?.name,
-    });
-    log(selected.id, `Conversa atribuída a ${u?.name ?? "—"}`);
+  async function assignTo(userId: string) {
+    await transferTo(userId, "assign");
   }
-  function transferTo(userId: string) {
+
+  async function transferTo(userId: string, mode: "transfer" | "assign" = "transfer") {
     if (!selected) return;
     const u = getUser(userId);
-    if (u && u.tenantId !== selected.tenantId) {
+    if (u && u.tenantId && u.tenantId !== selected.tenantId) {
       pushAudit({
         tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
         targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
         action: "conversation.transfer", result: "denied", reason: "cross-tenant transfer",
       });
+      toast.error("Não é possível transferir para usuário de outra empresa.");
       return;
     }
-    const from = getUser(selected.assignedTo)?.name ?? "não atribuída";
-    patchConv(selected.id, { assignedTo: userId });
-    pushAudit({
-      tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
-      targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
-      action: "conversation.transfer", result: "success", reason: `${from} → ${u?.name ?? "—"}`,
-    });
-    log(selected.id, `Transferida de ${from} para ${u?.name ?? "—"}`);
+    const from = selected.assignedUserName || getUser(selected.assignedTo)?.name || "não atribuída";
+    try {
+      const res = await apiPost(`/conversations/${encodeURIComponent(selected.id)}/transfer`, {
+        userId,
+      });
+      const isMine = (res.assigned_user_id ?? userId) === actor.id;
+      patchConv(selected.id, {
+        assignedTo: res.assigned_user_id ?? userId,
+        assignedUserName: res.assigned_user_name ?? u?.name,
+        isMine,
+        status: selected.status === "waiting" ? "open" : selected.status,
+      });
+      pushAudit({
+        tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
+        targetType: "conversation", targetId: selected.id, targetName: getContact(selected.contactId).name,
+        action: mode === "assign" ? "conversation.assign" : "conversation.transfer",
+        result: "success",
+        reason: `${from} → ${res.assigned_user_name ?? u?.name ?? "—"}`,
+      });
+      log(selected.id, `Atendimento transferido para ${res.assigned_user_name ?? u?.name ?? "—"}`);
+      toast.success(mode === "assign" ? "Atendimento atribuído" : "Atendimento transferido");
+      await reloadConversations({ silent: true });
+      await reloadMessages(selected.id, { silent: true });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao transferir atendimento");
+    }
   }
   function finish() {
     if (!selected) return;
@@ -1276,6 +1384,7 @@ function ConversationRow({
     last?.type === "document" ? `📄 ${last.fileName ?? "Documento"}` :
     last?.type === "contact" ? "👤 Contato compartilhado" :
     last?.type === "contacts" ? "👥 Contatos compartilhados" :
+    last?.type === "system" ? (last.text || "Evento do sistema") :
     "";
 
   return (
@@ -1314,6 +1423,21 @@ function ConversationRow({
             {groupContactIds.has(conv.contactId) && (
               <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">Grupo</span>
             )}
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                conv.isMine
+                  ? "bg-whatsapp/15 text-whatsapp"
+                  : conv.assignedTo
+                    ? "bg-amber-500/15 text-amber-700"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {conv.isMine
+                ? "Você"
+                : conv.assignedTo
+                  ? (conv.assignedUserName || getUser(conv.assignedTo)?.name || "Atendente")
+                  : "Sem responsável"}
+            </span>
             <StatusChip status={conv.status} />
           </div>
         </div>
@@ -1387,7 +1511,6 @@ function ChatHeader({
 }: { conversation: Conversation; showDetails: boolean; onToggleDetails: () => void; onBack?: () => void }) {
   const ct = getContact(conversation.contactId);
   const ch = getChannel(conversation.channelId);
-  const assignee = getUser(conversation.assignedTo);
   const isGroup = groupContactIds.has(conversation.contactId);
   return (
     <header className="flex items-center justify-between border-b border-border bg-card px-4 py-2.5">
@@ -1416,7 +1539,7 @@ function ChatHeader({
             )}
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            {!isGroup && ct.phone ? `${ct.phone} · ` : ""}{ch.name} · {assignee ? `Atendente: ${assignee.name}` : "Não atribuída"}
+            {!isGroup && ct.phone ? `${ct.phone} · ` : ""}{ch.name} · {responsibleLabel(conversation)}
           </div>
           {(() => {
             const dbg = conversationDebug.get(conversation.id);
@@ -1477,6 +1600,13 @@ function BubbleInner({ m }: { m: Message }) {
     return (
       <div className="mx-auto max-w-xl rounded-md border border-internal/30 bg-internal/10 px-3 py-2 text-center text-xs text-internal">
         <StickyNote className="mr-1 inline h-3.5 w-3.5" /> Nota interna · {m.authorName}: {m.text}
+      </div>
+    );
+  }
+  if (m.type === "system") {
+    return (
+      <div className="mx-auto max-w-xl rounded-md border border-border bg-muted/40 px-3 py-2 text-center text-xs text-muted-foreground">
+        {m.text || "Evento do sistema"}
       </div>
     );
   }
@@ -2046,7 +2176,14 @@ function DetailsPanel({
 
         <Section title="Atendimento">
           <Row label="Status" value={conversation.status} />
-          <Row label="Atribuída a" value={assignee?.name ?? "—"} />
+          <Row
+            label="Responsável"
+            value={
+              conversation.isMine
+                ? "Você"
+                : conversation.assignedUserName || assignee?.name || "Sem responsável"
+            }
+          />
         </Section>
 
         <Section title="Tags da conversa">

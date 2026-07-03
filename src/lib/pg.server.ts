@@ -511,6 +511,9 @@ export async function ensureCrmSchema() {
       // Campanhas (rascunhos + público; fila de envio criada mas não usada ainda).
       await ensureCampaignsSchema(s);
 
+      // Atribuição de atendimento + notificações de transferência.
+      await ensureAttendanceSchema(s);
+
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {
       const err = e as { message?: string; code?: string; detail?: string };
@@ -626,6 +629,75 @@ export async function ensurePlansSchema(s?: ReturnType<typeof sql>): Promise<voi
         updated_at = now()
     `;
   }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Atribuição de atendimento (responsável por conversa) + notificações.
+// Idempotente, não destrutivo. Um assignment ativo por conversa.
+// ───────────────────────────────────────────────────────────────────────────
+let _attendanceReady: Promise<void> | null = null;
+
+export async function ensureAttendanceSchema(s?: ReturnType<typeof sql>): Promise<void> {
+  if (s) {
+    await applyAttendanceSchema(s);
+    return;
+  }
+  if (_attendanceReady) return _attendanceReady;
+  _attendanceReady = (async () => {
+    try {
+      await applyAttendanceSchema(sql());
+      console.log("[ATTENDANCE_SCHEMA_OK]");
+    } catch (e) {
+      _attendanceReady = null;
+      throw e;
+    }
+  })();
+  return _attendanceReady;
+}
+
+async function applyAttendanceSchema(db: ReturnType<typeof sql>): Promise<void> {
+  await db.unsafe(`
+    CREATE TABLE IF NOT EXISTS public.conversation_assignments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      assigned_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      unassigned_at TIMESTAMPTZ,
+      active BOOLEAN NOT NULL DEFAULT true
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS conversation_assignments_one_active
+      ON public.conversation_assignments (conversation_id)
+      WHERE active = true AND unassigned_at IS NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_conversation_assignments_company
+      ON public.conversation_assignments (company_id);
+
+    CREATE INDEX IF NOT EXISTS idx_conversation_assignments_user_active
+      ON public.conversation_assignments (user_id)
+      WHERE active = true AND unassigned_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS public.attendance_notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+      type TEXT NOT NULL DEFAULT 'transfer',
+      title TEXT NOT NULL,
+      body TEXT,
+      from_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      read_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_attendance_notifications_user
+      ON public.attendance_notifications (user_id, read_at, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_attendance_notifications_conversation
+      ON public.attendance_notifications (conversation_id);
+  `);
 }
 
 // ───────────────────────────────────────────────────────────────────────────

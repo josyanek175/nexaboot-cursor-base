@@ -60,6 +60,7 @@ import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
+import { Route as ApiAttendanceNotificationsRouteImport } from './routes/api/attendance/notifications'
 import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
 import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
@@ -69,6 +70,7 @@ import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/pub
 import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
 import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
 import { Route as ApiEvolutionChannelsIdRouteImport } from './routes/api/evolution/channels/$id'
+import { Route as ApiConversationsIdTransferRouteImport } from './routes/api/conversations/$id/transfer'
 import { Route as ApiConversationsIdReadRouteImport } from './routes/api/conversations/$id/read'
 import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
 import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
@@ -339,6 +341,12 @@ const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
   path: '/api/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAttendanceNotificationsRoute =
+  ApiAttendanceNotificationsRouteImport.update({
+    id: '/api/attendance/notifications',
+    path: '/api/attendance/notifications',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAdminSeedDemoRoute = ApiAdminSeedDemoRouteImport.update({
   id: '/api/admin/seed-demo',
   path: '/api/admin/seed-demo',
@@ -387,6 +395,12 @@ const ApiEvolutionChannelsIdRoute = ApiEvolutionChannelsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiEvolutionChannelsRoute,
 } as any)
+const ApiConversationsIdTransferRoute =
+  ApiConversationsIdTransferRouteImport.update({
+    id: '/$id/transfer',
+    path: '/$id/transfer',
+    getParentRoute: () => ApiConversationsRoute,
+  } as any)
 const ApiConversationsIdReadRoute = ApiConversationsIdReadRouteImport.update({
   id: '/$id/read',
   path: '/$id/read',
@@ -488,6 +502,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
+  '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
@@ -519,6 +534,7 @@ export interface FileRoutesByFullPath {
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
   '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/conversations/$id/transfer': typeof ApiConversationsIdTransferRoute
   '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
@@ -560,6 +576,7 @@ export interface FileRoutesByTo {
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
+  '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
@@ -591,6 +608,7 @@ export interface FileRoutesByTo {
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
   '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/conversations/$id/transfer': typeof ApiConversationsIdTransferRoute
   '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
@@ -635,6 +653,7 @@ export interface FileRoutesById {
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
+  '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
@@ -666,6 +685,7 @@ export interface FileRoutesById {
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
   '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/conversations/$id/transfer': typeof ApiConversationsIdTransferRoute
   '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
@@ -710,6 +730,7 @@ export interface FileRouteTypes {
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
+    | '/api/attendance/notifications'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
@@ -741,6 +762,7 @@ export interface FileRouteTypes {
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
     | '/api/conversations/$id/read'
+    | '/api/conversations/$id/transfer'
     | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
@@ -782,6 +804,7 @@ export interface FileRouteTypes {
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
+    | '/api/attendance/notifications'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
@@ -813,6 +836,7 @@ export interface FileRouteTypes {
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
     | '/api/conversations/$id/read'
+    | '/api/conversations/$id/transfer'
     | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
@@ -856,6 +880,7 @@ export interface FileRouteTypes {
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
+    | '/api/attendance/notifications'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
@@ -887,6 +912,7 @@ export interface FileRouteTypes {
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
     | '/api/conversations/$id/read'
+    | '/api/conversations/$id/transfer'
     | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
@@ -917,6 +943,7 @@ export interface RootRouteChildren {
   ApiAdminAuthCheckRoute: typeof ApiAdminAuthCheckRoute
   ApiAdminResetPasswordRoute: typeof ApiAdminResetPasswordRoute
   ApiAdminSeedDemoRoute: typeof ApiAdminSeedDemoRoute
+  ApiAttendanceNotificationsRoute: typeof ApiAttendanceNotificationsRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthOperationalCompanyRoute: typeof ApiAuthOperationalCompanyRoute
@@ -1299,6 +1326,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/attendance/notifications': {
+      id: '/api/attendance/notifications'
+      path: '/api/attendance/notifications'
+      fullPath: '/api/attendance/notifications'
+      preLoaderRoute: typeof ApiAttendanceNotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/seed-demo': {
       id: '/api/admin/seed-demo'
       path: '/api/admin/seed-demo'
@@ -1361,6 +1395,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/evolution/channels/$id'
       preLoaderRoute: typeof ApiEvolutionChannelsIdRouteImport
       parentRoute: typeof ApiEvolutionChannelsRoute
+    }
+    '/api/conversations/$id/transfer': {
+      id: '/api/conversations/$id/transfer'
+      path: '/$id/transfer'
+      fullPath: '/api/conversations/$id/transfer'
+      preLoaderRoute: typeof ApiConversationsIdTransferRouteImport
+      parentRoute: typeof ApiConversationsRoute
     }
     '/api/conversations/$id/read': {
       id: '/api/conversations/$id/read'
@@ -1577,6 +1618,7 @@ interface ApiConversationsRouteChildren {
   ApiConversationsIdAssumeRoute: typeof ApiConversationsIdAssumeRoute
   ApiConversationsIdMessagesRoute: typeof ApiConversationsIdMessagesRoute
   ApiConversationsIdReadRoute: typeof ApiConversationsIdReadRoute
+  ApiConversationsIdTransferRoute: typeof ApiConversationsIdTransferRoute
 }
 
 const ApiConversationsRouteChildren: ApiConversationsRouteChildren = {
@@ -1584,6 +1626,7 @@ const ApiConversationsRouteChildren: ApiConversationsRouteChildren = {
   ApiConversationsIdAssumeRoute: ApiConversationsIdAssumeRoute,
   ApiConversationsIdMessagesRoute: ApiConversationsIdMessagesRoute,
   ApiConversationsIdReadRoute: ApiConversationsIdReadRoute,
+  ApiConversationsIdTransferRoute: ApiConversationsIdTransferRoute,
 }
 
 const ApiConversationsRouteWithChildren =
@@ -1681,6 +1724,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminAuthCheckRoute: ApiAdminAuthCheckRoute,
   ApiAdminResetPasswordRoute: ApiAdminResetPasswordRoute,
   ApiAdminSeedDemoRoute: ApiAdminSeedDemoRoute,
+  ApiAttendanceNotificationsRoute: ApiAttendanceNotificationsRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthOperationalCompanyRoute: ApiAuthOperationalCompanyRoute,
