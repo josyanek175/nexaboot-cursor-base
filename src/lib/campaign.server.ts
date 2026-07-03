@@ -56,13 +56,53 @@ type ActorContext = {
   actor: ActingUser;
 };
 
-const CAMPAIGN_SELECT = `
-  c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
-  c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
-  c.send_interval_ms, c.total_contacts, c.sent_count, c.failed_count,
-  c.skipped_count, c.created_by_user_id, c.created_at, c.updated_at,
-  ch.name AS channel_name
-`;
+export async function listCampaigns(companyId: string, status?: string): Promise<CampaignRow[]> {
+  try {
+    const rows = status
+      ? await sql<CampaignRow[]>`
+          SELECT
+            c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
+            c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
+            c.send_interval_ms, c.total_contacts, c.sent_count, c.failed_count,
+            c.skipped_count, c.created_by_user_id, c.created_at, c.updated_at,
+            ch.name AS channel_name
+          FROM public.campaigns c
+          LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
+            AND ch.company_id = c.company_id
+            AND lower(ch.channel_type) = 'evolution'
+          WHERE c.company_id = ${companyId}::uuid
+            AND c.deleted_at IS NULL
+            AND c.status = ${status}
+          ORDER BY c.created_at DESC
+        `
+      : await sql<CampaignRow[]>`
+          SELECT
+            c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
+            c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
+            c.send_interval_ms, c.total_contacts, c.sent_count, c.failed_count,
+            c.skipped_count, c.created_by_user_id, c.created_at, c.updated_at,
+            ch.name AS channel_name
+          FROM public.campaigns c
+          LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
+            AND ch.company_id = c.company_id
+            AND lower(ch.channel_type) = 'evolution'
+          WHERE c.company_id = ${companyId}::uuid
+            AND c.deleted_at IS NULL
+          ORDER BY c.created_at DESC
+        `;
+    console.log("[CAMPAIGNS_LIST_OK]", { companyId, status: status ?? null, count: rows.length });
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) {
+    const err = e as Error;
+    console.error("[CAMPAIGNS_LIST_FAIL]", {
+      companyId,
+      status: status ?? null,
+      message: err.message,
+      stack: err.stack,
+    });
+    throw e;
+  }
+}
 
 const CAMPAIGNS_AUTH_VERSION = "campaigns-auth-v5";
 
@@ -319,38 +359,17 @@ export async function syncCampaignContactCounters(
   `;
 }
 
-export async function listCampaigns(companyId: string, status?: string): Promise<CampaignRow[]> {
-  const rows = status
-    ? await sql<CampaignRow[]>`
-        SELECT ${sql.unsafe(CAMPAIGN_SELECT)}
-        FROM public.campaigns c
-        LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
-          AND ch.company_id = c.company_id
-          AND lower(ch.channel_type) = 'evolution'
-        WHERE c.company_id = ${companyId}::uuid
-          AND c.deleted_at IS NULL
-          AND c.status = ${status}
-        ORDER BY c.created_at DESC
-      `
-    : await sql<CampaignRow[]>`
-        SELECT ${sql.unsafe(CAMPAIGN_SELECT)}
-        FROM public.campaigns c
-        LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
-          AND ch.company_id = c.company_id
-          AND lower(ch.channel_type) = 'evolution'
-        WHERE c.company_id = ${companyId}::uuid
-          AND c.deleted_at IS NULL
-        ORDER BY c.created_at DESC
-      `;
-  return rows;
-}
-
 export async function getCampaignById(
   companyId: string,
   campaignId: string,
 ): Promise<CampaignRow | null> {
   const rows = await sql<CampaignRow[]>`
-    SELECT ${sql.unsafe(CAMPAIGN_SELECT)}
+    SELECT
+      c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
+      c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
+      c.send_interval_ms, c.total_contacts, c.sent_count, c.failed_count,
+      c.skipped_count, c.created_by_user_id, c.created_at, c.updated_at,
+      ch.name AS channel_name
     FROM public.campaigns c
     LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
       AND ch.company_id = c.company_id
