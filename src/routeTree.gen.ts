@@ -34,6 +34,7 @@ import { Route as AppCanaisRouteImport } from './routes/_app.canais'
 import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
 import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app.atendimento'
+import { Route as AppCampanhasIndexRouteImport } from './routes/_app.campanhas.index'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
@@ -204,6 +205,11 @@ const AppAtendimentoRoute = AppAtendimentoRouteImport.update({
   id: '/atendimento',
   path: '/atendimento',
   getParentRoute: () => AppRoute,
+} as any)
+const AppCampanhasIndexRoute = AppCampanhasIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppCampanhasRoute,
 } as any)
 const ApiWebhooksEvolutionRoute = ApiWebhooksEvolutionRouteImport.update({
   id: '/api/webhooks/evolution',
@@ -507,6 +513,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -530,7 +537,6 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
-  '/campanhas': typeof AppCampanhasRouteWithChildren
   '/canais': typeof AppCanaisRoute
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
@@ -579,6 +585,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/campanhas': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -653,6 +660,7 @@ export interface FileRoutesById {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/_app/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -727,6 +735,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/campanhas/'
     | '/api/campaigns/$id/contacts'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -750,7 +759,6 @@ export interface FileRouteTypes {
     | '/register'
     | '/atendimento'
     | '/automacoes'
-    | '/campanhas'
     | '/canais'
     | '/comunicacao-interna'
     | '/configuracoes'
@@ -799,6 +807,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/campanhas'
     | '/api/campaigns/$id/contacts'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -872,6 +881,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/_app/campanhas/'
     | '/api/campaigns/$id/contacts'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -1106,6 +1116,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/atendimento'
       preLoaderRoute: typeof AppAtendimentoRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/campanhas/': {
+      id: '/_app/campanhas/'
+      path: '/'
+      fullPath: '/campanhas/'
+      preLoaderRoute: typeof AppCampanhasIndexRouteImport
+      parentRoute: typeof AppCampanhasRoute
     }
     '/api/webhooks/evolution': {
       id: '/api/webhooks/evolution'
@@ -1435,11 +1452,13 @@ declare module '@tanstack/react-router' {
 interface AppCampanhasRouteChildren {
   AppCampanhasIdRoute: typeof AppCampanhasIdRoute
   AppCampanhasNovaRoute: typeof AppCampanhasNovaRoute
+  AppCampanhasIndexRoute: typeof AppCampanhasIndexRoute
 }
 
 const AppCampanhasRouteChildren: AppCampanhasRouteChildren = {
   AppCampanhasIdRoute: AppCampanhasIdRoute,
   AppCampanhasNovaRoute: AppCampanhasNovaRoute,
+  AppCampanhasIndexRoute: AppCampanhasIndexRoute,
 }
 
 const AppCampanhasRouteWithChildren = AppCampanhasRoute._addFileChildren(
