@@ -1,7 +1,7 @@
 // Campanhas — lógica server-side (fase 1: rascunhos + público).
 // Isolamento estrito por company_id. Sem envio WhatsApp nesta fase.
 import { sql } from "@/lib/pg.server";
-import { requireCompanyId } from "@/lib/company.server";
+import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 import {
   canViewCampaigns,
@@ -64,93 +64,184 @@ const CAMPAIGN_SELECT = `
   ch.name AS channel_name
 `;
 
-export async function getCampaignActor(
+const CAMPAIGNS_AUTH_VERSION = "campaigns-auth-v5";
+
+function campaignsAuthLog(
+  stage: string,
+  fields: {
+    hasUid?: boolean;
+    role?: string | null;
+    companyId?: string | null;
+    status?: number;
+    mode?: string;
+    ok?: boolean;
+  },
+) {
+  console.log("[CAMPAIGNS_AUTH_DEBUG]", {
+    authVersion: CAMPAIGNS_AUTH_VERSION,
+    stage,
+    ...fields,
+  });
+}
+
+type CampaignActorResult = {
+  userId: string;
+  companyId: string;
+  role: string;
+  actor: ActingUser;
+};
+
+/**
+ * Auth isolada de Campanhas — não altera requireCompanyId global.
+ * Espelha /api/evolution/channels (requireCompanyId) + checagem de perfil.
+ */
+async function requireCampaignActor(
   mode: "view" | "manage" | "delete",
-): Promise<ActorContext | Response> {
-  // Auth isolada de Campanhas: mesma resolução de empresa que /api/evolution/channels,
-  // com uid lido uma vez (requireCompanyId(uid) não relê o cookie).
-  const uid = getSessionUserId();
-  if (!uid) {
-    console.log("[CAMPAIGNS_AUTH_DEBUG]", {
-      ok: false,
-      stage: "session",
-      mode,
-      authVersion: "campaigns-auth-v4",
-    });
-    return Response.json({ error: "unauthenticated" }, { status: 401 });
+): Promise<CampaignActorResult | Response> {
+  let uid = getSessionUserId();
+  let companyId: string | Response;
+
+  if (uid) {
+    companyId = await requireCompanyId(uid);
+  } else {
+    // Fallback: mesmo caminho de GET /api/evolution/channels (cookie lido dentro de requireCompanyId).
+    companyId = await requireCompanyId();
+    if (!(companyId instanceof Response)) {
+      const info = await getCurrentUserCompanyInfo();
+      uid = info.userId;
+    }
   }
 
-  const companyId = await requireCompanyId(uid);
   if (companyId instanceof Response) {
-    console.log("[CAMPAIGNS_AUTH_DEBUG]", {
-      ok: false,
-      stage: "requireCompanyId",
-      userId: uid,
+    campaignsAuthLog("requireCompanyId", {
+      hasUid: !!uid,
+      role: null,
+      companyId: null,
       status: companyId.status,
       mode,
-      authVersion: "campaigns-auth-v4",
+      ok: false,
     });
     return companyId;
   }
 
-  const rows = await sql<{ id: string; role: string; tenant_id: string; active: boolean | null }[]>`
-    SELECT id, role, tenant_id, active FROM public.users
-    WHERE id = ${uid}
-    LIMIT 1
-  `;
-  const u = rows[0];
-  if (!u) {
-    console.log("[CAMPAIGNS_AUTH_DEBUG]", {
-      ok: false,
-      stage: "user_row",
-      userId: uid,
+  if (!uid) {
+    campaignsAuthLog("session", {
+      hasUid: false,
+      role: null,
+      companyId,
+      status: 401,
       mode,
-      authVersion: "campaigns-auth-v4",
+      ok: false,
     });
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
-  if (u.active === false) {
+
+  const info = await getCurrentUserCompanyInfo(uid);
+  const role = info.role ?? null;
+
+  if (!role) {
+    campaignsAuthLog("user_role", {
+      hasUid: true,
+      role: null,
+      companyId,
+      status: 401,
+      mode,
+      ok: false,
+    });
+    return Response.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  const rows = await sql<{ tenant_id: string; active: boolean | null }[]>`
+    SELECT tenant_id, active FROM public.users
+    WHERE id = ${uid}::uuid
+    LIMIT 1
+  `;
+  if (rows[0]?.active === false) {
+    campaignsAuthLog("user_inactive", {
+      hasUid: true,
+      role,
+      companyId,
+      status: 403,
+      mode,
+      ok: false,
+    });
     return Response.json(
       { error: "user_inactive", message: "Usuário inativo." },
       { status: 403 },
     );
   }
 
-  console.log("[CAMPAIGNS_AUTH_DEBUG]", {
-    ok: true,
-    userId: uid,
-    role: u.role,
-    companyId,
-    mode,
-    authVersion: "campaigns-auth-v4",
-  });
-
   const actor: ActingUser = {
-    id: String(u.id),
-    role: u.role as ActingUser["role"],
-    tenantId: String(u.tenant_id ?? ""),
+    id: uid,
+    role: role as ActingUser["role"],
+    tenantId: String(rows[0]?.tenant_id ?? ""),
   };
 
   if (mode === "view" && !canViewCampaigns(actor)) {
+    campaignsAuthLog("forbidden", {
+      hasUid: true,
+      role,
+      companyId,
+      status: 403,
+      mode,
+      ok: false,
+    });
     return Response.json(
       { error: "forbidden", message: "Seu perfil não tem permissão para acessar Campanhas." },
       { status: 403 },
     );
   }
   if (mode === "manage" && !canManageCampaigns(actor)) {
+    campaignsAuthLog("forbidden", {
+      hasUid: true,
+      role,
+      companyId,
+      status: 403,
+      mode,
+      ok: false,
+    });
     return Response.json(
       { error: "forbidden", message: "Seu perfil não tem permissão para gerenciar Campanhas." },
       { status: 403 },
     );
   }
   if (mode === "delete" && !canDeleteCampaign(actor)) {
+    campaignsAuthLog("forbidden", {
+      hasUid: true,
+      role,
+      companyId,
+      status: 403,
+      mode,
+      ok: false,
+    });
     return Response.json(
       { error: "forbidden", message: "Seu perfil não tem permissão para excluir campanhas." },
       { status: 403 },
     );
   }
 
-  return { companyId, userId: uid, actor };
+  campaignsAuthLog("ok", {
+    hasUid: true,
+    role,
+    companyId,
+    status: 200,
+    mode,
+    ok: true,
+  });
+
+  return { userId: uid, companyId, role, actor };
+}
+
+export async function getCampaignActor(
+  mode: "view" | "manage" | "delete",
+): Promise<ActorContext | Response> {
+  const result = await requireCampaignActor(mode);
+  if (result instanceof Response) return result;
+  return {
+    companyId: result.companyId,
+    userId: result.userId,
+    actor: result.actor,
+  };
 }
 
 export async function validateEvolutionChannel(
