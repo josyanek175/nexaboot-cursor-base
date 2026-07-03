@@ -652,29 +652,53 @@ function AtendimentoPage() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [search, session.tenantId]);
 
-  // Contatos que casaram com a busca mas ainda NÃO possuem conversa carregada.
+  // Contatos da busca sem conversa no canal alvo.
+  // Contato é único por empresa+telefone; conversa é por (contact_id, channel_id).
+  // Não esconder o telefone só porque já existe conversa em outro canal.
   const contactsWithoutConversation = useMemo(() => {
     if (!search.trim()) return [];
-    const withConv = new Set(convs.map((c) => c.contactId));
-    return contactResults.filter((ct) => !withConv.has(ct.id));
-  }, [contactResults, convs, search]);
 
-  /** Resolve o canal real para iniciar uma conversa nova. */
-  function resolveStartChannelId(): string | null {
+    return contactResults.filter((ct) => {
+      const channelsWithConv = new Set(
+        convs.filter((c) => c.contactId === ct.id).map((c) => c.channelId),
+      );
+
+      // Canal específico: só esconde se já há conversa NAQUELE canal.
+      if (channelFilter !== "all") {
+        return !channelsWithConv.has(channelFilter);
+      }
+
+      // Filtro "todos": mostra se falta conversa em pelo menos um canal.
+      if (tenantChannels.length === 0) return channelsWithConv.size === 0;
+      return tenantChannels.some((ch) => !channelsWithConv.has(ch.id));
+    });
+  }, [contactResults, convs, search, channelFilter, tenantChannels]);
+
+  /** Resolve o canal real para iniciar uma conversa nova (por contato + canal). */
+  function resolveStartChannelId(ct?: Contact): string | null {
     if (channelFilter !== "all") return channelFilter;
     if (tenantChannels.length === 1) return tenantChannels[0].id;
+
+    // Com filtro "todos", preferir um canal em que o contato ainda não tem conversa.
+    if (ct) {
+      const channelsWithConv = new Set(
+        convs.filter((c) => c.contactId === ct.id).map((c) => c.channelId),
+      );
+      const missing = tenantChannels.filter((ch) => !channelsWithConv.has(ch.id));
+      if (missing.length === 1) return missing[0].id;
+    }
     return null;
   }
 
-  /** Abre/cria uma conversa real para um contato sem conversa, num canal real. */
+  /** Abre/cria conversa real para o contato no canal selecionado (ou no único sem conversa). */
   async function startConversationWithContact(ct: Contact) {
     if (tenantChannels.length === 0) {
       toast.error("Nenhum canal real disponível. Conecte um canal em Canais.");
       return;
     }
-    const channelId = resolveStartChannelId();
+    const channelId = resolveStartChannelId(ct);
     if (!channelId) {
-      toast.info("Selecione um canal no filtro para iniciar a conversa.");
+      toast.info("Selecione um canal no filtro para iniciar a conversa neste canal.");
       return;
     }
     setStartingContactId(ct.id);
@@ -1068,11 +1092,13 @@ function AtendimentoPage() {
             />
           ))}
 
-          {/* Contatos reais sem conversa — permite iniciar um novo atendimento. */}
+          {/* Contatos sem conversa no canal alvo — mesmo telefone pode ter conversa em outro canal. */}
           {!loadingConvs && !convsError && search.trim().length >= 2 && contactsWithoutConversation.length > 0 && (
             <>
               <li className="bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Contatos sem conversa
+                {channelFilter !== "all"
+                  ? "Iniciar neste canal"
+                  : "Iniciar atendimento"}
               </li>
               {contactsWithoutConversation.map((ct) => (
                 <ContactResultRow
