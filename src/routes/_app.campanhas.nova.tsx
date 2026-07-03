@@ -17,8 +17,22 @@ export const Route = createFileRoute("/_app/campanhas/nova")({
   component: NovaCampanhaPage,
 });
 
+function campaignApiError(status: number, body: { error?: string; message?: string }): string {
+  if (status === 401) return "Sua sessão expirou. Faça login novamente.";
+  if (status === 403) {
+    if (body.error === "no_company") {
+      return body.message ?? "Selecione uma empresa ativa antes de criar campanha.";
+    }
+    if (body.error === "forbidden") return "Sem permissão para criar campanhas.";
+    return body.message ?? "Sem permissão para criar campanhas.";
+  }
+  if (body.error === "invalid_channel") return "Canal WhatsApp inválido para esta empresa.";
+  if (body.error === "invalid_input") return "Dados da campanha inválidos.";
+  return body.message ?? "Não foi possível salvar a campanha. Tente novamente.";
+}
+
 function NovaCampanhaPage() {
-  const { user, companyValid } = useAuth();
+  const { user, companyValid, hydrated } = useAuth();
   const navigate = useNavigate();
   const actor = user
     ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
@@ -32,10 +46,32 @@ function NovaCampanhaPage() {
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [saving, setSaving] = useState(false);
 
+  const [channelsError, setChannelsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!canManage) return;
+    setChannelsError(null);
     fetch("/api/evolution/channels", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : { channels: [] }))
+      .then(async (r) => {
+        if (r.status === 401) {
+          setChannelsError("Sua sessão expirou. Faça login novamente.");
+          return { channels: [] as ChannelOption[] };
+        }
+        if (r.status === 403) {
+          const j = (await r.json().catch(() => ({}))) as { error?: string; message?: string };
+          setChannelsError(
+            j.error === "no_company"
+              ? "Selecione uma empresa ativa antes de criar campanha."
+              : "Sem permissão para listar canais desta empresa.",
+          );
+          return { channels: [] as ChannelOption[] };
+        }
+        if (!r.ok) {
+          setChannelsError("Não foi possível carregar os canais WhatsApp.");
+          return { channels: [] as ChannelOption[] };
+        }
+        return r.json() as Promise<{ channels: ChannelOption[] }>;
+      })
       .then((data: { channels: ChannelOption[] }) => {
         const evo = (data.channels ?? []).filter(
           (ch) => String(ch.channel_type).toLowerCase() === "evolution",
@@ -43,13 +79,25 @@ function NovaCampanhaPage() {
         setChannels(evo);
         if (evo[0]) setChannelId(evo[0].id);
       })
-      .catch(() => {});
+      .catch(() => setChannelsError("Não foi possível carregar os canais WhatsApp."));
   }, [canManage]);
+
+  if (!hydrated) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!canManage) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">Sem permissão para criar campanhas.</p>
+        <p className="text-sm text-muted-foreground">
+          {!companyValid
+            ? "Selecione uma empresa ativa antes de criar campanha."
+            : "Sem permissão para criar campanhas."}
+        </p>
       </div>
     );
   }
@@ -74,8 +122,8 @@ function NovaCampanhaPage() {
         }),
       });
       if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error ?? `HTTP ${res.status}`);
+        const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+        throw new Error(campaignApiError(res.status, j));
       }
       const data = (await res.json()) as { campaign: { id: string } };
       toast.success("Campanha salva como rascunho");
@@ -133,6 +181,9 @@ function NovaCampanhaPage() {
           <span className="mb-1 block text-xs font-medium text-muted-foreground">
             Canal WhatsApp (Evolution)
           </span>
+          {channelsError ? (
+            <p className="mb-2 text-xs text-destructive">{channelsError}</p>
+          ) : null}
           <select
             value={channelId}
             onChange={(e) => setChannelId(e.target.value)}

@@ -55,7 +55,7 @@ export const Route = createFileRoute("/_app/empresas")({
 });
 
 function EmpresasPage() {
-  const { user, companyId } = useAuth();
+  const { user, companyId, companyName, hydrated } = useAuth();
   const actor = {
     id: user?.id ?? "",
     role: user?.role ?? "ATENDENTE",
@@ -116,9 +116,12 @@ function EmpresasPage() {
   }
 
   useEffect(() => {
+    if (!hydrated) return;
     reload();
     loadPlans();
-  }, []);
+  }, [hydrated, companyId]);
+
+  const companySubtitle = companyName ?? companyId ?? "—";
 
   const visible = items;
 
@@ -292,7 +295,7 @@ function EmpresasPage() {
             <p className="text-xs text-muted-foreground">
               {isPlatformView
                 ? "Visão global · plano e uso de canais"
-                : `Sua empresa · plano e consumo (${companyId ?? "—"})`}
+                : `Sua empresa · plano e consumo (${companySubtitle})`}
             </p>
           </div>
         </div>

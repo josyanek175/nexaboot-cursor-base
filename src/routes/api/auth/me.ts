@@ -9,6 +9,7 @@ import {
 import { buildOperationalCompanyClearCookie } from "@/lib/operational-company.server";
 import { getCurrentUserCompanyInfo, NO_COMPANY_MESSAGE } from "@/lib/company.server";
 import { isPlatformRole } from "@/lib/platform-roles";
+import { buildAuthUserResponse } from "@/lib/auth-user";
 
 export const Route = createFileRoute("/api/auth/me")({
   server: {
@@ -77,17 +78,17 @@ export const Route = createFileRoute("/api/auth/me")({
           platform_access: platformAccess,
         });
         return Response.json({
-          user: {
-            id: u.id,
-            email: u.email,
-            name: u.name,
-            role: u.role,
-            tenant_id: u.tenant_id,
-            company_id: company.companyId,
-            company_name: company.companyName,
-            company_valid: company.companyValid,
-            platform_access: platformAccess,
-          },
+          user: buildAuthUserResponse(
+            {
+              id: u.id,
+              email: u.email,
+              name: u.name,
+              role: u.role,
+              tenant_id: u.tenant_id,
+            },
+            company,
+            platformAccess,
+          ),
           ...(companyMessage ? { company_message: companyMessage } : {}),
         });
       },

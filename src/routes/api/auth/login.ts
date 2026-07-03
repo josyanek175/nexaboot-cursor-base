@@ -10,6 +10,7 @@ import {
   describeSessionCookie,
   hasSessionSecret,
 } from "@/lib/session.server";
+import { buildAuthUserResponse } from "@/lib/auth-user";
 
 const Body = z.object({
   email: z.string().email().max(255),
@@ -284,17 +285,21 @@ export const Route = createFileRoute("/api/auth/login")({
 
         return Response.json(
           {
-            user: {
-              id: u.id,
-              email: u.email,
-              name: u.name,
-              role: u.role,
-              tenant_id: u.tenant_id,
-              company_id: companyValid ? u.company_id : null,
-              company_name: companyName,
-              company_valid: companyValid,
-              platform_access: isPlatform,
-            },
+            user: buildAuthUserResponse(
+              {
+                id: u.id,
+                email: u.email,
+                name: u.name,
+                role: u.role,
+                tenant_id: u.tenant_id,
+              },
+              {
+                companyId: companyValid ? u.company_id : null,
+                companyName,
+                companyValid,
+              },
+              isPlatform,
+            ),
             diag: {
               db: dbMeta?.database ?? null,
               table: "public.users",

@@ -3,7 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
-import { ensureUserCompanySchema } from "@/lib/company.server";
+import { ensureUserCompanySchema, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 
@@ -35,6 +35,7 @@ export const Route = createFileRoute("/api/companies")({
     handlers: {
       GET: async () => {
         await ensureCrmSchema();
+        await ensureUserCompanySchema();
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
 
@@ -45,33 +46,24 @@ export const Route = createFileRoute("/api/companies")({
           return Response.json({ companies: rows });
         }
 
-        if (!actor.company_id) {
+        const company = await getCurrentUserCompanyInfo();
+        if (!company.authenticated) {
+          return Response.json({ error: "unauthenticated" }, { status: 401 });
+        }
+        if (!company.companyValid || !company.companyId) {
           return Response.json(
             {
-              error: "no_company",
-              message: "Usuário sem empresa vinculada. Contate o administrador.",
+              error: company.companyId ? "company_not_found" : "no_company",
+              message: company.companyId
+                ? "Sua conta está vinculada a uma empresa inexistente ou removida. Contate o administrador."
+                : "Usuário sem empresa vinculada. Contate o administrador.",
+              company_id: company.companyId,
             },
             { status: 403 },
           );
         }
 
-        const companyId = String(actor.company_id);
-        const exists = await sql<{ id: string }[]>`
-          SELECT id FROM public.companies WHERE id = ${companyId}::uuid LIMIT 1
-        `;
-        if (!exists[0]) {
-          return Response.json(
-            {
-              error: "company_not_found",
-              message:
-                "Sua conta está vinculada a uma empresa inexistente ou removida. Contate o administrador.",
-              company_id: companyId,
-            },
-            { status: 403 },
-          );
-        }
-
-        const rows = await listCompaniesWithPlanUsage({ companyId });
+        const rows = await listCompaniesWithPlanUsage({ companyId: company.companyId });
         return Response.json({ companies: rows });
       },
 

@@ -12,36 +12,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { tenants, type Role, type User, type Tenant } from "./mocks";
+import { tenants, type Tenant } from "./mocks";
 import { pushAudit } from "./audit-log";
+import {
+  normalizeAuthUser,
+  type AuthUser,
+  type MeUserPayload,
+} from "./auth-user";
 
-interface DbUser {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  tenant_id: string;
-  company_id?: string | null;
-  company_name?: string | null;
-  company_valid?: boolean;
-  platform_access?: boolean;
-}
-
-import { isPlatformRole as isPlatformRoleName } from "./platform-roles";
-
-function toUser(u: DbUser): User {
-  return {
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: (u.role as Role) ?? "ATENDENTE",
-    tenantId: u.tenant_id ?? "default",
-    avatarColor: "#00a884",
-  };
-}
+export type { AuthUser };
 
 interface AuthContextValue {
-  user: User | null;
+  user: AuthUser | null;
   tenant: Tenant | null;
   isAuthenticated: boolean;
   hydrated: boolean;
@@ -77,28 +59,31 @@ const MAX_ATTEMPTS = 5;
 const LOCK_SECONDS = 30;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
-  const [companyValid, setCompanyValid] = useState(true);
+  const [companyValid, setCompanyValid] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [companyMessage, setCompanyMessage] = useState<string | null>(null);
   const [platformAccess, setPlatformAccess] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
 
-  const applyMeResponse = useCallback((data: { user: DbUser | null; company_message?: string }) => {
-    if (data.user) {
-      setUser(toUser(data.user));
-      const valid = data.user.company_valid !== false;
-      const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
-      setCompanyValid(valid);
-      setCompanyName(data.user.company_name ?? null);
-      setCompanyId(data.user.company_id ?? null);
-      setPlatformAccess(platform);
-      setCompanyMessage(valid ? null : data.company_message ?? NO_COMPANY_MESSAGE);
-    }
-  }, []);
+  const applyMeResponse = useCallback(
+    (data: { user: MeUserPayload | null; company_message?: string }) => {
+      if (!data.user) return;
+      const authUser = normalizeAuthUser(data.user);
+      setUser(authUser);
+      setCompanyValid(authUser.companyValid);
+      setCompanyName(authUser.companyName);
+      setCompanyId(authUser.companyId);
+      setPlatformAccess(authUser.platformAccess);
+      setCompanyMessage(
+        authUser.companyValid ? null : data.company_message ?? NO_COMPANY_MESSAGE,
+      );
+    },
+    [],
+  );
 
   const refreshSession = useCallback(async () => {
     const res = await fetch("/api/auth/me", {
@@ -106,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return;
-    const data = (await res.json()) as { user: DbUser | null; company_message?: string };
+    const data = (await res.json()) as { user: MeUserPayload | null; company_message?: string };
     applyMeResponse(data);
   }, [applyMeResponse]);
 
@@ -135,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (!res.ok) throw new Error("me failed");
         const data = (await res.json()) as {
-          user: DbUser | null;
+          user: MeUserPayload | null;
           company_message?: string;
         };
         if (!cancelled && data.user) {
@@ -174,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         const data = (await res.json().catch(() => ({}))) as {
-          user?: DbUser;
+          user?: MeUserPayload;
           error?: string;
           reason?: string;
           message?: string;
@@ -262,26 +247,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             message: "Resposta de login inválida do servidor.",
           };
         }
-        const u = toUser(data.user);
-        setUser(u);
-        const valid = data.user.company_valid !== false;
-        const platform = data.user.platform_access ?? isPlatformRoleName(data.user.role);
-        setCompanyValid(valid);
-        setCompanyName(data.user.company_name ?? null);
-        setCompanyId(data.user.company_id ?? null);
-        setPlatformAccess(platform);
-        setCompanyMessage(valid ? null : NO_COMPANY_MESSAGE);
+        const authUser = normalizeAuthUser(data.user);
+        setUser(authUser);
+        setCompanyValid(authUser.companyValid);
+        setCompanyName(authUser.companyName);
+        setCompanyId(authUser.companyId);
+        setPlatformAccess(authUser.platformAccess);
+        setCompanyMessage(authUser.companyValid ? null : NO_COMPANY_MESSAGE);
         setAttempts(0);
         setLockedUntil(null);
         pushAudit({
-          tenantId: u.tenantId,
-          actorId: u.id,
-          actorName: u.name,
+          tenantId: authUser.tenantId,
+          actorId: authUser.id,
+          actorName: authUser.name,
           action: "auth.login.success",
           targetType: "user",
-          targetId: u.id,
+          targetId: authUser.id,
           result: "success",
-          reason: `Login: ${u.email}`,
+          reason: `Login: ${authUser.email}`,
         });
         return { ok: true };
       } catch (e) {
@@ -298,7 +281,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     const current = user;
     setUser(null);
-    setCompanyValid(true);
+    setCompanyValid(false);
     setCompanyName(null);
     setCompanyId(null);
     setCompanyMessage(null);
