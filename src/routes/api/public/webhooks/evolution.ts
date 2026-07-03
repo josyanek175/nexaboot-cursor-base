@@ -8,6 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
+import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
 
 const PayloadSchema = z
   .object({
@@ -27,7 +28,7 @@ type ChannelRow = {
 };
 
 type ParsedMsg = {
-  type: "text" | "image" | "audio" | "video" | "document" | "reaction";
+  type: "text" | "image" | "audio" | "video" | "document" | "reaction" | "contact" | "contacts";
   body?: string;
   mimeType?: string;
   fileName?: string;
@@ -48,6 +49,11 @@ function pickMessageType(msg: Json): ParsedMsg {
       reactionEmoji: emoji || undefined,
       reactionToId,
     };
+  }
+  // Contato(s) compartilhado(s) — contactMessage / contactsArrayMessage / vCard.
+  const contactParsed = parseContactMessageNode(m);
+  if (contactParsed) {
+    return { type: contactParsed.type, body: contactParsed.body };
   }
   if (typeof m.conversation === "string") return { type: "text", body: m.conversation };
   if (m.extendedTextMessage?.text) return { type: "text", body: m.extendedTextMessage.text };
@@ -322,7 +328,11 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
   let mediaBase64: string | null = null;
   let mimeType: string | null = parsed.mimeType ?? null;
   let mediaError: string | null = null;
-  const isMedia = parsed.type !== "text" && parsed.type !== "reaction";
+  const isMedia =
+    parsed.type === "image" ||
+    parsed.type === "audio" ||
+    parsed.type === "video" ||
+    parsed.type === "document";
 
   if (isMedia) {
     // Inclui o nome da instância no payload para o helper resolver o endpoint.

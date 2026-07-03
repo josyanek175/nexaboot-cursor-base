@@ -6,7 +6,7 @@ import {
   Check, CheckCheck, AlertCircle, FileText, Download, Play, Tag, X,
   UserPlus, ArrowRightLeft, CheckCircle, RotateCcw, StickyNote, History,
   Filter, PanelRightClose, PanelRightOpen, Image as ImageIcon, FileVideo, FileAudio,
-  Wifi, WifiOff,
+  Wifi, WifiOff, ContactRound,
 } from "lucide-react";
 import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
@@ -15,11 +15,26 @@ import { pushAudit } from "@/lib/audit-log";
 import { apiGet, apiPost, apiPostForm } from "@/lib/api";
 import { ensureNotificationPermission, showBrowserNotification, playNotificationSound, isTabHidden } from "@/lib/notifications";
 import { setUnread } from "@/lib/unread-store";
+import {
+  extractSharedContacts,
+  hasContactPayload,
+  isContactsArrayPayload,
+  type SharedContact,
+} from "@/lib/whatsapp-contact-message";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
 type ConversationStatus = "open" | "waiting" | "finished";
-type MessageType = "text" | "image" | "audio" | "document" | "video" | "internal" | "reaction";
+type MessageType =
+  | "text"
+  | "image"
+  | "audio"
+  | "document"
+  | "video"
+  | "internal"
+  | "reaction"
+  | "contact"
+  | "contacts";
 type MessageDirection = "in" | "out";
 type MessageStatus = "sent" | "delivered" | "read" | "error";
 type ChannelStatus = "connected" | "connecting" | "qrcode" | "disconnected" | "error";
@@ -77,6 +92,8 @@ interface Message {
   isInternalNote?: boolean;
   thumbnailUrl?: string;
   reactionEmoji?: string;
+  /** Contatos extraídos de contactMessage / contactsArrayMessage / vCard. */
+  sharedContacts?: SharedContact[];
 }
 
 // ───────── Utilitários de formatação ─────────
@@ -268,11 +285,7 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
 }
 function transformApiMessage(m: any, conversationId: string): Message {
   const mediaType = m.media_type ?? m.mediaType ?? undefined;
-  const rawType = mediaType || m.message_type || m.type || "text";
-  const type: MessageType =
-    rawType === "image" || rawType === "audio" || rawType === "video" || rawType === "document" || rawType === "internal" || rawType === "reaction"
-      ? rawType
-      : "text";
+  const rawType = String(mediaType || m.message_type || m.type || "text").toLowerCase();
 
   const fromMe = m.from_me === true;
   const rawDir = (m.direction || "").toString().toLowerCase();
@@ -286,23 +299,64 @@ function transformApiMessage(m: any, conversationId: string): Message {
 
   const text = m.message_text ?? m.text ?? m.body ?? m.content ?? m.message ?? undefined;
   const caption = m.media_caption ?? undefined;
-  const placeholder =
-    type === "image" ? "[imagem]" :
-    type === "audio" ? "[áudio]" :
-    type === "video" ? "[vídeo]" :
-    type === "document" ? "[documento]" : undefined;
-  const finalText =
-    (text && String(text).trim().length > 0) ? text :
-    (caption && String(caption).trim().length > 0) ? caption :
-    placeholder;
-
-  const mimeType = m.media_mimetype ?? m.mime_type ?? m.mimeType ?? undefined;
-  const mediaUrl: string | undefined = m.media_url ?? m.mediaUrl ?? undefined;
-  const mediaError: string | undefined = m.media_error ?? m.mediaError ?? undefined;
 
   const rp = m.raw_payload ?? m.rawPayload;
   const rpObj = typeof rp === "object" && rp ? (rp as any) : {};
   const dataObj = rpObj.data ?? {};
+
+  // Contatos: tipo novo (contact/contacts) ou legado unsupported com vCard no raw_payload.
+  const textStr = text != null ? String(text) : "";
+  const looksUnsupported =
+    /\[mensagem não suportada\]/i.test(textStr) ||
+    rawType === "unsupported" ||
+    rawType === "unknown";
+  const fromPayload = hasContactPayload(rp);
+  let type: MessageType =
+    rawType === "image" ||
+    rawType === "audio" ||
+    rawType === "video" ||
+    rawType === "document" ||
+    rawType === "internal" ||
+    rawType === "reaction" ||
+    rawType === "contact" ||
+    rawType === "contacts"
+      ? (rawType as MessageType)
+      : "text";
+  let sharedContacts: SharedContact[] | undefined;
+
+  if (type === "contact" || type === "contacts") {
+    sharedContacts = extractSharedContacts(rp);
+  } else if (fromPayload) {
+    // Legado: message_type text/unsupported com contactMessage no raw_payload.
+    type = isContactsArrayPayload(rp) ? "contacts" : "contact";
+    sharedContacts = extractSharedContacts(rp);
+  } else if (looksUnsupported && /BEGIN:VCARD/i.test(textStr)) {
+    type = "contact";
+    sharedContacts = extractSharedContacts(textStr);
+  } else if (/contato compartilhado/i.test(textStr) && !mediaType) {
+    // Texto já normalizado no banco, sem tipo contact.
+    type = /contatos compartilhados/i.test(textStr) ? "contacts" : "contact";
+    sharedContacts = extractSharedContacts(rp);
+  }
+
+  const placeholder =
+    type === "image" ? "[imagem]" :
+    type === "audio" ? "[áudio]" :
+    type === "video" ? "[vídeo]" :
+    type === "document" ? "[documento]" :
+    type === "contact" ? "Contato compartilhado" :
+    type === "contacts" ? "Contatos compartilhados" :
+    undefined;
+  const finalText =
+    type === "contact" || type === "contacts"
+      ? (textStr && !/\[mensagem não suportada\]/i.test(textStr) ? textStr : placeholder)
+      : (textStr.trim().length > 0) ? textStr :
+        (caption && String(caption).trim().length > 0) ? caption :
+        placeholder;
+
+  const mimeType = m.media_mimetype ?? m.mime_type ?? m.mimeType ?? undefined;
+  const mediaUrl: string | undefined = m.media_url ?? m.mediaUrl ?? undefined;
+  const mediaError: string | undefined = m.media_error ?? m.mediaError ?? undefined;
 
   // Miniatura base64 (jpegThumbnail) quando presente no payload.
   const thumbB64 =
@@ -329,6 +383,7 @@ function transformApiMessage(m: any, conversationId: string): Message {
     thumbnailUrl,
     mediaError,
     reactionEmoji: m.reaction_emoji ?? m.reactionEmoji ?? undefined,
+    sharedContacts,
   };
 }
 
@@ -1218,7 +1273,10 @@ function ConversationRow({
     last?.type === "image" ? "📷 Imagem" :
     last?.type === "audio" ? "🎤 Áudio" :
     last?.type === "video" ? "🎬 Vídeo" :
-    last?.type === "document" ? `📄 ${last.fileName ?? "Documento"}` : "";
+    last?.type === "document" ? `📄 ${last.fileName ?? "Documento"}` :
+    last?.type === "contact" ? "👤 Contato compartilhado" :
+    last?.type === "contacts" ? "👥 Contatos compartilhados" :
+    "";
 
   return (
     <li>
@@ -1433,6 +1491,47 @@ function BubbleInner({ m }: { m: Message }) {
         <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground">
           {reactionLabel}
         </span>
+      </div>
+    );
+  }
+  if (m.type === "contact" || m.type === "contacts") {
+    const out = m.direction === "out";
+    const contacts =
+      m.sharedContacts && m.sharedContacts.length > 0
+        ? m.sharedContacts
+        : [{ name: undefined, phone: undefined }];
+    return (
+      <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
+        <div
+          className={`max-w-[78%] rounded-lg px-3 py-2 text-sm shadow-sm ${out ? "rounded-tr-none" : "rounded-tl-none"}`}
+          style={{ backgroundColor: out ? "var(--bubble-out)" : "var(--bubble-in)" }}
+        >
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold">
+            <ContactRound className="h-3.5 w-3.5" />
+            Contato compartilhado
+          </div>
+          <div className="space-y-2">
+            {contacts.map((c, i) => (
+              <div
+                key={`sc-${m.id}-${i}`}
+                className="rounded-md border border-black/10 bg-black/5 px-2.5 py-2"
+              >
+                <div className="text-sm font-medium">
+                  Nome: {c.name?.trim() || "—"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Telefone: {c.phone?.trim() || "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+            {out && m.authorName && <span className="font-medium">{m.authorName}</span>}
+            {out && m.authorName && <span aria-hidden>·</span>}
+            <span>{formatTime(m.createdAt)}</span>
+            {out && <StatusIcon status={m.status} />}
+          </div>
+        </div>
       </div>
     );
   }

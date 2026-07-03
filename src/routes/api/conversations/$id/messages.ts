@@ -48,6 +48,7 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
             m.sent_by_name,
             m.reaction_emoji,
             m.reaction_to_message_id,
+            m.raw_payload,
             (m.raw_payload IS NOT NULL) AS has_raw_payload
           FROM public.messages m
           WHERE m.conversation_id = ${params.id}::uuid

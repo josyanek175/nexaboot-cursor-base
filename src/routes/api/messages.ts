@@ -48,6 +48,7 @@ export const Route = createFileRoute("/api/messages")({
             m.media_seconds    AS duration_seconds,
             m.from_me,
             m.created_at,
+            m.raw_payload,
             (m.raw_payload IS NOT NULL) AS has_raw_payload
           FROM public.messages m
           WHERE m.conversation_id = ${parsed.data.conversation_id}::uuid
