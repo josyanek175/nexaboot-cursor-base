@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   MessageSquare,
@@ -13,6 +13,14 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   ExternalLink,
+  Megaphone,
+  Send,
+  Reply,
+  MessageCircleOff,
+  ThumbsUp,
+  ThumbsDown,
+  Ban,
+  XCircle,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 
@@ -146,11 +154,69 @@ function responsibleLabel(item: { is_mine?: boolean; assigned_user_name?: string
   return "Sem responsável";
 }
 
+type CampaignMetrics = {
+  periodDays: number;
+  messagesSent: number;
+  responsesReceived: number;
+  noResponse: number;
+  interested: number;
+  notInterested: number;
+  optOut: number;
+  sendErrors: number;
+};
+
+type RecentCampaign = {
+  id: string;
+  name: string;
+  status: string;
+  totalSent: number;
+  totalResponded: number;
+  totalInterested: number;
+  totalNoResponse: number;
+  totalOptOut: number;
+  createdAt: string;
+};
+
+const EMPTY_CAMPAIGN_METRICS: CampaignMetrics = {
+  periodDays: 30,
+  messagesSent: 0,
+  responsesReceived: 0,
+  noResponse: 0,
+  interested: 0,
+  notInterested: 0,
+  optOut: 0,
+  sendErrors: 0,
+};
+
+const campaignCards = [
+  { label: "Mensagens enviadas", icon: Send, key: "messagesSent" as const, tone: "text-primary" },
+  { label: "Respostas recebidas", icon: Reply, key: "responsesReceived" as const, tone: "text-whatsapp" },
+  { label: "Sem resposta", icon: MessageCircleOff, key: "noResponse" as const, tone: "text-muted-foreground" },
+  { label: "Interessados", icon: ThumbsUp, key: "interested" as const, tone: "text-whatsapp" },
+  { label: "Não interessados", icon: ThumbsDown, key: "notInterested" as const, tone: "text-automation" },
+  { label: "Opt-out", icon: Ban, key: "optOut" as const, tone: "text-destructive" },
+  { label: "Erros de envio", icon: XCircle, key: "sendErrors" as const, tone: "text-destructive" },
+] as const;
+
+const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
+  draft: "Rascunho",
+  scheduled: "Agendada",
+  running: "Em envio",
+  paused: "Pausada",
+  completed: "Concluída",
+  canceled: "Cancelada",
+  failed: "Falhou",
+};
+
 function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [campaignMetrics, setCampaignMetrics] = useState<CampaignMetrics>(EMPTY_CAMPAIGN_METRICS);
+  const [recentCampaigns, setRecentCampaigns] = useState<RecentCampaign[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -167,11 +233,43 @@ function DashboardPage() {
     }
   }, []);
 
+  const loadCampaigns = useCallback(async () => {
+    setCampaignsLoading(true);
+    try {
+      const res = await fetch("/api/dashboard/campaigns", { credentials: "include" });
+
+      if (!res.ok) {
+        setCampaignMetrics(EMPTY_CAMPAIGN_METRICS);
+        setRecentCampaigns([]);
+        return;
+      }
+
+      const json = (await res.json()) as {
+        metrics?: CampaignMetrics;
+        recentCampaigns?: RecentCampaign[];
+      };
+
+      setCampaignMetrics(json.metrics ?? EMPTY_CAMPAIGN_METRICS);
+      setRecentCampaigns(json.recentCampaigns ?? []);
+    } catch {
+      setCampaignMetrics(EMPTY_CAMPAIGN_METRICS);
+      setRecentCampaigns([]);
+    } finally {
+      setCampaignsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load(false);
-    const id = setInterval(() => load(true), 20_000);
+    void loadCampaigns();
+
+    const id = setInterval(() => {
+      load(true);
+      void loadCampaigns();
+    }, 20_000);
+
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, loadCampaigns]);
 
   async function openTransfer(n: TransferItem) {
     try {
@@ -255,6 +353,38 @@ function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Campanhas */}
+      <section className="mt-5">
+        <div className="mb-3 flex items-center gap-2">
+          <Megaphone className="h-5 w-5 text-primary" />
+          <div>
+            <h2 className="text-lg font-semibold">Campanhas</h2>
+            <p className="text-xs text-muted-foreground">
+              Indicadores consolidados dos últimos {campaignMetrics.periodDays} dias
+            </p>
+          </div>
+        </div>
+
+        {campaignsLoading ? (
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Carregando indicadores de campanhas…
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
+            {campaignCards.map(({ label, icon: Icon, key, tone }) => (
+              <div key={key} className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{label}</span>
+                  <Icon className={`h-4 w-4 shrink-0 ${tone}`} />
+                </div>
+                <div className="mt-2 text-2xl font-semibold tabular-nums">{campaignMetrics[key]}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
         {/* Canais */}
@@ -395,21 +525,9 @@ function DashboardPage() {
 
       {/* Críticas */}
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <CriticalList
-          title="Sem responsável"
-          icon={UserX}
-          items={data.critical.unassigned}
-        />
-        <CriticalList
-          title="Sem resposta há +15 min"
-          icon={AlertTriangle}
-          items={data.critical.no_reply_15m}
-        />
-        <CriticalList
-          title="Recebidas hoje"
-          icon={MessageSquare}
-          items={data.critical.received_today}
-        />
+        <CriticalList title="Sem responsável" icon={UserX} items={data.critical.unassigned} />
+        <CriticalList title="Sem resposta há +15 min" icon={AlertTriangle} items={data.critical.no_reply_15m} />
+        <CriticalList title="Recebidas hoje" icon={MessageSquare} items={data.critical.received_today} />
       </div>
 
       {/* Últimas conversas */}
@@ -467,6 +585,55 @@ function DashboardPage() {
                           Abrir <ExternalLink className="h-3 w-3" />
                         </a>
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* Últimas campanhas */}
+      <div className="mt-5">
+        <Section title="Últimas campanhas" subtitle="Resumo dos disparos mais recentes">
+          {campaignsLoading ? (
+            <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando campanhas…
+            </div>
+          ) : recentCampaigns.length === 0 ? (
+            <Empty text="Nenhuma campanha cadastrada ainda." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium">Campanha</th>
+                    <th className="px-4 py-2 text-left font-medium">Status</th>
+                    <th className="px-4 py-2 text-right font-medium">Enviados</th>
+                    <th className="px-4 py-2 text-right font-medium">Respondidos</th>
+                    <th className="px-4 py-2 text-right font-medium">Interessados</th>
+                    <th className="px-4 py-2 text-right font-medium">Sem resposta</th>
+                    <th className="px-4 py-2 text-right font-medium">Opt-out</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {recentCampaigns.map((c) => (
+                    <tr key={c.id} className="hover:bg-muted/30">
+                      <td className="px-4 py-2.5 font-medium">
+                        <Link to="/campanhas/$id" params={{ id: c.id }} className="hover:underline">
+                          {c.name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <CampaignStatusBadge status={c.status} />
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{c.totalSent}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{c.totalResponded}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{c.totalInterested}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{c.totalNoResponse}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{c.totalOptOut}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -544,5 +711,22 @@ function CriticalList({
         </ul>
       )}
     </Section>
+  );
+}
+
+function CampaignStatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    draft: "bg-muted text-muted-foreground",
+    scheduled: "bg-automation/10 text-automation",
+    running: "bg-primary/10 text-primary",
+    paused: "bg-automation/10 text-automation",
+    completed: "bg-whatsapp/10 text-whatsapp",
+    canceled: "bg-muted text-muted-foreground",
+    failed: "bg-destructive/10 text-destructive",
+  };
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${map[status] ?? "bg-muted text-muted-foreground"}`}>
+      {CAMPAIGN_STATUS_LABEL[status] ?? status}
+    </span>
   );
 }

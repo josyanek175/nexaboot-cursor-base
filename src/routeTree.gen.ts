@@ -53,6 +53,7 @@ import { Route as ApiDebugPlansSelectsRouteImport } from './routes/api/debug/pla
 import { Route as ApiDebugDbRouteImport } from './routes/api/debug/db'
 import { Route as ApiDebugCurrentUserRouteImport } from './routes/api/debug/current-user'
 import { Route as ApiDebugColsRouteImport } from './routes/api/debug/cols'
+import { Route as ApiDashboardCampaignsRouteImport } from './routes/api/dashboard/campaigns'
 import { Route as ApiConversationsStartRouteImport } from './routes/api/conversations/start'
 import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
 import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
@@ -308,6 +309,11 @@ const ApiDebugColsRoute = ApiDebugColsRouteImport.update({
   path: '/api/debug/cols',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDashboardCampaignsRoute = ApiDashboardCampaignsRouteImport.update({
+  id: '/campaigns',
+  path: '/campaigns',
+  getParentRoute: () => ApiDashboardRoute,
+} as any)
 const ApiConversationsStartRoute = ApiConversationsStartRouteImport.update({
   id: '/start',
   path: '/start',
@@ -511,7 +517,7 @@ export interface FileRoutesByFullPath {
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
-  '/api/dashboard': typeof ApiDashboardRoute
+  '/api/dashboard': typeof ApiDashboardRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
@@ -530,6 +536,7 @@ export interface FileRoutesByFullPath {
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
+  '/api/dashboard/campaigns': typeof ApiDashboardCampaignsRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
@@ -588,7 +595,7 @@ export interface FileRoutesByTo {
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
-  '/api/dashboard': typeof ApiDashboardRoute
+  '/api/dashboard': typeof ApiDashboardRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
@@ -607,6 +614,7 @@ export interface FileRoutesByTo {
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
+  '/api/dashboard/campaigns': typeof ApiDashboardCampaignsRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
@@ -668,7 +676,7 @@ export interface FileRoutesById {
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
-  '/api/dashboard': typeof ApiDashboardRoute
+  '/api/dashboard': typeof ApiDashboardRouteWithChildren
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
@@ -687,6 +695,7 @@ export interface FileRoutesById {
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
+  '/api/dashboard/campaigns': typeof ApiDashboardCampaignsRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
@@ -767,6 +776,7 @@ export interface FileRouteTypes {
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
+    | '/api/dashboard/campaigns'
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
@@ -844,6 +854,7 @@ export interface FileRouteTypes {
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
+    | '/api/dashboard/campaigns'
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
@@ -923,6 +934,7 @@ export interface FileRouteTypes {
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
+    | '/api/dashboard/campaigns'
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
@@ -972,7 +984,7 @@ export interface RootRouteChildren {
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRouteWithChildren
-  ApiDashboardRoute: typeof ApiDashboardRoute
+  ApiDashboardRoute: typeof ApiDashboardRouteWithChildren
   ApiMessagesRoute: typeof ApiMessagesRouteWithChildren
   ApiPlansRoute: typeof ApiPlansRoute
   ApiUsersRoute: typeof ApiUsersRouteWithChildren
@@ -1313,6 +1325,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/debug/cols'
       preLoaderRoute: typeof ApiDebugColsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/dashboard/campaigns': {
+      id: '/api/dashboard/campaigns'
+      path: '/campaigns'
+      fullPath: '/api/dashboard/campaigns'
+      preLoaderRoute: typeof ApiDashboardCampaignsRouteImport
+      parentRoute: typeof ApiDashboardRoute
     }
     '/api/conversations/start': {
       id: '/api/conversations/start'
@@ -1694,6 +1713,18 @@ const ApiConversationsRouteChildren: ApiConversationsRouteChildren = {
 const ApiConversationsRouteWithChildren =
   ApiConversationsRoute._addFileChildren(ApiConversationsRouteChildren)
 
+interface ApiDashboardRouteChildren {
+  ApiDashboardCampaignsRoute: typeof ApiDashboardCampaignsRoute
+}
+
+const ApiDashboardRouteChildren: ApiDashboardRouteChildren = {
+  ApiDashboardCampaignsRoute: ApiDashboardCampaignsRoute,
+}
+
+const ApiDashboardRouteWithChildren = ApiDashboardRoute._addFileChildren(
+  ApiDashboardRouteChildren,
+)
+
 interface ApiMessagesRouteChildren {
   ApiMessagesMessageIdMediaRoute: typeof ApiMessagesMessageIdMediaRoute
   ApiMessagesSendEvolutionRoute: typeof ApiMessagesSendEvolutionRoute
@@ -1779,7 +1810,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
   ApiContactsRoute: ApiContactsRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRouteWithChildren,
-  ApiDashboardRoute: ApiDashboardRoute,
+  ApiDashboardRoute: ApiDashboardRouteWithChildren,
   ApiMessagesRoute: ApiMessagesRouteWithChildren,
   ApiPlansRoute: ApiPlansRoute,
   ApiUsersRoute: ApiUsersRouteWithChildren,

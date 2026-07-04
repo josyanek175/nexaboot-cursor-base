@@ -854,6 +854,14 @@ export async function ensureCampaignsSchema(s?: ReturnType<typeof sql>): Promise
     ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS campaign_reply_intent TEXT;
     ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS campaign_reply_at TIMESTAMPTZ;
 
+    CREATE INDEX IF NOT EXISTS idx_campaign_contacts_company_sent
+      ON public.campaign_contacts (company_id, sent_at DESC)
+      WHERE sent_at IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_campaign_contacts_company_responded
+      ON public.campaign_contacts (company_id, responded_at DESC)
+      WHERE responded_at IS NOT NULL;
+
     CREATE INDEX IF NOT EXISTS idx_campaigns_company_active
       ON public.campaigns (company_id, created_at DESC)
       WHERE deleted_at IS NULL;
