@@ -710,8 +710,37 @@ async function applyAttendanceSchema(db: ReturnType<typeof sql>): Promise<void> 
 // Campanhas (envio em massa via Evolution — fase 1: rascunhos + público).
 // Idempotente, não destrutivo. campaign_send_queue existe mas não é populada.
 // ───────────────────────────────────────────────────────────────────────────
+let _campaignsReady: Promise<void> | null = null;
+
 export async function ensureCampaignsSchema(s?: ReturnType<typeof sql>): Promise<void> {
-  const db = s ?? sql();
+  if (_campaignsReady) return _campaignsReady;
+
+  if (s) {
+    _campaignsReady = (async () => {
+      try {
+        await applyCampaignsSchema(s);
+        console.log("[CAMPAIGNS_SCHEMA_OK]");
+      } catch (e) {
+        _campaignsReady = null;
+        throw e;
+      }
+    })();
+    return _campaignsReady;
+  }
+
+  _campaignsReady = (async () => {
+    try {
+      await applyCampaignsSchema(sql());
+      console.log("[CAMPAIGNS_SCHEMA_OK]");
+    } catch (e) {
+      _campaignsReady = null;
+      throw e;
+    }
+  })();
+  return _campaignsReady;
+}
+
+async function applyCampaignsSchema(db: ReturnType<typeof sql>): Promise<void> {
   await db.unsafe(`
     CREATE TABLE IF NOT EXISTS public.campaigns (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

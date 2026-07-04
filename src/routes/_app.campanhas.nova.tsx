@@ -90,27 +90,37 @@ function NovaCampanhaPage() {
   useEffect(() => {
     if (!canManage) return;
     setChannelsError(null);
-    fetch("/api/evolution/channels", { credentials: "include" })
-      .then(async (r) => {
-        if (!r.ok) {
-          setChannelsError("Não foi possível carregar os canais WhatsApp.");
-          return { channels: [] as ChannelOption[] };
-        }
-        return r.json() as Promise<{ channels: ChannelOption[] }>;
-      })
-      .then((data) => {
-        const evo = (data.channels ?? []).filter(
-          (ch) => String(ch.channel_type).toLowerCase() === "evolution",
-        );
-        setChannels(evo);
-        if (evo[0]) setChannelId(evo[0].id);
-      })
-      .catch(() => setChannelsError("Não foi possível carregar os canais WhatsApp."));
 
-    fetch("/api/campaigns/templates", { credentials: "include" })
-      .then(async (r) => (r.ok ? r.json() : { templates: [] }))
-      .then((data: { templates: TemplateOption[] }) => setTemplates(data.templates ?? []))
-      .catch(() => setTemplates([]));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+
+    Promise.allSettled([
+      fetch("/api/evolution/channels", { credentials: "include", signal: controller.signal })
+        .then(async (r) => {
+          if (!r.ok) {
+            setChannelsError("Não foi possível carregar os canais WhatsApp.");
+            return { channels: [] as ChannelOption[] };
+          }
+          return r.json() as Promise<{ channels: ChannelOption[] }>;
+        })
+        .then((data) => {
+          const evo = (data.channels ?? []).filter(
+            (ch) => String(ch.channel_type).toLowerCase() === "evolution",
+          );
+          setChannels(evo);
+          if (evo[0]) setChannelId(evo[0].id);
+        })
+        .catch(() => setChannelsError("Não foi possível carregar os canais WhatsApp.")),
+      fetch("/api/campaigns/templates", { credentials: "include", signal: controller.signal })
+        .then(async (r) => (r.ok ? r.json() : { templates: [] }))
+        .then((data: { templates: TemplateOption[] }) => setTemplates(data.templates ?? []))
+        .catch(() => setTemplates([])),
+    ]).finally(() => clearTimeout(timer));
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [canManage]);
 
   useEffect(() => {

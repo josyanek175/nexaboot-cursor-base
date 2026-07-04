@@ -1,5 +1,5 @@
 // Indicadores consolidados de campanhas para o dashboard (últimos 30 dias).
-import { sql, ensureCampaignsSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 export const DASHBOARD_CAMPAIGNS_DAYS = 30;
 
@@ -48,7 +48,6 @@ function toInt(value: unknown): number {
 }
 
 export async function getDashboardCampaigns(companyId: string): Promise<DashboardCampaignsPayload> {
-  await ensureCampaignsSchema();
   const db = sql();
 
   const since = new Date();

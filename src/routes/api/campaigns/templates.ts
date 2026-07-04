@@ -20,8 +20,13 @@ export const Route = createFileRoute("/api/campaigns/templates")({
         const ctx = await getCampaignActor("view");
         if (ctx instanceof Response) return ctx;
 
-        const templates = await listCampaignTemplates(ctx.companyId);
-        return Response.json({ templates });
+        try {
+          const templates = await listCampaignTemplates(ctx.companyId);
+          return Response.json({ templates });
+        } catch (e) {
+          console.error("[CAMPAIGNS_TEMPLATES_LIST_FAIL]", e);
+          return Response.json({ templates: [] });
+        }
       },
 
       POST: async ({ request }) => {

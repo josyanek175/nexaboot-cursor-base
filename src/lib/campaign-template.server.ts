@@ -1,5 +1,5 @@
 // Modelos de mensagem reutilizáveis por empresa.
-import { sql, ensureCampaignsSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 export type CampaignTemplateRow = {
   id: string;
@@ -13,7 +13,6 @@ export type CampaignTemplateRow = {
 };
 
 export async function listCampaignTemplates(companyId: string): Promise<CampaignTemplateRow[]> {
-  await ensureCampaignsSchema();
   const rows = await sql<CampaignTemplateRow[]>`
     SELECT id, company_id, name, message_body, active,
            created_by_user_id, created_at, updated_at
@@ -29,7 +28,6 @@ export async function getCampaignTemplate(
   companyId: string,
   templateId: string,
 ): Promise<CampaignTemplateRow | null> {
-  await ensureCampaignsSchema();
   const rows = await sql<CampaignTemplateRow[]>`
     SELECT id, company_id, name, message_body, active,
            created_by_user_id, created_at, updated_at
@@ -47,7 +45,6 @@ export async function createCampaignTemplate(
   userId: string | null,
   data: { name: string; message_body: string },
 ): Promise<CampaignTemplateRow> {
-  await ensureCampaignsSchema();
   const rows = await sql<CampaignTemplateRow[]>`
     INSERT INTO public.campaign_templates
       (company_id, name, message_body, created_by_user_id)
@@ -67,7 +64,6 @@ export async function deactivateCampaignTemplate(
   companyId: string,
   templateId: string,
 ): Promise<boolean> {
-  await ensureCampaignsSchema();
   const rows = await sql<{ id: string }[]>`
     UPDATE public.campaign_templates
     SET active = false, updated_at = now()
