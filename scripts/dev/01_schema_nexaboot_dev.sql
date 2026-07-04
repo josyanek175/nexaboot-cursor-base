@@ -334,6 +334,21 @@ ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS send_mode TEXT NOT NULL DE
 ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS total_replied INT NOT NULL DEFAULT 0;
 ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS total_interested INT NOT NULL DEFAULT 0;
 ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS total_opt_out INT NOT NULL DEFAULT 0;
+ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS template_id UUID;
+ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS source_campaign_id UUID;
+
+CREATE TABLE IF NOT EXISTS public.campaign_templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  message_body TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_templates_company
+  ON public.campaign_templates (company_id, active, updated_at DESC);
 
 ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS greeting_variant TEXT;
 ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS closing_variant TEXT;

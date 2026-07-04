@@ -17,6 +17,7 @@ import {
   isInvalidCampaignPhone,
   isOptOutContact,
 } from "@/lib/campaign-send-policy";
+import { getCampaignTemplate } from "@/lib/campaign-template.server";
 
 export type CampaignRow = {
   id: string;
@@ -94,6 +95,8 @@ export type CampaignWriteInput = {
   schedule_date?: string | null;
   window_start_time?: string | null;
   window_end_time?: string | null;
+  template_id?: string | null;
+  source_campaign_id?: string | null;
 };
 
 type ActorContext = {
@@ -550,6 +553,7 @@ export async function createCampaign(
       company_id, whatsapp_channel_id, name, message_text,
       message_type, status, send_interval_ms, send_mode,
       schedule_date, window_start_time, window_end_time,
+      template_id, source_campaign_id,
       created_by_user_id
     )
     VALUES (
@@ -564,6 +568,8 @@ export async function createCampaign(
       ${scheduleDate}::date,
       ${windowStart}::time,
       ${windowEnd}::time,
+      ${data.template_id ?? null}::uuid,
+      ${data.source_campaign_id ?? null}::uuid,
       ${userId ?? null}::uuid
     )
     RETURNING id, company_id, whatsapp_channel_id, name, message_text,
@@ -874,4 +880,49 @@ export async function removeCampaignContact(
     campaign_contact_id: contactRowId,
   });
   return true;
+}
+
+/** Nova campanha rascunho a partir de campanha anterior (sem copiar público/histórico). */
+export async function createCampaignFromSource(
+  companyId: string,
+  userId: string | null,
+  sourceCampaignId: string,
+  opts?: { name?: string },
+): Promise<CampaignDetail | null> {
+  const source = await getCampaignById(companyId, sourceCampaignId);
+  if (!source) return null;
+
+  const suffix = new Date().toLocaleDateString("pt-BR");
+  const name = opts?.name?.trim() || `${source.name} — novo disparo ${suffix}`;
+
+  return createCampaign(companyId, userId, {
+    name,
+    message_text: source.message_text,
+    whatsapp_channel_id: source.whatsapp_channel_id,
+    source_campaign_id: sourceCampaignId,
+    schedule_date: null,
+    window_start_time: source.window_start_time
+      ? String(source.window_start_time).slice(0, 5)
+      : null,
+    window_end_time: source.window_end_time
+      ? String(source.window_end_time).slice(0, 5)
+      : null,
+  });
+}
+
+/** Nova campanha rascunho a partir de modelo salvo. */
+export async function createCampaignFromTemplate(
+  companyId: string,
+  userId: string | null,
+  templateId: string,
+  data: CampaignWriteInput & { name: string },
+): Promise<CampaignDetail | null> {
+  const tpl = await getCampaignTemplate(companyId, templateId);
+  if (!tpl) return null;
+
+  return createCampaign(companyId, userId, {
+    ...data,
+    message_text: data.message_text ?? tpl.message_body,
+    template_id: templateId,
+  });
 }

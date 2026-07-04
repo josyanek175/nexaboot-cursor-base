@@ -57,6 +57,7 @@ import { Route as ApiDashboardCampaignsRouteImport } from './routes/api/dashboar
 import { Route as ApiConversationsStartRouteImport } from './routes/api/conversations/start'
 import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
 import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
+import { Route as ApiCampaignsTemplatesRouteImport } from './routes/api/campaigns/templates'
 import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
@@ -78,7 +79,9 @@ import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/con
 import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
 import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
 import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
+import { Route as ApiCampaignsTemplatesIdRouteImport } from './routes/api/campaigns/templates/$id'
 import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaigns/$id/schedule'
+import { Route as ApiCampaignsIdReuseRouteImport } from './routes/api/campaigns/$id/reuse'
 import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
 import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
 import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
@@ -86,6 +89,8 @@ import { Route as ApiEvolutionChannelsIdStatusRouteImport } from './routes/api/e
 import { Route as ApiEvolutionChannelsIdQrcodeRouteImport } from './routes/api/evolution/channels/$id/qrcode'
 import { Route as ApiEvolutionChannelsIdDisconnectRouteImport } from './routes/api/evolution/channels/$id/disconnect'
 import { Route as ApiEvolutionChannelsIdConnectRouteImport } from './routes/api/evolution/channels/$id/connect'
+import { Route as ApiCampaignsIdImportPreviewRouteImport } from './routes/api/campaigns/$id/import/preview'
+import { Route as ApiCampaignsIdImportConfirmRouteImport } from './routes/api/campaigns/$id/import/confirm'
 import { Route as ApiCampaignsIdContactsContactRowIdRouteImport } from './routes/api/campaigns/$id/contacts/$contactRowId'
 
 const RegisterRoute = RegisterRouteImport.update({
@@ -329,6 +334,11 @@ const ApiCompaniesIdRoute = ApiCompaniesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiCompaniesRoute,
 } as any)
+const ApiCampaignsTemplatesRoute = ApiCampaignsTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => ApiCampaignsRoute,
+} as any)
 const ApiCampaignsIdRoute = ApiCampaignsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -443,9 +453,19 @@ const ApiCampaignsWorkerTickRoute = ApiCampaignsWorkerTickRouteImport.update({
   path: '/worker/tick',
   getParentRoute: () => ApiCampaignsRoute,
 } as any)
+const ApiCampaignsTemplatesIdRoute = ApiCampaignsTemplatesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiCampaignsTemplatesRoute,
+} as any)
 const ApiCampaignsIdScheduleRoute = ApiCampaignsIdScheduleRouteImport.update({
   id: '/schedule',
   path: '/schedule',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdReuseRoute = ApiCampaignsIdReuseRouteImport.update({
+  id: '/reuse',
+  path: '/reuse',
   getParentRoute: () => ApiCampaignsIdRoute,
 } as any)
 const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
@@ -488,6 +508,18 @@ const ApiEvolutionChannelsIdConnectRoute =
     id: '/connect',
     path: '/connect',
     getParentRoute: () => ApiEvolutionChannelsIdRoute,
+  } as any)
+const ApiCampaignsIdImportPreviewRoute =
+  ApiCampaignsIdImportPreviewRouteImport.update({
+    id: '/import/preview',
+    path: '/import/preview',
+    getParentRoute: () => ApiCampaignsIdRoute,
+  } as any)
+const ApiCampaignsIdImportConfirmRoute =
+  ApiCampaignsIdImportConfirmRouteImport.update({
+    id: '/import/confirm',
+    path: '/import/confirm',
+    getParentRoute: () => ApiCampaignsIdRoute,
   } as any)
 const ApiCampaignsIdContactsContactRowIdRoute =
   ApiCampaignsIdContactsContactRowIdRouteImport.update({
@@ -533,6 +565,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
@@ -556,7 +589,9 @@ export interface FileRoutesByFullPath {
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -568,6 +603,8 @@ export interface FileRoutesByFullPath {
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
+  '/api/campaigns/$id/import/confirm': typeof ApiCampaignsIdImportConfirmRoute
+  '/api/campaigns/$id/import/preview': typeof ApiCampaignsIdImportPreviewRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
   '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
@@ -611,6 +648,7 @@ export interface FileRoutesByTo {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
@@ -634,7 +672,9 @@ export interface FileRoutesByTo {
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/campanhas': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -646,6 +686,8 @@ export interface FileRoutesByTo {
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
+  '/api/campaigns/$id/import/confirm': typeof ApiCampaignsIdImportConfirmRoute
+  '/api/campaigns/$id/import/preview': typeof ApiCampaignsIdImportPreviewRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
   '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
@@ -692,6 +734,7 @@ export interface FileRoutesById {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
@@ -715,7 +758,9 @@ export interface FileRoutesById {
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/_app/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -727,6 +772,8 @@ export interface FileRoutesById {
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
+  '/api/campaigns/$id/import/confirm': typeof ApiCampaignsIdImportConfirmRoute
+  '/api/campaigns/$id/import/preview': typeof ApiCampaignsIdImportPreviewRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
   '/api/evolution/channels/$id/qrcode': typeof ApiEvolutionChannelsIdQrcodeRoute
@@ -773,6 +820,7 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
@@ -796,7 +844,9 @@ export interface FileRouteTypes {
     | '/api/webhooks/evolution'
     | '/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/reuse'
     | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/templates/$id'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -808,6 +858,8 @@ export interface FileRouteTypes {
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
     | '/api/campaigns/$id/contacts/$contactRowId'
+    | '/api/campaigns/$id/import/confirm'
+    | '/api/campaigns/$id/import/preview'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
     | '/api/evolution/channels/$id/qrcode'
@@ -851,6 +903,7 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
@@ -874,7 +927,9 @@ export interface FileRouteTypes {
     | '/api/webhooks/evolution'
     | '/campanhas'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/reuse'
     | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/templates/$id'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -886,6 +941,8 @@ export interface FileRouteTypes {
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
     | '/api/campaigns/$id/contacts/$contactRowId'
+    | '/api/campaigns/$id/import/confirm'
+    | '/api/campaigns/$id/import/preview'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
     | '/api/evolution/channels/$id/qrcode'
@@ -931,6 +988,7 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
@@ -954,7 +1012,9 @@ export interface FileRouteTypes {
     | '/api/webhooks/evolution'
     | '/_app/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/reuse'
     | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/templates/$id'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -966,6 +1026,8 @@ export interface FileRouteTypes {
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
     | '/api/campaigns/$id/contacts/$contactRowId'
+    | '/api/campaigns/$id/import/confirm'
+    | '/api/campaigns/$id/import/preview'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
     | '/api/evolution/channels/$id/qrcode'
@@ -1354,6 +1416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompaniesIdRouteImport
       parentRoute: typeof ApiCompaniesRoute
     }
+    '/api/campaigns/templates': {
+      id: '/api/campaigns/templates'
+      path: '/templates'
+      fullPath: '/api/campaigns/templates'
+      preLoaderRoute: typeof ApiCampaignsTemplatesRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
     '/api/campaigns/$id': {
       id: '/api/campaigns/$id'
       path: '/$id'
@@ -1501,11 +1570,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCampaignsWorkerTickRouteImport
       parentRoute: typeof ApiCampaignsRoute
     }
+    '/api/campaigns/templates/$id': {
+      id: '/api/campaigns/templates/$id'
+      path: '/$id'
+      fullPath: '/api/campaigns/templates/$id'
+      preLoaderRoute: typeof ApiCampaignsTemplatesIdRouteImport
+      parentRoute: typeof ApiCampaignsTemplatesRoute
+    }
     '/api/campaigns/$id/schedule': {
       id: '/api/campaigns/$id/schedule'
       path: '/schedule'
       fullPath: '/api/campaigns/$id/schedule'
       preLoaderRoute: typeof ApiCampaignsIdScheduleRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
+    '/api/campaigns/$id/reuse': {
+      id: '/api/campaigns/$id/reuse'
+      path: '/reuse'
+      fullPath: '/api/campaigns/$id/reuse'
+      preLoaderRoute: typeof ApiCampaignsIdReuseRouteImport
       parentRoute: typeof ApiCampaignsIdRoute
     }
     '/api/campaigns/$id/contacts': {
@@ -1556,6 +1639,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/evolution/channels/$id/connect'
       preLoaderRoute: typeof ApiEvolutionChannelsIdConnectRouteImport
       parentRoute: typeof ApiEvolutionChannelsIdRoute
+    }
+    '/api/campaigns/$id/import/preview': {
+      id: '/api/campaigns/$id/import/preview'
+      path: '/import/preview'
+      fullPath: '/api/campaigns/$id/import/preview'
+      preLoaderRoute: typeof ApiCampaignsIdImportPreviewRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
+    '/api/campaigns/$id/import/confirm': {
+      id: '/api/campaigns/$id/import/confirm'
+      path: '/import/confirm'
+      fullPath: '/api/campaigns/$id/import/confirm'
+      preLoaderRoute: typeof ApiCampaignsIdImportConfirmRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
     }
     '/api/campaigns/$id/contacts/$contactRowId': {
       id: '/api/campaigns/$id/contacts/$contactRowId'
@@ -1632,25 +1729,46 @@ const ApiCampaignsIdContactsRouteWithChildren =
 
 interface ApiCampaignsIdRouteChildren {
   ApiCampaignsIdContactsRoute: typeof ApiCampaignsIdContactsRouteWithChildren
+  ApiCampaignsIdReuseRoute: typeof ApiCampaignsIdReuseRoute
   ApiCampaignsIdScheduleRoute: typeof ApiCampaignsIdScheduleRoute
+  ApiCampaignsIdImportConfirmRoute: typeof ApiCampaignsIdImportConfirmRoute
+  ApiCampaignsIdImportPreviewRoute: typeof ApiCampaignsIdImportPreviewRoute
 }
 
 const ApiCampaignsIdRouteChildren: ApiCampaignsIdRouteChildren = {
   ApiCampaignsIdContactsRoute: ApiCampaignsIdContactsRouteWithChildren,
+  ApiCampaignsIdReuseRoute: ApiCampaignsIdReuseRoute,
   ApiCampaignsIdScheduleRoute: ApiCampaignsIdScheduleRoute,
+  ApiCampaignsIdImportConfirmRoute: ApiCampaignsIdImportConfirmRoute,
+  ApiCampaignsIdImportPreviewRoute: ApiCampaignsIdImportPreviewRoute,
 }
 
 const ApiCampaignsIdRouteWithChildren = ApiCampaignsIdRoute._addFileChildren(
   ApiCampaignsIdRouteChildren,
 )
 
+interface ApiCampaignsTemplatesRouteChildren {
+  ApiCampaignsTemplatesIdRoute: typeof ApiCampaignsTemplatesIdRoute
+}
+
+const ApiCampaignsTemplatesRouteChildren: ApiCampaignsTemplatesRouteChildren = {
+  ApiCampaignsTemplatesIdRoute: ApiCampaignsTemplatesIdRoute,
+}
+
+const ApiCampaignsTemplatesRouteWithChildren =
+  ApiCampaignsTemplatesRoute._addFileChildren(
+    ApiCampaignsTemplatesRouteChildren,
+  )
+
 interface ApiCampaignsRouteChildren {
   ApiCampaignsIdRoute: typeof ApiCampaignsIdRouteWithChildren
+  ApiCampaignsTemplatesRoute: typeof ApiCampaignsTemplatesRouteWithChildren
   ApiCampaignsWorkerTickRoute: typeof ApiCampaignsWorkerTickRoute
 }
 
 const ApiCampaignsRouteChildren: ApiCampaignsRouteChildren = {
   ApiCampaignsIdRoute: ApiCampaignsIdRouteWithChildren,
+  ApiCampaignsTemplatesRoute: ApiCampaignsTemplatesRouteWithChildren,
   ApiCampaignsWorkerTickRoute: ApiCampaignsWorkerTickRoute,
 }
 

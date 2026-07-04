@@ -865,6 +865,41 @@ export async function ensureCampaignsSchema(s?: ReturnType<typeof sql>): Promise
     CREATE INDEX IF NOT EXISTS idx_campaigns_company_active
       ON public.campaigns (company_id, created_at DESC)
       WHERE deleted_at IS NULL;
+
+    -- Modelos de mensagem reutilizáveis por empresa.
+    CREATE TABLE IF NOT EXISTS public.campaign_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      message_body TEXT NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_campaign_templates_company
+      ON public.campaign_templates (company_id, active, updated_at DESC);
+
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS template_id UUID;
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS source_campaign_id UUID;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'campaigns_template_id_fkey'
+      ) THEN
+        ALTER TABLE public.campaigns
+          ADD CONSTRAINT campaigns_template_id_fkey
+          FOREIGN KEY (template_id) REFERENCES public.campaign_templates(id) ON DELETE SET NULL;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'campaigns_source_campaign_id_fkey'
+      ) THEN
+        ALTER TABLE public.campaigns
+          ADD CONSTRAINT campaigns_source_campaign_id_fkey
+          FOREIGN KEY (source_campaign_id) REFERENCES public.campaigns(id) ON DELETE SET NULL;
+      END IF;
+    END$$;
   `);
 }
 
