@@ -1,5 +1,6 @@
-// Campanhas — lógica server-side (fase 1: rascunhos + público).
-// Isolamento estrito por company_id. Sem envio WhatsApp nesta fase.
+// Campanhas — lógica server-side (rascunhos + público + agenda).
+// Ritmo de envio é interno (auto_safe). Cliente não configura intervalo/pausa.
+// Isolamento estrito por company_id.
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
@@ -10,6 +11,12 @@ import {
   type ActingUser,
 } from "@/lib/permissions";
 import { normalizePhone } from "@/lib/phone";
+import {
+  CAMPAIGN_SEND_MODE,
+  buildVariedMessage,
+  isInvalidCampaignPhone,
+  isOptOutContact,
+} from "@/lib/campaign-send-policy";
 
 export type CampaignRow = {
   id: string;
@@ -23,10 +30,17 @@ export type CampaignRow = {
   started_at: string | null;
   finished_at: string | null;
   send_interval_ms: number;
+  schedule_date: string | null;
+  window_start_time: string | null;
+  window_end_time: string | null;
+  send_mode: string;
   total_contacts: number;
   sent_count: number;
   failed_count: number;
   skipped_count: number;
+  total_replied: number;
+  total_interested: number;
+  total_opt_out: number;
   created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
@@ -47,7 +61,39 @@ export type CampaignContactRow = {
   variables: Record<string, unknown>;
   status: string;
   skip_reason: string | null;
+  greeting_variant: string | null;
+  closing_variant: string | null;
+  rendered_message: string | null;
+  responded_at: string | null;
+  response_text: string | null;
+  response_intent: string | null;
   created_at: string;
+};
+
+function normalizeTimeInput(v: string | null | undefined): string | null {
+  if (v == null || String(v).trim() === "") return null;
+  const m = String(v).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}:00`;
+}
+
+function normalizeDateInput(v: string | null | undefined): string | null {
+  if (v == null || String(v).trim() === "") return null;
+  const s = String(v).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  return s;
+}
+
+export type CampaignWriteInput = {
+  name?: string;
+  message_text?: string | null;
+  whatsapp_channel_id?: string | null;
+  schedule_date?: string | null;
+  window_start_time?: string | null;
+  window_end_time?: string | null;
 };
 
 type ActorContext = {
@@ -63,8 +109,13 @@ export async function listCampaigns(companyId: string, status?: string): Promise
           SELECT
             c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
             c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
-            c.send_interval_ms, c.total_contacts, c.sent_count, c.failed_count,
-            c.skipped_count, c.created_by_user_id, c.created_at, c.updated_at,
+            c.send_interval_ms, c.schedule_date, c.window_start_time, c.window_end_time,
+            COALESCE(c.send_mode, 'auto_safe') AS send_mode,
+            c.total_contacts, c.sent_count, c.failed_count, c.skipped_count,
+            COALESCE(c.total_replied, 0) AS total_replied,
+            COALESCE(c.total_interested, 0) AS total_interested,
+            COALESCE(c.total_opt_out, 0) AS total_opt_out,
+            c.created_by_user_id, c.created_at, c.updated_at,
             ch.name AS channel_name
           FROM public.campaigns c
           LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
@@ -79,8 +130,13 @@ export async function listCampaigns(companyId: string, status?: string): Promise
           SELECT
             c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
             c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
-            c.send_interval_ms, c.total_contacts, c.sent_count, c.failed_count,
-            c.skipped_count, c.created_by_user_id, c.created_at, c.updated_at,
+            c.send_interval_ms, c.schedule_date, c.window_start_time, c.window_end_time,
+            COALESCE(c.send_mode, 'auto_safe') AS send_mode,
+            c.total_contacts, c.sent_count, c.failed_count, c.skipped_count,
+            COALESCE(c.total_replied, 0) AS total_replied,
+            COALESCE(c.total_interested, 0) AS total_interested,
+            COALESCE(c.total_opt_out, 0) AS total_opt_out,
+            c.created_by_user_id, c.created_at, c.updated_at,
             ch.name AS channel_name
           FROM public.campaigns c
           LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
@@ -342,7 +398,8 @@ export async function syncCampaignContactCounters(
   campaignId: string,
   companyId: string,
 ): Promise<void> {
-  await sql()`
+  const s = sql();
+  await s`
     UPDATE public.campaigns c
     SET total_contacts = (
           SELECT COUNT(*)::int FROM public.campaign_contacts cc
@@ -352,11 +409,86 @@ export async function syncCampaignContactCounters(
           SELECT COUNT(*)::int FROM public.campaign_contacts cc
           WHERE cc.campaign_id = c.id AND cc.status = 'skipped'
         ),
+        sent_count = (
+          SELECT COUNT(*)::int FROM public.campaign_contacts cc
+          WHERE cc.campaign_id = c.id AND cc.status IN ('sent', 'responded')
+        ),
+        failed_count = (
+          SELECT COUNT(*)::int FROM public.campaign_contacts cc
+          WHERE cc.campaign_id = c.id AND cc.status IN ('failed', 'erro_envio')
+        ),
+        total_replied = (
+          SELECT COUNT(*)::int FROM public.campaign_contacts cc
+          WHERE cc.campaign_id = c.id AND cc.status = 'responded'
+        ),
+        total_interested = (
+          SELECT COUNT(*)::int FROM public.campaign_contacts cc
+          WHERE cc.campaign_id = c.id AND cc.response_intent = 'interested'
+        ),
+        total_opt_out = (
+          SELECT COUNT(*)::int FROM public.campaign_contacts cc
+          WHERE cc.campaign_id = c.id AND cc.response_intent = 'opt_out'
+        ),
         updated_at = now()
     WHERE c.id = ${campaignId}::uuid
       AND c.company_id = ${companyId}::uuid
       AND c.deleted_at IS NULL
   `;
+}
+
+/** Agenda campanha (draft → scheduled). Ritmo continua interno (auto_safe). */
+export async function scheduleCampaign(
+  companyId: string,
+  campaignId: string,
+  userId: string | null,
+): Promise<CampaignDetail | null> {
+  const existing = await getCampaignById(companyId, campaignId);
+  if (!existing) return null;
+  if (existing.status !== "draft" && existing.status !== "paused") {
+    throw new Error("not_schedulable");
+  }
+  if (!existing.whatsapp_channel_id) throw new Error("missing_channel");
+  if (!existing.message_text?.trim()) throw new Error("missing_message");
+  if (!existing.schedule_date) throw new Error("missing_schedule_date");
+  if (!existing.window_start_time || !existing.window_end_time) {
+    throw new Error("missing_window");
+  }
+
+  const ch = await validateEvolutionChannel(companyId, existing.whatsapp_channel_id);
+  if (!ch.ok) throw new Error("invalid_channel");
+
+  const s = sql();
+  const pending = await s<{ count: string }[]>`
+    SELECT COUNT(*)::text AS count FROM public.campaign_contacts
+    WHERE campaign_id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status = 'pending'
+  `;
+  if (parseInt(pending[0]?.count ?? "0", 10) < 1) throw new Error("no_pending_contacts");
+
+  const rows = await s<CampaignRow[]>`
+    UPDATE public.campaigns
+    SET status = 'scheduled',
+        send_mode = 'auto_safe',
+        updated_at = now()
+    WHERE id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND deleted_at IS NULL
+    RETURNING id, company_id, whatsapp_channel_id, name, message_text,
+              message_type, status, scheduled_at, started_at, finished_at,
+              send_interval_ms, schedule_date, window_start_time, window_end_time,
+              send_mode, total_contacts, sent_count, failed_count, skipped_count,
+              total_replied, total_interested, total_opt_out,
+              created_by_user_id, created_at, updated_at
+  `;
+  if (!rows[0]) return null;
+
+  await insertCampaignEvent(companyId, campaignId, "campaign.scheduled", userId, {
+    schedule_date: existing.schedule_date,
+    window_start_time: existing.window_start_time,
+    window_end_time: existing.window_end_time,
+  });
+  return withChannelStatus(companyId, rows[0]);
 }
 
 export async function getCampaignById(
@@ -367,8 +499,13 @@ export async function getCampaignById(
     SELECT
       c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
       c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
-      c.send_interval_ms, c.total_contacts, c.sent_count, c.failed_count,
-      c.skipped_count, c.created_by_user_id, c.created_at, c.updated_at,
+      c.send_interval_ms, c.schedule_date, c.window_start_time, c.window_end_time,
+      COALESCE(c.send_mode, 'auto_safe') AS send_mode,
+      c.total_contacts, c.sent_count, c.failed_count, c.skipped_count,
+      COALESCE(c.total_replied, 0) AS total_replied,
+      COALESCE(c.total_interested, 0) AS total_interested,
+      COALESCE(c.total_opt_out, 0) AS total_opt_out,
+      c.created_by_user_id, c.created_at, c.updated_at,
       ch.name AS channel_name
     FROM public.campaigns c
     LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
@@ -394,22 +531,26 @@ export async function getCampaignDetail(
 export async function createCampaign(
   companyId: string,
   userId: string | null,
-  data: {
-    name: string;
-    message_text?: string | null;
-    whatsapp_channel_id?: string | null;
-    send_interval_ms?: number;
-  },
+  data: CampaignWriteInput & { name: string },
 ): Promise<CampaignDetail> {
   if (data.whatsapp_channel_id) {
     const ch = await validateEvolutionChannel(companyId, data.whatsapp_channel_id);
     if (!ch.ok) throw new Error(ch.error);
   }
 
+  const scheduleDate = normalizeDateInput(data.schedule_date);
+  const windowStart = normalizeTimeInput(data.window_start_time);
+  const windowEnd = normalizeTimeInput(data.window_end_time);
+  if (windowStart && windowEnd && windowStart === windowEnd) {
+    throw new Error("invalid_window");
+  }
+
   const rows = await sql<CampaignRow[]>`
     INSERT INTO public.campaigns (
       company_id, whatsapp_channel_id, name, message_text,
-      message_type, status, send_interval_ms, created_by_user_id
+      message_type, status, send_interval_ms, send_mode,
+      schedule_date, window_start_time, window_end_time,
+      created_by_user_id
     )
     VALUES (
       ${companyId}::uuid,
@@ -418,17 +559,24 @@ export async function createCampaign(
       ${data.message_text ?? null},
       'text',
       'draft',
-      ${data.send_interval_ms ?? 5000},
+      5000,
+      ${CAMPAIGN_SEND_MODE},
+      ${scheduleDate}::date,
+      ${windowStart}::time,
+      ${windowEnd}::time,
       ${userId ?? null}::uuid
     )
     RETURNING id, company_id, whatsapp_channel_id, name, message_text,
               message_type, status, scheduled_at, started_at, finished_at,
-              send_interval_ms, total_contacts, sent_count, failed_count,
-              skipped_count, created_by_user_id, created_at, updated_at
+              send_interval_ms, schedule_date, window_start_time, window_end_time,
+              send_mode, total_contacts, sent_count, failed_count, skipped_count,
+              total_replied, total_interested, total_opt_out,
+              created_by_user_id, created_at, updated_at
   `;
   const campaign = rows[0];
   await insertCampaignEvent(companyId, campaign.id, "campaign.created", userId, {
     name: data.name,
+    send_mode: CAMPAIGN_SEND_MODE,
   });
   return withChannelStatus(companyId, campaign);
 }
@@ -437,12 +585,7 @@ export async function updateCampaign(
   companyId: string,
   campaignId: string,
   userId: string | null,
-  data: {
-    name?: string;
-    message_text?: string | null;
-    whatsapp_channel_id?: string | null;
-    send_interval_ms?: number;
-  },
+  data: CampaignWriteInput,
 ): Promise<CampaignDetail | null> {
   const existing = await getCampaignById(companyId, campaignId);
   if (!existing) return null;
@@ -461,14 +604,34 @@ export async function updateCampaign(
     data.whatsapp_channel_id !== undefined
       ? data.whatsapp_channel_id
       : existing.whatsapp_channel_id;
-  const nextInterval = data.send_interval_ms ?? existing.send_interval_ms;
+  const nextSchedule =
+    data.schedule_date !== undefined
+      ? normalizeDateInput(data.schedule_date)
+      : existing.schedule_date
+        ? String(existing.schedule_date).slice(0, 10)
+        : null;
+  const nextStart =
+    data.window_start_time !== undefined
+      ? normalizeTimeInput(data.window_start_time)
+      : normalizeTimeInput(existing.window_start_time);
+  const nextEnd =
+    data.window_end_time !== undefined
+      ? normalizeTimeInput(data.window_end_time)
+      : normalizeTimeInput(existing.window_end_time);
+
+  if (nextStart && nextEnd && nextStart === nextEnd) {
+    throw new Error("invalid_window");
+  }
 
   const rows = await sql<CampaignRow[]>`
     UPDATE public.campaigns
     SET name = ${nextName},
         message_text = ${nextMessage},
         whatsapp_channel_id = ${nextChannel}::uuid,
-        send_interval_ms = ${nextInterval},
+        schedule_date = ${nextSchedule}::date,
+        window_start_time = ${nextStart}::time,
+        window_end_time = ${nextEnd}::time,
+        send_mode = ${CAMPAIGN_SEND_MODE},
         updated_at = now()
     WHERE id = ${campaignId}::uuid
       AND company_id = ${companyId}::uuid
@@ -476,8 +639,10 @@ export async function updateCampaign(
       AND deleted_at IS NULL
     RETURNING id, company_id, whatsapp_channel_id, name, message_text,
               message_type, status, scheduled_at, started_at, finished_at,
-              send_interval_ms, total_contacts, sent_count, failed_count,
-              skipped_count, created_by_user_id, created_at, updated_at
+              send_interval_ms, schedule_date, window_start_time, window_end_time,
+              send_mode, total_contacts, sent_count, failed_count, skipped_count,
+              total_replied, total_interested, total_opt_out,
+              created_by_user_id, created_at, updated_at
   `;
   if (!rows[0]) return null;
 
@@ -489,6 +654,55 @@ export async function updateCampaign(
     data as Record<string, unknown>,
   );
   return withChannelStatus(companyId, rows[0]);
+}
+
+/** Prepara e grava a variação de mensagem para um contato da campanha (uso no worker de envio). */
+export async function prepareCampaignContactMessage(
+  companyId: string,
+  campaignId: string,
+  contactRowId: string,
+): Promise<{ rendered_message: string; greeting_variant: string; closing_variant: string } | null> {
+  const campaign = await getCampaignById(companyId, campaignId);
+  if (!campaign?.message_text) return null;
+
+  const rows = await sql<
+    {
+      id: string;
+      phone: string;
+      name: string | null;
+      variables: Record<string, unknown> | null;
+    }[]
+  >`
+    SELECT id, phone, name, variables
+    FROM public.campaign_contacts
+    WHERE id = ${contactRowId}::uuid
+      AND campaign_id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+
+  const variation = buildVariedMessage(campaign.message_text, {
+    ...(row.variables ?? {}),
+    nome: row.name,
+    name: row.name,
+    phone: row.phone,
+  });
+
+  await sql`
+    UPDATE public.campaign_contacts
+    SET greeting_variant = ${variation.greeting_variant},
+        closing_variant = ${variation.closing_variant},
+        rendered_message = ${variation.rendered_message}
+    WHERE id = ${row.id}::uuid
+  `;
+
+  return {
+    rendered_message: variation.rendered_message,
+    greeting_variant: variation.greeting_variant,
+    closing_variant: variation.closing_variant,
+  };
 }
 
 export async function deleteCampaign(
@@ -538,7 +752,10 @@ export async function listCampaignContacts(
 
   const contacts = await sql<CampaignContactRow[]>`
     SELECT cc.id, cc.campaign_id, cc.company_id, cc.contact_id, cc.phone,
-           cc.name, cc.variables, cc.status, cc.skip_reason, cc.created_at
+           cc.name, cc.variables, cc.status, cc.skip_reason,
+           cc.greeting_variant, cc.closing_variant, cc.rendered_message,
+           cc.responded_at, cc.response_text, cc.response_intent,
+           cc.created_at
     FROM public.campaign_contacts cc
     INNER JOIN public.campaigns c ON c.id = cc.campaign_id
     WHERE cc.campaign_id = ${campaignId}::uuid
@@ -568,9 +785,10 @@ export async function addCampaignContacts(
       phone: string;
       name: string | null;
       status: string | null;
+      tags: string[] | null;
     }[]
   >`
-    SELECT id, phone, name, status
+    SELECT id, phone, name, status, tags
     FROM public.contacts
     WHERE company_id = ${companyId}::uuid
       AND id = ANY(${contactIds}::uuid[])
@@ -581,16 +799,20 @@ export async function addCampaignContacts(
 
   for (const ct of contacts) {
     const phone = normalizePhone(ct.phone);
-    if (phone.length < 8) {
-      skipped++;
-      continue;
+
+    let rowStatus = "pending";
+    let skipReason: string | null = null;
+
+    if (isInvalidCampaignPhone(phone)) {
+      rowStatus = "skipped";
+      skipReason = "invalid_phone";
+    } else if (isOptOutContact({ status: ct.status, tags: ct.tags })) {
+      rowStatus = "skipped";
+      skipReason = ct.status === "inativo" || ct.status === "merged" ? "contact_inactive" : "opt_out";
     }
 
-    const isInactive = ct.status === "inativo" || ct.status === "merged";
-    const rowStatus = isInactive ? "skipped" : "pending";
-    const skipReason = isInactive ? "contact_inactive" : null;
-
     try {
+      // Duplicado na mesma campanha: ON CONFLICT (campaign_id, phone) ignora.
       const inserted = await sql<{ id: string }[]>`
         INSERT INTO public.campaign_contacts
           (campaign_id, company_id, contact_id, phone, name, status, skip_reason)
@@ -603,8 +825,9 @@ export async function addCampaignContacts(
       `;
       if (inserted[0]) {
         if (rowStatus === "pending") added++;
+        else skipped++;
       } else {
-        skipped++;
+        skipped++; // duplicado
       }
     } catch {
       skipped++;

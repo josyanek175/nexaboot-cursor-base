@@ -18,7 +18,6 @@ type CampaignRow = {
   total_contacts: number;
   skipped_count: number;
   channel_name: string | null;
-  send_interval_ms: number;
   created_at: string;
   updated_at: string;
 };
@@ -26,9 +25,9 @@ type CampaignRow = {
 const STATUS_LABEL: Record<string, string> = {
   draft: "Rascunho",
   scheduled: "Agendada",
-  running: "Em envio",
-  paused: "Pausada",
-  completed: "Concluída",
+  running: "Enviando",
+  paused: "Pausada (janela)",
+  completed: "Finalizada",
   canceled: "Cancelada",
   failed: "Falhou",
 };

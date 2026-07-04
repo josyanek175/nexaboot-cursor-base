@@ -6,7 +6,8 @@ import { normalizePhoneForMatch } from "@/lib/phone";
 let _sql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
 
-export function sql() {
+/** Cliente postgres.js. Use `sql()`…` ou `const s = sql(); s`…``. */
+export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
   if (!_sql) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL não configurada");
@@ -19,6 +20,11 @@ export function sql() {
       prepare: false,
     });
   }
+  // Chamada como tagged template: sql`SELECT …`
+  if (strings && Array.isArray(strings) && "raw" in strings) {
+    return (_sql as (...args: unknown[]) => unknown)(strings, ...values);
+  }
+  // Chamada normal: const s = sql(); await s`SELECT …`
   return _sql;
 }
 
@@ -805,6 +811,48 @@ export async function ensureCampaignsSchema(s?: ReturnType<typeof sql>): Promise
       ON public.campaign_events (company_id);
 
     ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+    -- Agenda e janela de envio (cliente configura só isso; ritmo é interno).
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS schedule_date DATE;
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS window_start_time TIME;
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS window_end_time TIME;
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS send_mode TEXT NOT NULL DEFAULT 'auto_safe';
+
+    -- Variação de mensagem e motivo de skip por contato.
+    ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS greeting_variant TEXT;
+    ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS closing_variant TEXT;
+    ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS rendered_message TEXT;
+    -- Resposta do cliente ao disparo.
+    ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS responded_at TIMESTAMPTZ;
+    ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS response_text TEXT;
+    ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS response_intent TEXT;
+
+    -- Contadores de resposta na campanha.
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS total_replied INT NOT NULL DEFAULT 0;
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS total_interested INT NOT NULL DEFAULT 0;
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS total_opt_out INT NOT NULL DEFAULT 0;
+
+    -- Opt-out global por empresa (impede novos disparos).
+    CREATE TABLE IF NOT EXISTS public.opt_out_contacts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      phone TEXT NOT NULL,
+      phone_match TEXT,
+      source TEXT,
+      campaign_id UUID REFERENCES public.campaigns(id) ON DELETE SET NULL,
+      campaign_contact_id UUID REFERENCES public.campaign_contacts(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS opt_out_contacts_company_phone_uniq
+      ON public.opt_out_contacts (company_id, phone);
+    CREATE INDEX IF NOT EXISTS idx_opt_out_contacts_company_match
+      ON public.opt_out_contacts (company_id, phone_match);
+
+    -- Origem de resposta de campanha na conversa (atendimento).
+    ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS campaign_reply_campaign_id UUID;
+    ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS campaign_reply_campaign_name TEXT;
+    ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS campaign_reply_text TEXT;
+    ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS campaign_reply_intent TEXT;
+    ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS campaign_reply_at TIMESTAMPTZ;
 
     CREATE INDEX IF NOT EXISTS idx_campaigns_company_active
       ON public.campaigns (company_id, created_at DESC)

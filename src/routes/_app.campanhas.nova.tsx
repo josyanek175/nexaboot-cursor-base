@@ -1,8 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Megaphone, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { canManageCampaigns, actingUserFromAuth } from "@/lib/permissions";
 
@@ -27,8 +26,15 @@ function campaignApiError(status: number, body: { error?: string; message?: stri
     return body.message ?? "Sem permissão para criar campanhas.";
   }
   if (body.error === "invalid_channel") return "Canal WhatsApp inválido para esta empresa.";
+  if (body.error === "invalid_window") return "Horário inicial e final não podem ser iguais.";
   if (body.error === "invalid_input") return "Dados da campanha inválidos.";
   return body.message ?? "Não foi possível salvar a campanha. Tente novamente.";
+}
+
+function toTimeInput(v: string): string {
+  const m = v.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return v;
+  return `${m[1].padStart(2, "0")}:${m[2]}`;
 }
 
 function NovaCampanhaPage() {
@@ -42,10 +48,11 @@ function NovaCampanhaPage() {
   const [name, setName] = useState("");
   const [messageText, setMessageText] = useState("");
   const [channelId, setChannelId] = useState("");
-  const [sendIntervalMs, setSendIntervalMs] = useState(5000);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [windowStart, setWindowStart] = useState("09:00");
+  const [windowEnd, setWindowEnd] = useState("18:00");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [saving, setSaving] = useState(false);
-
   const [channelsError, setChannelsError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -118,7 +125,9 @@ function NovaCampanhaPage() {
           name: name.trim(),
           message_text: messageText.trim() || null,
           whatsapp_channel_id: channelId || null,
-          send_interval_ms: sendIntervalMs,
+          schedule_date: scheduleDate || null,
+          window_start_time: windowStart ? toTimeInput(windowStart) : null,
+          window_end_time: windowEnd ? toTimeInput(windowEnd) : null,
         }),
       });
       if (!res.ok) {
@@ -145,7 +154,7 @@ function NovaCampanhaPage() {
         <div>
           <h1 className="text-lg font-semibold">Nova campanha</h1>
           <p className="text-xs text-muted-foreground">
-            Salvar como rascunho — sem envio nesta fase
+            Configure a mensagem e a janela de envio — o ritmo é automático
           </p>
         </div>
       </header>
@@ -167,19 +176,8 @@ function NovaCampanhaPage() {
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted-foreground">Mensagem</span>
-          <textarea
-            value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
-            rows={5}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
-            placeholder="Texto que será enviado aos contatos…"
-          />
-        </label>
-
-        <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted-foreground">
-            Canal WhatsApp (Evolution)
+            Canal / número de envio (WhatsApp)
           </span>
           {channelsError ? (
             <p className="mb-2 text-xs text-destructive">{channelsError}</p>
@@ -189,7 +187,7 @@ function NovaCampanhaPage() {
             onChange={(e) => setChannelId(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
           >
-            <option value="">Nenhum (definir depois)</option>
+            <option value="">Selecione o canal</option>
             {channels.map((ch) => (
               <option key={ch.id} value={ch.id}>
                 {ch.name} ({ch.status})
@@ -200,20 +198,67 @@ function NovaCampanhaPage() {
 
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted-foreground">
-            Intervalo entre envios (ms) — usado na fase de envio
+            Mensagem modelo (use tags da planilha)
+          </span>
+          <textarea
+            value={messageText}
+            onChange={(e) => setMessageText(e.target.value)}
+            rows={5}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
+            placeholder={"Ex.: Temos uma condição especial para você.\nUse tags como {nome} ou {telefone}."}
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            O sistema adiciona automaticamente uma saudação e um fechamento variados.
+            Tags: {"{nome}"}, {"{telefone}"} e colunas da planilha.
+          </p>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">
+            Data de envio
           </span>
           <input
-            type="number"
-            min={1000}
-            max={600000}
-            step={1000}
-            value={sendIntervalMs}
-            onChange={(e) => setSendIntervalMs(Number(e.target.value))}
+            type="date"
+            value={scheduleDate}
+            onChange={(e) => setScheduleDate(e.target.value)}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
           />
         </label>
 
-        <div className="flex justify-end gap-2 pt-4">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">
+              Horário inicial
+            </span>
+            <input
+              type="time"
+              value={windowStart}
+              onChange={(e) => setWindowStart(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">
+              Horário final
+            </span>
+            <input
+              type="time"
+              value={windowEnd}
+              onChange={(e) => setWindowEnd(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
+            />
+          </label>
+        </div>
+
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+          <span className="font-medium">Modo de envio:</span> Automático seguro
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          A lista de contatos (planilha/público) é definida na próxima tela, após salvar o rascunho.
+        </p>
+
+        <div className="flex justify-end gap-2 pt-2">
           <Link to="/campanhas" className="rounded-md px-3 py-2 text-sm hover:bg-accent">
             Cancelar
           </Link>

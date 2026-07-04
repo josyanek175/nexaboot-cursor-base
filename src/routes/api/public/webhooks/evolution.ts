@@ -6,9 +6,10 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql, ensureCrmSchema, ensureCampaignsSchema } from "@/lib/pg.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
+import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
 
 const PayloadSchema = z
   .object({
@@ -403,6 +404,22 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
         updated_at = now()
     WHERE id = ${conversationId}::uuid
   `;
+
+  // Resposta a disparo de campanha (somente inbound de texto).
+  if (!fromMe && parsed.type === "text" && parsed.body) {
+    try {
+      await ensureCampaignsSchema();
+      await handleCampaignInboundReply({
+        companyId: channel.company_id,
+        channelId: channel.id,
+        conversationId,
+        phone,
+        responseText: parsed.body,
+      });
+    } catch (e) {
+      console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", e);
+    }
+  }
 }
 
 async function handleConnectionUpdate(channel: ChannelRow, raw: Json) {

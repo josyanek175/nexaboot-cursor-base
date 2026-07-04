@@ -76,6 +76,10 @@ interface Conversation {
   isMine?: boolean;
   lastMessageAt: string;
   tags: string[];
+  campaignReplyCampaignId?: string;
+  campaignReplyCampaignName?: string;
+  campaignReplyText?: string;
+  campaignReplyIntent?: string;
 }
 interface Message {
   id: string;
@@ -289,6 +293,10 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
     isMine: c.is_mine === true,
     lastMessageAt: c.last_message_at ?? new Date().toISOString(),
     tags: [],
+    campaignReplyCampaignId: c.campaign_reply_campaign_id ?? undefined,
+    campaignReplyCampaignName: c.campaign_reply_campaign_name ?? undefined,
+    campaignReplyText: c.campaign_reply_text ?? undefined,
+    campaignReplyIntent: c.campaign_reply_intent ?? undefined,
   };
 }
 
@@ -1300,7 +1308,35 @@ function AtendimentoPage() {
               showDetails={showDetails}
               onToggleDetails={() => setShowDetails((v) => !v)}
               onBack={() => setMobileView("list")}
+              onAssume={assumeSelf}
             />
+            {selected.campaignReplyCampaignId && (
+              <div className="border-b border-border bg-amber-50 px-4 py-2 text-xs text-amber-900">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold">
+                    Resposta de Campanha
+                  </span>
+                  <span className="font-medium">{selected.campaignReplyCampaignName}</span>
+                  {selected.campaignReplyIntent && (
+                    <span className="text-amber-800/80">
+                      ·{" "}
+                      {selected.campaignReplyIntent === "interested"
+                        ? "Interessado"
+                        : selected.campaignReplyIntent === "opt_out"
+                          ? "Opt-out"
+                          : selected.campaignReplyIntent === "not_interested"
+                            ? "Sem interesse"
+                            : "Resposta"}
+                    </span>
+                  )}
+                </div>
+                {selected.campaignReplyText && (
+                  <p className="mt-1 truncate text-amber-900/90">
+                    Resposta: “{selected.campaignReplyText}”
+                  </p>
+                )}
+              </div>
+            )}
             <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
               <div className="mx-auto max-w-3xl space-y-2">
                 {loadingMsgs && (
@@ -1444,6 +1480,11 @@ function ConversationRow({
                   ? (conv.assignedUserName || getUser(conv.assignedTo)?.name || "Atendente")
                   : "Sem responsável"}
             </span>
+            {conv.campaignReplyCampaignId && (
+              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                Campanha
+              </span>
+            )}
             <StatusChip status={conv.status} />
           </div>
         </div>
@@ -1513,11 +1554,18 @@ function FilterSelect({
 
 // ───────── Header do chat ─────────
 function ChatHeader({
-  conversation, showDetails, onToggleDetails, onBack,
-}: { conversation: Conversation; showDetails: boolean; onToggleDetails: () => void; onBack?: () => void }) {
+  conversation, showDetails, onToggleDetails, onBack, onAssume,
+}: {
+  conversation: Conversation;
+  showDetails: boolean;
+  onToggleDetails: () => void;
+  onBack?: () => void;
+  onAssume?: () => void;
+}) {
   const ct = getContact(conversation.contactId);
   const ch = getChannel(conversation.channelId);
   const isGroup = groupContactIds.has(conversation.contactId);
+  const showAssume = !conversation.assignedTo && !!onAssume;
   return (
     <header className="flex items-center justify-between border-b border-border bg-card px-4 py-2.5">
       <div className="flex min-w-0 items-center gap-3">
@@ -1543,23 +1591,29 @@ function ChatHeader({
             {isGroup && (
               <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">Grupo</span>
             )}
+            {conversation.campaignReplyCampaignId && (
+              <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                Campanha
+              </span>
+            )}
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {!isGroup && ct.phone ? `${ct.phone} · ` : ""}{ch.name} · {responsibleLabel(conversation)}
           </div>
-          {(() => {
-            const dbg = conversationDebug.get(conversation.id);
-            if (!dbg || (!dbg.pushName && !dbg.remoteJid)) return null;
-            return (
-              <div className="truncate text-[10px] text-amber-600">
-                debug · pushName: {dbg.pushName ?? "—"} · remoteJid: {dbg.remoteJid ?? "—"}
-              </div>
-            );
-          })()}
         </div>
 
       </div>
       <div className="flex items-center gap-1 text-muted-foreground sm:gap-2">
+        {showAssume && (
+          <button
+            type="button"
+            onClick={onAssume}
+            className="inline-flex items-center gap-1 rounded-md bg-whatsapp px-2.5 py-1.5 text-xs font-medium text-whatsapp-foreground hover:opacity-90"
+          >
+            <CheckCircle className="h-3.5 w-3.5" />
+            Assumir atendimento
+          </button>
+        )}
         <ChannelModeBadge channel={ch} />
         <button className="hidden rounded-md p-2 hover:bg-muted sm:inline-flex" title="Ligar"><Phone className="h-4 w-4" /></button>
         <button className="hidden rounded-md p-2 hover:bg-muted sm:inline-flex" title="Vídeo"><Video className="h-4 w-4" /></button>

@@ -76,6 +76,8 @@ import { Route as ApiConversationsIdReadRouteImport } from './routes/api/convers
 import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
 import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
 import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
+import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
+import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaigns/$id/schedule'
 import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
 import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
 import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
@@ -430,6 +432,16 @@ const ApiCompaniesIdSubscriptionRoute =
     path: '/subscription',
     getParentRoute: () => ApiCompaniesIdRoute,
   } as any)
+const ApiCampaignsWorkerTickRoute = ApiCampaignsWorkerTickRouteImport.update({
+  id: '/worker/tick',
+  path: '/worker/tick',
+  getParentRoute: () => ApiCampaignsRoute,
+} as any)
+const ApiCampaignsIdScheduleRoute = ApiCampaignsIdScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
 const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
   id: '/contacts',
   path: '/contacts',
@@ -537,6 +549,8 @@ export interface FileRoutesByFullPath {
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -612,6 +626,8 @@ export interface FileRoutesByTo {
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/campanhas': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -690,6 +706,8 @@ export interface FileRoutesById {
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/_app/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -768,6 +786,8 @@ export interface FileRouteTypes {
     | '/api/webhooks/evolution'
     | '/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
@@ -843,6 +863,8 @@ export interface FileRouteTypes {
     | '/api/webhooks/evolution'
     | '/campanhas'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
@@ -920,6 +942,8 @@ export interface FileRouteTypes {
     | '/api/webhooks/evolution'
     | '/_app/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/messages'
@@ -1451,6 +1475,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompaniesIdSubscriptionRouteImport
       parentRoute: typeof ApiCompaniesIdRoute
     }
+    '/api/campaigns/worker/tick': {
+      id: '/api/campaigns/worker/tick'
+      path: '/worker/tick'
+      fullPath: '/api/campaigns/worker/tick'
+      preLoaderRoute: typeof ApiCampaignsWorkerTickRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/$id/schedule': {
+      id: '/api/campaigns/$id/schedule'
+      path: '/schedule'
+      fullPath: '/api/campaigns/$id/schedule'
+      preLoaderRoute: typeof ApiCampaignsIdScheduleRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
     '/api/campaigns/$id/contacts': {
       id: '/api/campaigns/$id/contacts'
       path: '/contacts'
@@ -1575,10 +1613,12 @@ const ApiCampaignsIdContactsRouteWithChildren =
 
 interface ApiCampaignsIdRouteChildren {
   ApiCampaignsIdContactsRoute: typeof ApiCampaignsIdContactsRouteWithChildren
+  ApiCampaignsIdScheduleRoute: typeof ApiCampaignsIdScheduleRoute
 }
 
 const ApiCampaignsIdRouteChildren: ApiCampaignsIdRouteChildren = {
   ApiCampaignsIdContactsRoute: ApiCampaignsIdContactsRouteWithChildren,
+  ApiCampaignsIdScheduleRoute: ApiCampaignsIdScheduleRoute,
 }
 
 const ApiCampaignsIdRouteWithChildren = ApiCampaignsIdRoute._addFileChildren(
@@ -1587,10 +1627,12 @@ const ApiCampaignsIdRouteWithChildren = ApiCampaignsIdRoute._addFileChildren(
 
 interface ApiCampaignsRouteChildren {
   ApiCampaignsIdRoute: typeof ApiCampaignsIdRouteWithChildren
+  ApiCampaignsWorkerTickRoute: typeof ApiCampaignsWorkerTickRoute
 }
 
 const ApiCampaignsRouteChildren: ApiCampaignsRouteChildren = {
   ApiCampaignsIdRoute: ApiCampaignsIdRouteWithChildren,
+  ApiCampaignsWorkerTickRoute: ApiCampaignsWorkerTickRoute,
 }
 
 const ApiCampaignsRouteWithChildren = ApiCampaignsRoute._addFileChildren(

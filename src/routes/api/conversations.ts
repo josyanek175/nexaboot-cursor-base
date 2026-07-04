@@ -50,7 +50,12 @@ export const Route = createFileRoute("/api/conversations")({
             CASE
               WHEN a.user_id IS NOT NULL AND a.user_id = ${currentUserId}::uuid THEN true
               ELSE false
-            END AS is_mine
+            END AS is_mine,
+            c.campaign_reply_campaign_id,
+            c.campaign_reply_campaign_name,
+            c.campaign_reply_text,
+            c.campaign_reply_intent,
+            c.campaign_reply_at
           FROM public.conversations c
           JOIN public.contacts ct ON ct.id = c.contact_id
           JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id

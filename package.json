@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "start": "node .output/server/index.mjs",
     "preview": "vite preview",
+    "campaign:worker": "node scripts/campaign-worker.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

@@ -8,11 +8,23 @@ import {
   deleteCampaign,
 } from "@/lib/campaign.server";
 
+const TimeStr = z
+  .string()
+  .regex(/^\d{1,2}:\d{2}(:\d{2})?$/, "Horário inválido (use HH:MM)")
+  .optional()
+  .nullable();
+
 const PatchBody = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   message_text: z.string().trim().max(4000).optional().nullable(),
   whatsapp_channel_id: z.string().uuid().optional().nullable(),
-  send_interval_ms: z.number().int().min(1000).max(600000).optional(),
+  schedule_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (use AAAA-MM-DD)")
+    .optional()
+    .nullable(),
+  window_start_time: TimeStr,
+  window_end_time: TimeStr,
 });
 
 export const Route = createFileRoute("/api/campaigns/$id")({
@@ -53,6 +65,9 @@ export const Route = createFileRoute("/api/campaigns/$id")({
           }
           if (msg === "invalid_channel") {
             return Response.json({ error: "invalid_channel" }, { status: 400 });
+          }
+          if (msg === "invalid_window") {
+            return Response.json({ error: "invalid_window" }, { status: 400 });
           }
           console.error("[CAMPAIGNS_PATCH_FAIL]", e);
           return Response.json({ error: "update_failed" }, { status: 500 });

@@ -12,9 +12,16 @@ type Campaign = {
   status: string;
   message_text: string | null;
   whatsapp_channel_id: string | null;
-  send_interval_ms: number;
+  schedule_date: string | null;
+  window_start_time: string | null;
+  window_end_time: string | null;
+  send_mode: string;
   total_contacts: number;
   skipped_count: number;
+  sent_count?: number;
+  total_replied?: number;
+  total_interested?: number;
+  total_opt_out?: number;
   channel_name: string | null;
   channel_unavailable: boolean;
 };
@@ -25,6 +32,11 @@ type CampaignContact = {
   name: string | null;
   status: string;
   skip_reason: string | null;
+  greeting_variant?: string | null;
+  closing_variant?: string | null;
+  responded_at?: string | null;
+  response_text?: string | null;
+  response_intent?: string | null;
 };
 
 type ContactPick = {
@@ -71,11 +83,14 @@ function EditarCampanhaPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   const [name, setName] = useState("");
   const [messageText, setMessageText] = useState("");
   const [channelId, setChannelId] = useState("");
-  const [sendIntervalMs, setSendIntervalMs] = useState(5000);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [windowStart, setWindowStart] = useState("09:00");
+  const [windowEnd, setWindowEnd] = useState("18:00");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
 
   const [audience, setAudience] = useState<CampaignContact[]>([]);
@@ -108,7 +123,17 @@ function EditarCampanhaPage() {
     setName(data.campaign.name);
     setMessageText(data.campaign.message_text ?? "");
     setChannelId(data.campaign.whatsapp_channel_id ?? "");
-    setSendIntervalMs(data.campaign.send_interval_ms);
+    setScheduleDate(
+      data.campaign.schedule_date ? String(data.campaign.schedule_date).slice(0, 10) : "",
+    );
+    const start = data.campaign.window_start_time
+      ? String(data.campaign.window_start_time).slice(0, 5)
+      : "09:00";
+    const end = data.campaign.window_end_time
+      ? String(data.campaign.window_end_time).slice(0, 5)
+      : "18:00";
+    setWindowStart(start);
+    setWindowEnd(end);
     setChannelUnavailable(data.campaign.channel_unavailable ?? false);
   }, [id]);
 
@@ -173,11 +198,16 @@ function EditarCampanhaPage() {
           name: name.trim(),
           message_text: messageText.trim() || null,
           whatsapp_channel_id: channelId || null,
-          send_interval_ms: sendIntervalMs,
+          schedule_date: scheduleDate || null,
+          window_start_time: windowStart || null,
+          window_end_time: windowEnd || null,
         }),
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (j.error === "invalid_window") {
+          throw new Error("Horário inicial e final não podem ser iguais.");
+        }
         throw new Error(j.error ?? `HTTP ${res.status}`);
       }
       toast.success("Campanha atualizada");
@@ -186,6 +216,68 @@ function EditarCampanhaPage() {
       toast.error((e as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSchedule() {
+    if (!canManage || !isDraft) return;
+    if (!scheduleDate || !windowStart || !windowEnd) {
+      toast.error("Informe data, horário inicial e horário final antes de agendar.");
+      return;
+    }
+    if (!channelId) {
+      toast.error("Selecione o canal de envio.");
+      return;
+    }
+    if (!messageText.trim()) {
+      toast.error("Informe a mensagem modelo.");
+      return;
+    }
+    setScheduling(true);
+    try {
+      const saveRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          message_text: messageText.trim() || null,
+          whatsapp_channel_id: channelId || null,
+          schedule_date: scheduleDate || null,
+          window_start_time: windowStart || null,
+          window_end_time: windowEnd || null,
+        }),
+      });
+      if (!saveRes.ok) {
+        const j = (await saveRes.json().catch(() => ({}))) as { error?: string };
+        if (j.error === "invalid_window") {
+          throw new Error("Horário inicial e final não podem ser iguais.");
+        }
+        throw new Error(j.error ?? `HTTP ${saveRes.status}`);
+      }
+
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/schedule`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        const map: Record<string, string> = {
+          no_pending_contacts: "Adicione contatos pendentes ao público antes de agendar.",
+          missing_channel: "Selecione o canal de envio.",
+          missing_message: "Informe a mensagem modelo.",
+          missing_schedule_date: "Informe a data de envio.",
+          missing_window: "Informe horário inicial e final.",
+          not_schedulable: "Esta campanha não pode ser agendada.",
+        };
+        throw new Error(map[j.error ?? ""] ?? j.error ?? `HTTP ${res.status}`);
+      }
+      toast.success("Campanha agendada — o worker enviará no horário configurado");
+      await loadCampaign();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
     }
   }
 
@@ -304,21 +396,45 @@ function EditarCampanhaPage() {
           <div>
             <h1 className="text-lg font-semibold">{campaign.name}</h1>
             <p className="text-xs text-muted-foreground">
-              Rascunho · {campaign.total_contacts} no público (total)
+              {campaign.status === "draft"
+                ? "Rascunho"
+                : campaign.status === "scheduled"
+                  ? "Agendada"
+                  : campaign.status === "running"
+                    ? "Enviando"
+                    : campaign.status === "paused"
+                      ? "Pausada (fora da janela)"
+                      : campaign.status === "completed"
+                        ? "Finalizada"
+                        : campaign.status}
+              {" · "}
+              {campaign.total_contacts} no público (total)
               {campaign.skipped_count > 0 ? ` · ${campaign.skipped_count} ignorados` : ""}
+              {" · "}Modo: Automático seguro
             </p>
           </div>
         </div>
         {canManage && isDraft && tab === "dados" && (
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Salvar rascunho
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || scheduling}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar rascunho
+            </button>
+            <button
+              type="button"
+              onClick={handleSchedule}
+              disabled={saving || scheduling}
+              className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+            >
+              {scheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Agendar envio
+            </button>
+          </div>
         )}
       </header>
 
@@ -362,18 +478,8 @@ function EditarCampanhaPage() {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Mensagem</span>
-              <textarea
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                disabled={!canManage || !isDraft}
-                rows={5}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
-              />
-            </label>
-            <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                Canal WhatsApp (Evolution)
+                Canal / número de envio
               </span>
               <select
                 value={channelId}
@@ -381,7 +487,7 @@ function EditarCampanhaPage() {
                 disabled={!canManage || !isDraft}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
               >
-                <option value="">Nenhum</option>
+                <option value="">Selecione o canal</option>
                 {channels.map((ch) => (
                   <option key={ch.id} value={ch.id}>
                     {ch.name} ({ch.status})
@@ -391,23 +497,72 @@ function EditarCampanhaPage() {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                Intervalo entre envios (ms)
+                Mensagem modelo (tags da planilha)
+              </span>
+              <textarea
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                disabled={!canManage || !isDraft}
+                rows={5}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
+                placeholder="Corpo principal. Use {nome} e outras tags da planilha."
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Saudação e fechamento variam automaticamente; o corpo principal é preservado.
+              </p>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                Data de envio
               </span>
               <input
-                type="number"
-                min={1000}
-                max={600000}
-                value={sendIntervalMs}
-                onChange={(e) => setSendIntervalMs(Number(e.target.value))}
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
                 disabled={!canManage || !isDraft}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
               />
             </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Horário inicial
+                </span>
+                <input
+                  type="time"
+                  value={windowStart}
+                  onChange={(e) => setWindowStart(e.target.value)}
+                  disabled={!canManage || !isDraft}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Horário final
+                </span>
+                <input
+                  type="time"
+                  value={windowEnd}
+                  onChange={(e) => setWindowEnd(e.target.value)}
+                  disabled={!canManage || !isDraft}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
+                />
+              </label>
+            </div>
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <span className="font-medium">Modo de envio:</span> Automático seguro
+            </div>
           </div>
         )}
 
         {tab === "publico" && (
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <StatCard label="Respondidos" value={campaign.total_replied ?? 0} />
+              <StatCard label="Interessados" value={campaign.total_interested ?? 0} />
+              <StatCard label="Opt-out" value={campaign.total_opt_out ?? 0} />
+              <StatCard label="Enviados" value={campaign.sent_count ?? 0} />
+            </div>
             <p className="text-xs text-muted-foreground">
               O público inclui todos os contatos adicionados ({campaign.total_contacts} total
               {campaign.skipped_count > 0 ? `, ${campaign.skipped_count} ignorados` : ""}).
@@ -438,6 +593,8 @@ function EditarCampanhaPage() {
                       <th className="px-4 py-3 text-left">Nome</th>
                       <th className="px-4 py-3 text-left">Telefone</th>
                       <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Resposta</th>
+                      <th className="px-4 py-3 text-left">Intenção</th>
                       {canManage && isDraft && <th className="px-4 py-3 text-right">Ações</th>}
                     </tr>
                   </thead>
@@ -445,7 +602,7 @@ function EditarCampanhaPage() {
                     {audience.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={canManage && isDraft ? 4 : 3}
+                          colSpan={canManage && isDraft ? 6 : 5}
                           className="px-4 py-8 text-center text-muted-foreground"
                         >
                           Nenhum contato no público desta campanha.
@@ -459,11 +616,29 @@ function EditarCampanhaPage() {
                           <td className="px-4 py-3 text-xs">
                             {row.status === "skipped" ? (
                               <span className="text-amber-700" title={row.skip_reason ?? ""}>
-                                Ignorado
+                                {row.skip_reason === "invalid_phone"
+                                  ? "Telefone inválido"
+                                  : row.skip_reason === "opt_out"
+                                    ? "Opt-out"
+                                    : row.skip_reason === "contact_inactive"
+                                      ? "Inativo"
+                                      : "Ignorado"}
                               </span>
+                            ) : row.status === "responded" ? (
+                              <span className="text-primary">Respondido</span>
+                            ) : row.status === "sent" ? (
+                              <span className="text-whatsapp">Enviado</span>
+                            ) : row.status === "failed" || row.status === "erro_envio" ? (
+                              <span className="text-destructive">Erro envio</span>
                             ) : (
                               "Pendente"
                             )}
+                          </td>
+                          <td className="max-w-[200px] truncate px-4 py-3 text-xs text-muted-foreground">
+                            {row.response_text || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            {intentLabel(row.response_intent)}
                           </td>
                           {canManage && isDraft && (
                             <td className="px-4 py-3 text-right">
@@ -559,4 +734,22 @@ function EditarCampanhaPage() {
       )}
     </div>
   );
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="text-lg font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function intentLabel(intent?: string | null): string {
+  if (!intent) return "—";
+  if (intent === "interested") return "Interessado";
+  if (intent === "not_interested") return "Sem interesse";
+  if (intent === "opt_out") return "Opt-out";
+  if (intent === "unknown") return "Outra";
+  return intent;
 }
