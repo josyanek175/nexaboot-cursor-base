@@ -409,6 +409,56 @@ export async function ensureCrmSchema() {
         ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+        -- Meta WhatsApp Cloud API (campos operacionais por canal; tokens ficam em whatsapp_channel_secrets).
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS waba_id TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS phone_number_id TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS business_id TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS display_phone_number TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS token_status TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS webhook_verify_token TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS last_error_code TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS last_error_message TEXT;
+        ALTER TABLE public.whatsapp_channels ADD COLUMN IF NOT EXISTS last_webhook_at TIMESTAMPTZ;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_meta_phone_number_id
+          ON public.whatsapp_channels(phone_number_id)
+          WHERE phone_number_id IS NOT NULL AND deleted_at IS NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_channels_meta_waba
+          ON public.whatsapp_channels(waba_id)
+          WHERE channel_type = 'meta';
+
+        CREATE INDEX IF NOT EXISTS idx_channels_company_type
+          ON public.whatsapp_channels(company_id, channel_type);
+
+        CREATE TABLE IF NOT EXISTS public.whatsapp_channel_secrets (
+          channel_id UUID PRIMARY KEY REFERENCES public.whatsapp_channels(id) ON DELETE CASCADE,
+          access_token_ciphertext TEXT,
+          token_updated_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE TABLE IF NOT EXISTS public.meta_webhook_event_logs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          company_id UUID REFERENCES public.companies(id) ON DELETE SET NULL,
+          channel_id UUID REFERENCES public.whatsapp_channels(id) ON DELETE SET NULL,
+          phone_number_id TEXT,
+          event_type TEXT,
+          signature_valid BOOLEAN NOT NULL DEFAULT false,
+          processing_status TEXT NOT NULL DEFAULT 'received',
+          http_status INT,
+          payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+          error TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_meta_webhook_logs_company
+          ON public.meta_webhook_event_logs(company_id, created_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_meta_webhook_logs_channel
+          ON public.meta_webhook_event_logs(channel_id, created_at DESC);
+
         CREATE TABLE IF NOT EXISTS public.contacts (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
