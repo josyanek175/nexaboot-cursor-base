@@ -36,6 +36,7 @@ import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
 import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app.atendimento'
 import { Route as AppCampanhasIndexRouteImport } from './routes/_app.campanhas.index'
+import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
@@ -68,6 +69,7 @@ import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/re
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
 import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
 import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
+import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
 import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
 import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
@@ -221,6 +223,11 @@ const AppCampanhasIndexRoute = AppCampanhasIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppCampanhasRoute,
+} as any)
+const ApiWebhooksMetaRoute = ApiWebhooksMetaRouteImport.update({
+  id: '/api/webhooks/meta',
+  path: '/api/webhooks/meta',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiWebhooksEvolutionRoute = ApiWebhooksEvolutionRouteImport.update({
   id: '/api/webhooks/evolution',
@@ -385,6 +392,11 @@ const AppCampanhasIdRoute = AppCampanhasIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AppCampanhasRoute,
+} as any)
+const ApiPublicWebhooksMetaRoute = ApiPublicWebhooksMetaRouteImport.update({
+  id: '/api/public/webhooks/meta',
+  path: '/api/public/webhooks/meta',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicWebhooksEvolutionRoute =
   ApiPublicWebhooksEvolutionRouteImport.update({
@@ -554,6 +566,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/webhooks/meta': typeof ApiWebhooksMetaRoute
   '/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
@@ -567,6 +580,7 @@ export interface FileRoutesByFullPath {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
@@ -632,6 +646,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/webhooks/meta': typeof ApiWebhooksMetaRoute
   '/campanhas': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
@@ -645,6 +660,7 @@ export interface FileRoutesByTo {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
@@ -713,6 +729,7 @@ export interface FileRoutesById {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
+  '/api/webhooks/meta': typeof ApiWebhooksMetaRoute
   '/_app/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
@@ -726,6 +743,7 @@ export interface FileRoutesById {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
+  '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/evolution/channels/$id/connect': typeof ApiEvolutionChannelsIdConnectRoute
   '/api/evolution/channels/$id/disconnect': typeof ApiEvolutionChannelsIdDisconnectRoute
@@ -794,6 +812,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/api/webhooks/meta'
     | '/campanhas/'
     | '/api/campaigns/$id/contacts'
     | '/api/campaigns/$id/schedule'
@@ -807,6 +826,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/public/webhooks/meta'
     | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
@@ -872,6 +892,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/api/webhooks/meta'
     | '/campanhas'
     | '/api/campaigns/$id/contacts'
     | '/api/campaigns/$id/schedule'
@@ -885,6 +906,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/public/webhooks/meta'
     | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
@@ -952,6 +974,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
+    | '/api/webhooks/meta'
     | '/_app/campanhas/'
     | '/api/campaigns/$id/contacts'
     | '/api/campaigns/$id/schedule'
@@ -965,6 +988,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/public/webhooks/evolution'
+    | '/api/public/webhooks/meta'
     | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/evolution/channels/$id/connect'
     | '/api/evolution/channels/$id/disconnect'
@@ -1013,7 +1037,9 @@ export interface RootRouteChildren {
   ApiInternalChatUnreadCountRoute: typeof ApiInternalChatUnreadCountRoute
   ApiInternalChatUsersRoute: typeof ApiInternalChatUsersRoute
   ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
+  ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRoute
   ApiPublicWebhooksEvolutionRoute: typeof ApiPublicWebhooksEvolutionRoute
+  ApiPublicWebhooksMetaRoute: typeof ApiPublicWebhooksMetaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1206,6 +1232,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/campanhas/'
       preLoaderRoute: typeof AppCampanhasIndexRouteImport
       parentRoute: typeof AppCampanhasRoute
+    }
+    '/api/webhooks/meta': {
+      id: '/api/webhooks/meta'
+      path: '/api/webhooks/meta'
+      fullPath: '/api/webhooks/meta'
+      preLoaderRoute: typeof ApiWebhooksMetaRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/webhooks/evolution': {
       id: '/api/webhooks/evolution'
@@ -1430,6 +1463,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/campanhas/$id'
       preLoaderRoute: typeof AppCampanhasIdRouteImport
       parentRoute: typeof AppCampanhasRoute
+    }
+    '/api/public/webhooks/meta': {
+      id: '/api/public/webhooks/meta'
+      path: '/api/public/webhooks/meta'
+      fullPath: '/api/public/webhooks/meta'
+      preLoaderRoute: typeof ApiPublicWebhooksMetaRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/webhooks/evolution': {
       id: '/api/public/webhooks/evolution'
@@ -1839,7 +1879,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalChatUnreadCountRoute: ApiInternalChatUnreadCountRoute,
   ApiInternalChatUsersRoute: ApiInternalChatUsersRoute,
   ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
+  ApiWebhooksMetaRoute: ApiWebhooksMetaRoute,
   ApiPublicWebhooksEvolutionRoute: ApiPublicWebhooksEvolutionRoute,
+  ApiPublicWebhooksMetaRoute: ApiPublicWebhooksMetaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
