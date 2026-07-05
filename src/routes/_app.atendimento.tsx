@@ -21,6 +21,7 @@ import {
   isContactsArrayPayload,
   type SharedContact,
 } from "@/lib/whatsapp-contact-message";
+import { formatChannelPhoneForDisplay, formatPhoneDisplayLoose } from "@/lib/phone";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
@@ -118,6 +119,13 @@ function formatBytes(b?: number): string {
   if (b < 1024) return `${b} B`;
   if (b < 1_048_576) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1_048_576).toFixed(1)} MB`;
+}
+function phoneLabel(raw: string | null | undefined): string {
+  return formatPhoneDisplayLoose(raw);
+}
+function channelFilterLabel(ch: Channel): string {
+  const phone = ch.phone?.trim();
+  return phone ? `${ch.name} (${phone})` : ch.name;
 }
 
 // ───────── Registros reais (preenchidos a partir das APIs) ─────────
@@ -245,14 +253,23 @@ function mapChannelStatus(s: unknown): ChannelStatus {
 }
 
 /** Upsert de um canal real vindo de /api/evolution/channels (autoritativo). */
-function upsertRealChannel(c: any, tenantId: string): Channel {
+function upsertRealChannel(
+  c: any,
+  tenantId: string,
+  metaById?: Map<string, { display_phone_number?: string | null }>,
+): Channel {
   const provider: Provider =
     String(c?.channel_type).toLowerCase() === "meta" ? "META" : "EVOLUTION";
+  const meta = metaById?.get(c.id);
   const channel: Channel = {
     id: c.id,
     tenantId,
     name: c.display_name || c.name || c.evolution_instance_name || "Canal",
-    phone: c.phone_number || "",
+    phone: formatChannelPhoneForDisplay({
+      channelType: c.channel_type,
+      displayPhoneNumber: meta?.display_phone_number ?? c.display_phone_number,
+      phoneNumber: c.phone_number,
+    }),
     provider,
     status: mapChannelStatus(c.status),
   };
@@ -565,9 +582,15 @@ function AtendimentoPage() {
   // Carrega canais reais conectados/cadastrados (Evolution) para o filtro.
   const reloadChannels = async () => {
     try {
-      const data = await apiGet("/evolution/channels");
+      const [data, metaData] = await Promise.all([
+        apiGet("/evolution/channels"),
+        apiGet("/meta/channels").catch(() => ({ channels: [] as { id: string; display_phone_number?: string | null }[] })),
+      ]);
+      const metaById = new Map(
+        (metaData.channels ?? []).map((m: { id: string; display_phone_number?: string | null }) => [m.id, m]),
+      );
       const list: any[] = Array.isArray(data?.channels) ? data.channels : [];
-      const mapped = list.map((c) => upsertRealChannel(c, session.tenantId));
+      const mapped = list.map((c) => upsertRealChannel(c, session.tenantId, metaById));
       setChannelList(mapped);
     } catch {
       // mantém canais já conhecidos (vindos das conversas); silencioso
@@ -1208,7 +1231,7 @@ function AtendimentoPage() {
               icon={Filter}
               value={channelFilter}
               onChange={setChannelFilter}
-              options={[{ v: "all", l: "Todos canais" }, ...tenantChannels.map((c) => ({ v: c.id, l: c.name }))]}
+              options={[{ v: "all", l: "Todos canais" }, ...tenantChannels.map((c) => ({ v: c.id, l: channelFilterLabel(c) }))]}
             />
             <FilterSelect
               icon={UserPlus}
@@ -1511,7 +1534,7 @@ function ContactResultRow({
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{contact.name || contact.phone}</div>
-          {contact.phone && <div className="truncate text-xs text-muted-foreground">{contact.phone}</div>}
+          {contact.phone && <div className="truncate text-xs text-muted-foreground">{phoneLabel(contact.phone)}</div>}
           <div className="mt-1">
             <span className="inline-flex items-center gap-1 rounded bg-whatsapp/10 px-1.5 py-0.5 text-[10px] font-medium text-whatsapp">
               <UserPlus className="h-3 w-3" />
@@ -1598,7 +1621,7 @@ function ChatHeader({
             )}
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            {!isGroup && ct.phone ? `${ct.phone} · ` : ""}{ch.name} · {responsibleLabel(conversation)}
+            {!isGroup && ct.phone ? `${phoneLabel(ct.phone)} · ` : ""}{ch.name} · {responsibleLabel(conversation)}
           </div>
         </div>
 
@@ -1628,12 +1651,13 @@ function ChatHeader({
 
 function ChannelModeBadge({ channel }: { channel: Channel }) {
   const connected = channel.status === "connected";
+  const phoneHint = channel.phone ? ` · ${channel.phone}` : "";
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
         connected ? "bg-whatsapp/10 text-whatsapp" : "bg-destructive/10 text-destructive"
       }`}
-      title={`${channel.provider} ${connected ? "conectado" : "desconectado"}`}
+      title={`${channel.provider}${phoneHint} ${connected ? "conectado" : "desconectado"}`}
     >
       {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
       {channel.provider}
@@ -1710,7 +1734,7 @@ function BubbleInner({ m }: { m: Message }) {
                   Nome: {c.name?.trim() || "—"}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Telefone: {c.phone?.trim() || "—"}
+                  Telefone: {phoneLabel(c.phone) || "—"}
                 </div>
               </div>
             ))}
@@ -2181,7 +2205,7 @@ function DetailsPanel({
           {ct.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
         </div>
         <div className="mt-3 text-base font-medium">{ct.name}</div>
-        <div className="text-xs text-muted-foreground">{ct.phone}</div>
+        <div className="text-xs text-muted-foreground">{phoneLabel(ct.phone) || "—"}</div>
         {ct.email && <div className="text-xs text-muted-foreground">{ct.email}</div>}
       </div>
 
@@ -2230,7 +2254,7 @@ function DetailsPanel({
 
         <Section title="Canal">
           <Row label="Nome" value={ch.name} />
-          <Row label="Número" value={ch.phone} />
+          <Row label="Número" value={ch.phone || "—"} />
           <Row label="Provedor" value={ch.provider} />
         </Section>
 

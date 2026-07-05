@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useSession } from "@/lib/session";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, formatPhoneDisplayLoose } from "@/lib/phone";
 
 export const Route = createFileRoute("/_app/contatos")({
   component: ContatosPage,
@@ -359,7 +359,7 @@ function ContatosPage() {
                       <div className="font-medium">{c.name || c.phone}</div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs">{c.phone}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{formatPhoneDisplayLoose(c.phone) || c.phone}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.email ?? "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.reference ?? "—"}</td>
                   <td className="px-4 py-3">
@@ -471,7 +471,7 @@ function EditModal({
             <input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} className="input" />
           </Field>
           <Field label="Telefone">
-            <input value={value.phone} onChange={(e) => onChange({ ...value, phone: e.target.value })} placeholder="5511999999999" className="input" />
+            <input value={value.phone} onChange={(e) => onChange({ ...value, phone: e.target.value })} placeholder="+55 34 99970-8837 ou +1 555 603-4558" className="input" />
           </Field>
           <Field label="E-mail">
             <input value={value.email ?? ""} onChange={(e) => onChange({ ...value, email: e.target.value })} className="input" />
