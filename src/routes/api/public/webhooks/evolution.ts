@@ -7,7 +7,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql, ensureCrmSchema, ensureCampaignsSchema } from "@/lib/pg.server";
-import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
+import { isValidE164Digits, normalizePhoneE164, normalizePhoneForMatch } from "@/lib/phone";
 import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
 
@@ -312,8 +312,8 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
   if (!remoteJid) { console.log("[IGNORED_NO_REMOTE_JID]"); return; }
   if (remoteJid.endsWith("@g.us")) { console.log("[IGNORED_GROUP]", remoteJid); return; }
 
-  const phone = normalizePhone(remoteJid);
-  if (!phone.startsWith("55") || phone.length < 12 || phone.length > 13) {
+  const phone = normalizePhoneE164(remoteJid, { defaultCountry: "BR" });
+  if (!isValidE164Digits(phone)) {
     console.log("[INVALID_PHONE_BLOCKED]", { remoteJid, phone });
     return;
   }
