@@ -3,19 +3,27 @@
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import {
+  buildMetaWebhookAuditPayload,
+  extractMetaEventTypes,
+  extractMetaPhoneNumberIds,
+  parseMetaWebhookPhones,
+  sanitizeMetaWebhookPayload,
+} from "@/lib/meta-webhook-parse";
 import { loadMetaChannelByPhoneNumberId } from "@/lib/whatsapp/whatsapp-provider-router.server";
 
-const SENSITIVE_PAYLOAD_KEYS = new Set([
-  "access_token",
-  "authorization",
-  "token",
-  "api_key",
-  "apikey",
-  "secret",
-  "password",
-  "webhook_verify_token",
-  "access_token_ciphertext",
-]);
+export type {
+  MetaParsedPhoneField,
+  MetaWebhookParsedChange,
+} from "@/lib/meta-webhook-parse";
+export {
+  buildMetaWebhookAuditPayload,
+  extractMetaEventTypes,
+  extractMetaPhoneNumberIds,
+  parseMetaPhoneField,
+  parseMetaWebhookPhones,
+  sanitizeMetaWebhookPayload,
+} from "@/lib/meta-webhook-parse";
 
 function metaAppVerifyToken(): string | null {
   const value = process.env.META_APP_VERIFY_TOKEN?.trim();
@@ -25,92 +33,6 @@ function metaAppVerifyToken(): string | null {
 function metaAppSecret(): string | null {
   const value = process.env.META_APP_SECRET?.trim();
   return value || null;
-}
-
-/** Sanitiza payload antes de persistir em meta_webhook_event_logs. */
-export function sanitizeMetaWebhookPayload(value: unknown, depth = 0): unknown {
-  if (depth > 10) return "[truncated]";
-  if (value === null || value === undefined) return value;
-  if (typeof value === "string") {
-    return value.length > 4000 ? `${value.slice(0, 4000)}…` : value;
-  }
-  if (typeof value !== "object") return value;
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeMetaWebhookPayload(item, depth + 1));
-  }
-
-  const out: Record<string, unknown> = {};
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    if (SENSITIVE_PAYLOAD_KEYS.has(key.toLowerCase())) {
-      out[key] = "[redacted]";
-    } else {
-      out[key] = sanitizeMetaWebhookPayload(nested, depth + 1);
-    }
-  }
-  return out;
-}
-
-/** Extrai phone_number_id(s) do payload padrão da Meta Cloud API. */
-export function extractMetaPhoneNumberIds(payload: unknown): string[] {
-  const ids = new Set<string>();
-  if (!payload || typeof payload !== "object") return [];
-
-  const entries = Array.isArray((payload as Record<string, unknown>).entry)
-    ? ((payload as Record<string, unknown>).entry as unknown[])
-    : [];
-
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") continue;
-    const changes = Array.isArray((entry as Record<string, unknown>).changes)
-      ? ((entry as Record<string, unknown>).changes as unknown[])
-      : [];
-
-    for (const change of changes) {
-      if (!change || typeof change !== "object") continue;
-      const value = (change as Record<string, unknown>).value;
-      if (!value || typeof value !== "object") continue;
-      const metadata = (value as Record<string, unknown>).metadata;
-      if (!metadata || typeof metadata !== "object") continue;
-      const phoneNumberId = (metadata as Record<string, unknown>).phone_number_id;
-      if (typeof phoneNumberId === "string" && phoneNumberId.trim()) {
-        ids.add(phoneNumberId.trim());
-      }
-    }
-  }
-
-  return [...ids];
-}
-
-/** Extrai tipos de evento (fields) do payload Meta. */
-export function extractMetaEventTypes(payload: unknown): string[] {
-  const types = new Set<string>();
-  if (!payload || typeof payload !== "object") return [];
-
-  const objectType = (payload as Record<string, unknown>).object;
-  if (typeof objectType === "string" && objectType.trim()) {
-    types.add(objectType.trim());
-  }
-
-  const entries = Array.isArray((payload as Record<string, unknown>).entry)
-    ? ((payload as Record<string, unknown>).entry as unknown[])
-    : [];
-
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") continue;
-    const changes = Array.isArray((entry as Record<string, unknown>).changes)
-      ? ((entry as Record<string, unknown>).changes as unknown[])
-      : [];
-
-    for (const change of changes) {
-      if (!change || typeof change !== "object") continue;
-      const field = (change as Record<string, unknown>).field;
-      if (typeof field === "string" && field.trim()) {
-        types.add(field.trim());
-      }
-    }
-  }
-
-  return [...types];
 }
 
 export function validateMetaWebhookSignature(
@@ -224,6 +146,8 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
   const phoneNumberId = phoneNumberIds[0] ?? null;
   const eventTypes = extractMetaEventTypes(payload);
   const eventType = eventTypes.length > 0 ? eventTypes.join(",") : null;
+  const parsedPhones = parseMetaWebhookPhones(payload);
+  const auditPayload = buildMetaWebhookAuditPayload(payload, parsedPhones);
 
   let channelId: string | null = null;
   let companyId: string | null = null;
@@ -248,7 +172,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       signatureValid: true,
       processingStatus,
       httpStatus: 200,
-      payload,
+      payload: auditPayload,
     });
   } catch (e) {
     console.error("[META_WEBHOOK_LOG_FAIL]", {
