@@ -11,6 +11,8 @@ import {
   sanitizeMetaWebhookPayload,
 } from "@/lib/meta-webhook-parse";
 import { loadMetaChannelByPhoneNumberId } from "@/lib/whatsapp/whatsapp-provider-router.server";
+import { persistMetaInboundTextMessages } from "@/lib/meta-inbound-message.server";
+import { unwrapMetaWebhookBody } from "@/lib/meta-inbound-parse";
 
 export type {
   MetaParsedPhoneField,
@@ -163,6 +165,28 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     }
   }
 
+  let persistError: string | null = null;
+  if (companyId && channelId) {
+    try {
+      await ensureCrmSchema();
+      const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
+      const persistResult = await persistMetaInboundTextMessages(webhookBody);
+      if (persistResult.saved > 0) {
+        processingStatus = "persisted";
+      } else if (persistResult.processed === 0) {
+        processingStatus = "processed";
+      } else if (persistResult.errors > 0) {
+        processingStatus = "persist_error";
+        persistError = `errors=${persistResult.errors}`;
+      }
+      console.log("[META_INBOUND_PERSIST]", persistResult);
+    } catch (e) {
+      persistError = e instanceof Error ? e.message : String(e);
+      processingStatus = "persist_error";
+      console.error("[META_INBOUND_PERSIST_FAIL]", { error: persistError });
+    }
+  }
+
   try {
     await insertMetaWebhookLog({
       companyId,
@@ -173,6 +197,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       processingStatus,
       httpStatus: 200,
       payload: auditPayload,
+      error: persistError,
     });
   } catch (e) {
     console.error("[META_WEBHOOK_LOG_FAIL]", {
