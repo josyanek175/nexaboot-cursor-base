@@ -109,6 +109,29 @@ export function formatPhoneDisplay(phone: string): string {
   return `+${digits}`;
 }
 
+/** Formata dígitos ou texto com +/espaços para exibição; fallback para o original. */
+export function formatPhoneDisplayLoose(raw: string | null | undefined): string {
+  if (!raw?.trim()) return "";
+  const normalized = normalizePhoneE164(raw) || normalizePhone(raw);
+  if (!normalized) return raw.trim();
+  return formatPhoneDisplay(normalized) || raw.trim();
+}
+
+/** Telefone de canal (Meta/Evolution) para exibição na UI. */
+export function formatChannelPhoneForDisplay(input: {
+  channelType?: string | null;
+  displayPhoneNumber?: string | null;
+  phoneNumber?: string | null;
+}): string {
+  const isMeta = String(input.channelType ?? "").toLowerCase() === "meta";
+  const displayRaw = input.displayPhoneNumber?.trim();
+  const phoneRaw = input.phoneNumber?.trim();
+  if (isMeta && displayRaw) return formatPhoneDisplayLoose(displayRaw);
+  if (phoneRaw) return formatPhoneDisplayLoose(phoneRaw);
+  if (displayRaw) return formatPhoneDisplayLoose(displayRaw);
+  return "";
+}
+
 /**
  * Chave canônica para COMPARAR/DEDUPLICAR números, tratando a variação do nono
  * dígito de celulares brasileiros como equivalente:

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiGet, apiPost, apiDelete } from "@/lib/api";
+import { formatChannelPhoneForDisplay } from "@/lib/phone";
 
 type ChannelStatus = "disconnected" | "connecting" | "qrcode" | "connected" | "error" | string;
 
@@ -15,6 +16,7 @@ interface Channel {
   name: string | null;
   display_name: string | null;
   phone_number: string | null;
+  display_phone_number?: string | null;
   channel_type: string;
   evolution_instance_name: string | null;
   status: ChannelStatus;
@@ -38,8 +40,18 @@ function CanaisPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await apiGet("/evolution/channels");
-      setChannels(data.channels ?? []);
+      const [data, metaData] = await Promise.all([
+        apiGet("/evolution/channels"),
+        apiGet("/meta/channels").catch(() => ({ channels: [] as { id: string; display_phone_number?: string | null }[] })),
+      ]);
+      const metaById = new Map(
+        (metaData.channels ?? []).map((m: { id: string; display_phone_number?: string | null }) => [m.id, m]),
+      );
+      const merged = (data.channels ?? []).map((c: Channel) => {
+        const meta = metaById.get(c.id);
+        return meta ? { ...c, display_phone_number: meta.display_phone_number ?? c.display_phone_number } : c;
+      });
+      setChannels(merged);
       setEvolutionConfigured(data.evolutionConfigured ?? false);
     } catch (e) {
       toast.error(`Falha ao carregar canais: ${e instanceof Error ? e.message : "erro"}`);
@@ -99,7 +111,7 @@ function CanaisPage() {
           <div>
             <h1 className="text-lg font-semibold">Canais WhatsApp</h1>
             <p className="text-xs text-muted-foreground">
-              {channels.length} canal(is) · conectados via Evolution API
+              {channels.length} canal(is) · Evolution API e Meta Cloud API
             </p>
           </div>
         </div>
@@ -125,7 +137,14 @@ function CanaisPage() {
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {channels.map((c) => (
+            {channels.map((c) => {
+              const isMeta = c.channel_type?.toLowerCase() === "meta";
+              const phoneLabel = formatChannelPhoneForDisplay({
+                channelType: c.channel_type,
+                displayPhoneNumber: c.display_phone_number,
+                phoneNumber: c.phone_number,
+              });
+              return (
               <div key={c.id} className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0">
@@ -136,10 +155,12 @@ function CanaisPage() {
                       </span>
                     </div>
                     <p className="mt-1 truncate text-xs text-muted-foreground">
-                      Instância: {c.evolution_instance_name || "—"}
+                      {isMeta
+                        ? "Meta WhatsApp Cloud API"
+                        : `Instância: ${c.evolution_instance_name || "—"}`}
                     </p>
-                    {c.phone_number && (
-                      <p className="truncate text-xs text-muted-foreground">{c.phone_number}</p>
+                    {phoneLabel && (
+                      <p className="truncate text-xs text-muted-foreground">{phoneLabel}</p>
                     )}
                   </div>
                   <StatusBadge status={c.status} />
@@ -183,7 +204,8 @@ function CanaisPage() {
                   </button>
                 </div>
               </div>
-            ))}
+            );
+            })}
             {channels.length === 0 && (
               <div className="col-span-full rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 Nenhum canal cadastrado. Clique em “Adicionar número” para começar.
