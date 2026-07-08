@@ -1,9 +1,14 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Megaphone, ArrowLeft, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Megaphone, ArrowLeft, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { canManageCampaigns, actingUserFromAuth } from "@/lib/permissions";
+import { CampaignAudienceImport } from "@/components/campaign-audience-import";
+import {
+  parseSpreadsheetRow,
+  previewMessage,
+} from "@/lib/campaign-spreadsheet";
 
 type ChannelOption = {
   id: string;
@@ -12,8 +17,26 @@ type ChannelOption = {
   status: string;
 };
 
+type TemplateOption = {
+  id: string;
+  name: string;
+  message_body: string;
+};
+
+const STEPS = [
+  { id: 1, label: "Dados / modelo" },
+  { id: 2, label: "Mensagem" },
+  { id: 3, label: "Público" },
+  { id: 4, label: "Agendamento" },
+  { id: 5, label: "Revisão" },
+] as const;
+
 export const Route = createFileRoute("/_app/campanhas/nova")({
   component: NovaCampanhaPage,
+  validateSearch: (s: Record<string, unknown>) => ({
+    templateId: typeof s.templateId === "string" ? s.templateId : undefined,
+    from: typeof s.from === "string" ? s.from : undefined,
+  }),
 });
 
 function campaignApiError(status: number, body: { error?: string; message?: string }): string {
@@ -40,10 +63,15 @@ function toTimeInput(v: string): string {
 function NovaCampanhaPage() {
   const { user, companyValid, hydrated } = useAuth();
   const navigate = useNavigate();
+  const { templateId: searchTemplateId, from: searchFrom } = Route.useSearch();
   const actor = user
     ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
     : { id: "", role: "ATENDENTE" as const, tenantId: "" };
   const canManage = canManageCampaigns(actor) && companyValid;
+
+  const [step, setStep] = useState(1);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [audienceTotal, setAudienceTotal] = useState(0);
 
   const [name, setName] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -52,42 +80,221 @@ function NovaCampanhaPage() {
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
   const [saving, setSaving] = useState(false);
   const [channelsError, setChannelsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canManage) return;
     setChannelsError(null);
-    fetch("/api/evolution/channels", { credentials: "include" })
-      .then(async (r) => {
-        if (r.status === 401) {
-          setChannelsError("Sessão expirada. Faça login novamente.");
-          return { channels: [] as ChannelOption[] };
-        }
-        if (r.status === 403) {
-          const j = (await r.json().catch(() => ({}))) as { error?: string; message?: string };
-          setChannelsError(
-            j.error === "no_company"
-              ? "Selecione uma empresa ativa antes de criar campanha."
-              : "Sem permissão para listar canais desta empresa.",
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+
+    Promise.allSettled([
+      fetch("/api/evolution/channels", { credentials: "include", signal: controller.signal })
+        .then(async (r) => {
+          if (!r.ok) {
+            setChannelsError("Não foi possível carregar os canais WhatsApp.");
+            return { channels: [] as ChannelOption[] };
+          }
+          return r.json() as Promise<{ channels: ChannelOption[] }>;
+        })
+        .then((data) => {
+          const evo = (data.channels ?? []).filter(
+            (ch) => String(ch.channel_type).toLowerCase() === "evolution",
           );
-          return { channels: [] as ChannelOption[] };
-        }
-        if (!r.ok) {
-          setChannelsError("Não foi possível carregar os canais WhatsApp.");
-          return { channels: [] as ChannelOption[] };
-        }
-        return r.json() as Promise<{ channels: ChannelOption[] }>;
-      })
-      .then((data: { channels: ChannelOption[] }) => {
-        const evo = (data.channels ?? []).filter(
-          (ch) => String(ch.channel_type).toLowerCase() === "evolution",
-        );
-        setChannels(evo);
-        if (evo[0]) setChannelId(evo[0].id);
-      })
-      .catch(() => setChannelsError("Não foi possível carregar os canais WhatsApp."));
+          setChannels(evo);
+          if (evo[0]) setChannelId(evo[0].id);
+        })
+        .catch(() => setChannelsError("Não foi possível carregar os canais WhatsApp.")),
+      fetch("/api/campaigns/templates", { credentials: "include", signal: controller.signal })
+        .then(async (r) => (r.ok ? r.json() : { templates: [] }))
+        .then((data: { templates: TemplateOption[] }) => setTemplates(data.templates ?? []))
+        .catch(() => setTemplates([])),
+    ]).finally(() => clearTimeout(timer));
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [canManage]);
+
+  useEffect(() => {
+    if (searchTemplateId && templates.length) {
+      const tpl = templates.find((t) => t.id === searchTemplateId);
+      if (tpl) {
+        setSelectedTemplateId(tpl.id);
+        setMessageText(tpl.message_body);
+      }
+    }
+  }, [searchTemplateId, templates]);
+
+  useEffect(() => {
+    if (!searchFrom || campaignId) return;
+    fetch(`/api/campaigns/${encodeURIComponent(searchFrom)}`, { credentials: "include" })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((data: { campaign?: { name: string; message_text: string | null; whatsapp_channel_id: string | null } } | null) => {
+        if (!data?.campaign) return;
+        setName(`${data.campaign.name} — novo disparo`);
+        setMessageText(data.campaign.message_text ?? "");
+        if (data.campaign.whatsapp_channel_id) {
+          setChannelId(data.campaign.whatsapp_channel_id);
+        }
+      })
+      .catch(() => undefined);
+  }, [searchFrom, campaignId]);
+
+  function applyTemplate(id: string) {
+    setSelectedTemplateId(id);
+    const tpl = templates.find((t) => t.id === id);
+    if (tpl) setMessageText(tpl.message_body);
+  }
+
+  const localPreview = useMemo(() => {
+    const sample = parseSpreadsheetRow(
+      { nome: "Maria Silva", telefone: "5534999999999", produto: "Plano Pro" },
+      0,
+    );
+    return previewMessage(messageText, sample);
+  }, [messageText]);
+
+  async function refreshAudienceCount(id: string) {
+    const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/contacts?limit=1`, {
+      credentials: "include",
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { total: number };
+      setAudienceTotal(data.total ?? 0);
+    }
+  }
+
+  async function persistCampaign(partial = false): Promise<string | null> {
+    const payload = {
+      name: name.trim(),
+      message_text: messageText.trim() || null,
+      whatsapp_channel_id: channelId || null,
+      schedule_date: scheduleDate || null,
+      window_start_time: windowStart ? toTimeInput(windowStart) : null,
+      window_end_time: windowEnd ? toTimeInput(windowEnd) : null,
+      template_id: selectedTemplateId || null,
+      source_campaign_id: searchFrom || null,
+    };
+
+    if (campaignId) {
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+        throw new Error(campaignApiError(res.status, j));
+      }
+      return campaignId;
+    }
+
+    if (!name.trim()) throw new Error("Informe o nome da campanha");
+    const res = await fetch("/api/campaigns", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      throw new Error(campaignApiError(res.status, j));
+    }
+    const data = (await res.json()) as { campaign: { id: string } };
+    setCampaignId(data.campaign.id);
+    if (!partial) await refreshAudienceCount(data.campaign.id);
+    return data.campaign.id;
+  }
+
+  async function saveTemplateIfRequested() {
+    if (!saveAsTemplate || !templateName.trim() || !messageText.trim()) return;
+    const res = await fetch("/api/campaigns/templates", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: templateName.trim(),
+        message_body: messageText.trim(),
+      }),
+    });
+    if (res.ok) toast.success("Modelo salvo");
+  }
+
+  async function handleNext() {
+    setSaving(true);
+    try {
+      if (step === 1) {
+        if (!name.trim()) {
+          toast.error("Informe o nome da campanha");
+          return;
+        }
+        await persistCampaign(true);
+        setStep(2);
+      } else if (step === 2) {
+        await persistCampaign(true);
+        await saveTemplateIfRequested();
+        setStep(3);
+      } else if (step === 3) {
+        const id = campaignId ?? (await persistCampaign(true));
+        if (!id) return;
+        await refreshAudienceCount(id);
+        setStep(4);
+      } else if (step === 4) {
+        if (!scheduleDate || !windowStart || !windowEnd) {
+          toast.error("Informe data e janela de envio");
+          return;
+        }
+        await persistCampaign(true);
+        setStep(5);
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSchedule() {
+    setSaving(true);
+    try {
+      const id = campaignId ?? (await persistCampaign());
+      if (!id) return;
+      if (audienceTotal < 1) {
+        toast.error("Importe pelo menos um contato válido no público");
+        return;
+      }
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/schedule`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        const map: Record<string, string> = {
+          no_pending_contacts: "Importe contatos válidos antes de agendar.",
+          missing_channel: "Selecione o canal de envio.",
+          missing_message: "Informe a mensagem modelo.",
+          missing_schedule_date: "Informe a data de envio.",
+          missing_window: "Informe horário inicial e final.",
+        };
+        throw new Error(map[j.error ?? ""] ?? j.error ?? `HTTP ${res.status}`);
+      }
+      toast.success("Campanha agendada");
+      navigate({ to: "/campanhas/$id", params: { id } });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (!hydrated) {
     return (
@@ -109,41 +316,6 @@ function NovaCampanhaPage() {
     );
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Informe o nome da campanha");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/campaigns", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          message_text: messageText.trim() || null,
-          whatsapp_channel_id: channelId || null,
-          schedule_date: scheduleDate || null,
-          window_start_time: windowStart ? toTimeInput(windowStart) : null,
-          window_end_time: windowEnd ? toTimeInput(windowEnd) : null,
-        }),
-      });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-        throw new Error(campaignApiError(res.status, j));
-      }
-      const data = (await res.json()) as { campaign: { id: string } };
-      toast.success("Campanha salva como rascunho");
-      navigate({ to: "/campanhas/$id", params: { id: data.campaign.id } });
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
@@ -151,127 +323,255 @@ function NovaCampanhaPage() {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <Megaphone className="h-5 w-5 text-whatsapp" />
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-semibold">Nova campanha</h1>
-          <p className="text-xs text-muted-foreground">
-            Configure a mensagem e a janela de envio — o ritmo é automático
-          </p>
+          <p className="text-xs text-muted-foreground">Etapa {step} de 5 — {STEPS[step - 1].label}</p>
         </div>
       </header>
 
-      <form
-        onSubmit={handleSave}
-        className="mx-auto w-full max-w-lg flex-1 overflow-auto p-6 space-y-4"
-      >
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted-foreground">
-            Nome da campanha
-          </span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
-            placeholder="Ex.: Promoção de março"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted-foreground">
-            Canal / número de envio (WhatsApp)
-          </span>
-          {channelsError ? (
-            <p className="mb-2 text-xs text-destructive">{channelsError}</p>
-          ) : null}
-          <select
-            value={channelId}
-            onChange={(e) => setChannelId(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
+      <nav className="flex gap-1 overflow-x-auto border-b border-border bg-muted/20 px-4 py-2">
+        {STEPS.map((s) => (
+          <span
+            key={s.id}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+              s.id === step
+                ? "bg-whatsapp text-whatsapp-foreground"
+                : s.id < step
+                  ? "bg-muted text-muted-foreground"
+                  : "text-muted-foreground"
+            }`}
           >
-            <option value="">Selecione o canal</option>
-            {channels.map((ch) => (
-              <option key={ch.id} value={ch.id}>
-                {ch.name} ({ch.status})
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted-foreground">
-            Mensagem modelo (use tags da planilha)
+            {s.id}. {s.label}
           </span>
-          <textarea
-            value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
-            rows={5}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
-            placeholder={"Ex.: Temos uma condição especial para você.\nUse tags como {nome} ou {telefone}."}
+        ))}
+      </nav>
+
+      <div className="mx-auto w-full max-w-2xl flex-1 overflow-auto p-6 space-y-4">
+        {step === 1 && (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Nome da campanha</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
+                placeholder="Ex.: Promoção de março"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Canal WhatsApp</span>
+              {channelsError && <p className="mb-1 text-xs text-destructive">{channelsError}</p>}
+              <select
+                value={channelId}
+                onChange={(e) => setChannelId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Selecione o canal</option>
+                {channels.map((ch) => (
+                  <option key={ch.id} value={ch.id}>
+                    {ch.name} ({ch.status})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {templates.length > 0 && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Usar modelo salvo (opcional)
+                </span>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => applyTemplate(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">— Nenhum —</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Mensagem modelo</span>
+              <textarea
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                rows={6}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
+                placeholder={"Olá {nome}, temos novidade sobre {produto}."}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Tags: {"{nome}"}, {"{telefone}"} e colunas extras da planilha.
+                Saudação e fechamento variados são adicionados automaticamente.
+              </p>
+            </label>
+            {localPreview && (
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Prévia (exemplo)</p>
+                <pre className="whitespace-pre-wrap text-xs">{localPreview}</pre>
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={saveAsTemplate}
+                onChange={(e) => setSaveAsTemplate(e.target.checked)}
+              />
+              Salvar mensagem como modelo
+            </label>
+            {saveAsTemplate && (
+              <input
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Nome do modelo"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            )}
+          </>
+        )}
+
+        {step === 3 && campaignId && (
+          <CampaignAudienceImport
+            campaignId={campaignId}
+            messageTemplate={messageText}
+            onImported={() => refreshAudienceCount(campaignId)}
           />
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            O sistema adiciona automaticamente uma saudação e um fechamento variados.
-            Tags: {"{nome}"}, {"{telefone}"} e colunas da planilha.
-          </p>
-        </label>
+        )}
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted-foreground">
-            Data de envio
-          </span>
-          <input
-            type="date"
-            value={scheduleDate}
-            onChange={(e) => setScheduleDate(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
-          />
-        </label>
+        {step === 3 && !campaignId && (
+          <p className="text-sm text-muted-foreground">Salve os dados anteriores para importar o público.</p>
+        )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">
-              Horário inicial
-            </span>
-            <input
-              type="time"
-              value={windowStart}
-              onChange={(e) => setWindowStart(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">
-              Horário final
-            </span>
-            <input
-              type="time"
-              value={windowEnd}
-              onChange={(e) => setWindowEnd(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp"
-            />
-          </label>
-        </div>
+        {step === 4 && (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Data de envio</span>
+              <input
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Horário inicial</span>
+                <input
+                  type="time"
+                  value={windowStart}
+                  onChange={(e) => setWindowStart(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Horário final</span>
+                <input
+                  type="time"
+                  value={windowEnd}
+                  onChange={(e) => setWindowEnd(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <span className="font-medium">Modo de envio:</span> Automático seguro
+            </div>
+          </>
+        )}
 
-        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-          <span className="font-medium">Modo de envio:</span> Automático seguro
-        </div>
+        {step === 5 && (
+          <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-sm">
+            <h2 className="font-semibold">Revisão</h2>
+            <dl className="space-y-1 text-xs">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Campanha</dt>
+                <dd className="font-medium">{name}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Público importado</dt>
+                <dd className="font-medium tabular-nums">{audienceTotal}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Data</dt>
+                <dd>{scheduleDate || "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Janela</dt>
+                <dd>
+                  {windowStart} – {windowEnd}
+                </dd>
+              </div>
+            </dl>
+            {messageText && (
+              <div className="rounded-md bg-muted/30 p-2 text-xs whitespace-pre-wrap">{messageText}</div>
+            )}
+          </div>
+        )}
 
-        <p className="text-xs text-muted-foreground">
-          A lista de contatos (planilha/público) é definida na próxima tela, após salvar o rascunho.
-        </p>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Link to="/campanhas" className="rounded-md px-3 py-2 text-sm hover:bg-accent">
-            Cancelar
-          </Link>
+        <div className="flex justify-between gap-2 pt-4">
           <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+            type="button"
+            disabled={step === 1 || saving}
+            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Salvar rascunho
+            <ChevronLeft className="h-4 w-4" /> Voltar
           </button>
+          <div className="flex gap-2">
+            {step < 5 ? (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleNext}
+                className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Continuar <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={async () => {
+                    try {
+                      setSaving(true);
+                      const id = campaignId ?? (await persistCampaign());
+                      if (id) {
+                        toast.success("Rascunho salvo");
+                        navigate({ to: "/campanhas/$id", params: { id } });
+                      }
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+                >
+                  Salvar rascunho
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleSchedule}
+                  className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Agendar envio
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

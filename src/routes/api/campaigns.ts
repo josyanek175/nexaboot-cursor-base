@@ -22,6 +22,8 @@ const CreateBody = z.object({
     .nullable(),
   window_start_time: TimeStr,
   window_end_time: TimeStr,
+  template_id: z.string().uuid().optional().nullable(),
+  source_campaign_id: z.string().uuid().optional().nullable(),
 });
 
 export const Route = createFileRoute("/api/campaigns")({

@@ -1,10 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
-import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2 } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { canManageCampaigns, actingUserFromAuth, canAccessCampaignsModule } from "@/lib/permissions";
 import { apiGet } from "@/lib/api";
+import { CampaignAudienceImport } from "@/components/campaign-audience-import";
+import { parseSpreadsheetRow, previewMessage } from "@/lib/campaign-spreadsheet";
 
 type Campaign = {
   id: string;
@@ -72,6 +74,7 @@ function campaignApiMessage(status: number, body: { error?: string; message?: st
 
 function EditarCampanhaPage() {
   const { id } = Route.useParams();
+  const navigate = useNavigate();
   const { user, companyValid, companyId } = useAuth();
   const actor = user
     ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
@@ -105,6 +108,35 @@ function EditarCampanhaPage() {
   const [channelUnavailable, setChannelUnavailable] = useState(false);
 
   const isDraft = campaign?.status === "draft";
+
+  const messagePreview = useMemo(() => {
+    const sample = parseSpreadsheetRow(
+      { nome: "Maria Silva", telefone: "5534999999999", produto: "Plano Pro" },
+      0,
+    );
+    return previewMessage(messageText, sample);
+  }, [messageText]);
+
+  async function handleReuse() {
+    if (!canManage) return;
+    try {
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/reuse`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { campaign: { id: string } };
+      toast.success("Nova campanha criada a partir deste modelo");
+      navigate({ to: "/campanhas/$id", params: { id: data.campaign.id } });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   const CHANNEL_UNAVAILABLE_MSG =
     "O canal selecionado não está mais disponível. Escolha outro canal antes de enviar.";
@@ -414,6 +446,16 @@ function EditarCampanhaPage() {
             </p>
           </div>
         </div>
+        {canManage && (
+          <button
+            type="button"
+            onClick={handleReuse}
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+          >
+            <Copy className="h-4 w-4" />
+            Novo disparo com este modelo
+          </button>
+        )}
         {canManage && isDraft && tab === "dados" && (
           <div className="flex items-center gap-2">
             <button
@@ -510,6 +552,12 @@ function EditarCampanhaPage() {
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Saudação e fechamento variam automaticamente; o corpo principal é preservado.
               </p>
+              {messagePreview && isDraft && (
+                <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Prévia (exemplo)</p>
+                  <pre className="whitespace-pre-wrap text-xs">{messagePreview}</pre>
+                </div>
+              )}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">
@@ -568,6 +616,16 @@ function EditarCampanhaPage() {
               {campaign.skipped_count > 0 ? `, ${campaign.skipped_count} ignorados` : ""}).
             </p>
             {canManage && isDraft && (
+              <CampaignAudienceImport
+                campaignId={id}
+                messageTemplate={messageText}
+                onImported={async () => {
+                  await loadCampaign();
+                  await loadAudience();
+                }}
+              />
+            )}
+            {canManage && isDraft && (
               <button
                 type="button"
                 onClick={() => {
@@ -575,9 +633,9 @@ function EditarCampanhaPage() {
                   setContactSearch("");
                   searchContacts("");
                 }}
-                className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
+                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
               >
-                <Plus className="h-4 w-4" /> Adicionar contatos
+                <Plus className="h-4 w-4" /> Adicionar do CRM (opcional)
               </button>
             )}
 

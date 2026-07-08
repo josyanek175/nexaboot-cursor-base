@@ -760,8 +760,37 @@ async function applyAttendanceSchema(db: ReturnType<typeof sql>): Promise<void> 
 // Campanhas (envio em massa via Evolution — fase 1: rascunhos + público).
 // Idempotente, não destrutivo. campaign_send_queue existe mas não é populada.
 // ───────────────────────────────────────────────────────────────────────────
+let _campaignsReady: Promise<void> | null = null;
+
 export async function ensureCampaignsSchema(s?: ReturnType<typeof sql>): Promise<void> {
-  const db = s ?? sql();
+  if (_campaignsReady) return _campaignsReady;
+
+  if (s) {
+    _campaignsReady = (async () => {
+      try {
+        await applyCampaignsSchema(s);
+        console.log("[CAMPAIGNS_SCHEMA_OK]");
+      } catch (e) {
+        _campaignsReady = null;
+        throw e;
+      }
+    })();
+    return _campaignsReady;
+  }
+
+  _campaignsReady = (async () => {
+    try {
+      await applyCampaignsSchema(sql());
+      console.log("[CAMPAIGNS_SCHEMA_OK]");
+    } catch (e) {
+      _campaignsReady = null;
+      throw e;
+    }
+  })();
+  return _campaignsReady;
+}
+
+async function applyCampaignsSchema(db: ReturnType<typeof sql>): Promise<void> {
   await db.unsafe(`
     CREATE TABLE IF NOT EXISTS public.campaigns (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -915,6 +944,41 @@ export async function ensureCampaignsSchema(s?: ReturnType<typeof sql>): Promise
     CREATE INDEX IF NOT EXISTS idx_campaigns_company_active
       ON public.campaigns (company_id, created_at DESC)
       WHERE deleted_at IS NULL;
+
+    -- Modelos de mensagem reutilizáveis por empresa.
+    CREATE TABLE IF NOT EXISTS public.campaign_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      message_body TEXT NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_campaign_templates_company
+      ON public.campaign_templates (company_id, active, updated_at DESC);
+
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS template_id UUID;
+    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS source_campaign_id UUID;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'campaigns_template_id_fkey'
+      ) THEN
+        ALTER TABLE public.campaigns
+          ADD CONSTRAINT campaigns_template_id_fkey
+          FOREIGN KEY (template_id) REFERENCES public.campaign_templates(id) ON DELETE SET NULL;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'campaigns_source_campaign_id_fkey'
+      ) THEN
+        ALTER TABLE public.campaigns
+          ADD CONSTRAINT campaigns_source_campaign_id_fkey
+          FOREIGN KEY (source_campaign_id) REFERENCES public.campaigns(id) ON DELETE SET NULL;
+      END IF;
+    END$$;
   `);
 }
 

@@ -233,10 +233,16 @@ function DashboardPage() {
     }
   }, []);
 
-  const loadCampaigns = useCallback(async () => {
-    setCampaignsLoading(true);
+  const loadCampaigns = useCallback(async (silent = false) => {
+    if (!silent) setCampaignsLoading(true);
     try {
-      const res = await fetch("/api/dashboard/campaigns", { credentials: "include" });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      const res = await fetch("/api/dashboard/campaigns", {
+        credentials: "include",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
 
       if (!res.ok) {
         setCampaignMetrics(EMPTY_CAMPAIGN_METRICS);
@@ -255,17 +261,17 @@ function DashboardPage() {
       setCampaignMetrics(EMPTY_CAMPAIGN_METRICS);
       setRecentCampaigns([]);
     } finally {
-      setCampaignsLoading(false);
+      if (!silent) setCampaignsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     load(false);
-    void loadCampaigns();
+    void loadCampaigns(false);
 
     const id = setInterval(() => {
       load(true);
-      void loadCampaigns();
+      void loadCampaigns(true);
     }, 20_000);
 
     return () => clearInterval(id);
