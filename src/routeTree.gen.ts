@@ -40,6 +40,7 @@ import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
 import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
+import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
 import { Route as ApiInternalChatUnreadCountRouteImport } from './routes/api/internal-chat/unread-count'
 import { Route as ApiInternalChatSendRouteImport } from './routes/api/internal-chat/send'
@@ -74,6 +75,7 @@ import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
 import { Route as ApiWebhooksMetaWhatsappRouteImport } from './routes/api/webhooks/meta/whatsapp'
 import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
+import { Route as ApiMetaMessagesSendTextRouteImport } from './routes/api/meta/messages/send-text'
 import { Route as ApiMetaChannelsIdRouteImport } from './routes/api/meta/channels/$id'
 import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
 import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
@@ -253,6 +255,11 @@ const ApiMetaChannelsRoute = ApiMetaChannelsRouteImport.update({
   path: '/api/meta/channels',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
+  id: '/send',
+  path: '/send',
+  getParentRoute: () => ApiMessagesRoute,
+} as any)
 const ApiInternalChatUsersRoute = ApiInternalChatUsersRouteImport.update({
   id: '/api/internal-chat/users',
   path: '/api/internal-chat/users',
@@ -428,6 +435,11 @@ const ApiPublicWebhooksEvolutionRoute =
     path: '/api/public/webhooks/evolution',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiMetaMessagesSendTextRoute = ApiMetaMessagesSendTextRouteImport.update({
+  id: '/api/meta/messages/send-text',
+  path: '/api/meta/messages/send-text',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMetaChannelsIdRoute = ApiMetaChannelsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -435,9 +447,9 @@ const ApiMetaChannelsIdRoute = ApiMetaChannelsIdRouteImport.update({
 } as any)
 const ApiMessagesSendEvolutionRoute =
   ApiMessagesSendEvolutionRouteImport.update({
-    id: '/send/evolution',
-    path: '/send/evolution',
-    getParentRoute: () => ApiMessagesRoute,
+    id: '/evolution',
+    path: '/evolution',
+    getParentRoute: () => ApiMessagesSendRoute,
   } as any)
 const ApiMessagesMessageIdMediaRoute =
   ApiMessagesMessageIdMediaRouteImport.update({
@@ -511,9 +523,9 @@ const ApiMetaChannelsIdStatusRoute = ApiMetaChannelsIdStatusRouteImport.update({
 } as any)
 const ApiMessagesSendMediaEvolutionRoute =
   ApiMessagesSendMediaEvolutionRouteImport.update({
-    id: '/send/media/evolution',
-    path: '/send/media/evolution',
-    getParentRoute: () => ApiMessagesRoute,
+    id: '/media/evolution',
+    path: '/media/evolution',
+    getParentRoute: () => ApiMessagesSendRoute,
   } as any)
 const ApiInternalChatMessagesIdAttachmentRoute =
   ApiInternalChatMessagesIdAttachmentRouteImport.update({
@@ -621,6 +633,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/send': typeof ApiInternalChatSendRoute
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
+  '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -640,6 +653,7 @@ export interface FileRoutesByFullPath {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
+  '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
   '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
@@ -710,6 +724,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/send': typeof ApiInternalChatSendRoute
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
+  '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -729,6 +744,7 @@ export interface FileRoutesByTo {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
+  '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
   '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
@@ -802,6 +818,7 @@ export interface FileRoutesById {
   '/api/internal-chat/send': typeof ApiInternalChatSendRoute
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
+  '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -821,6 +838,7 @@ export interface FileRoutesById {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
+  '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
   '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
@@ -894,6 +912,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/send'
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
+    | '/api/messages/send'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -913,6 +932,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/meta/channels/$id'
+    | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
     | '/api/webhooks/meta/whatsapp'
@@ -983,6 +1003,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/send'
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
+    | '/api/messages/send'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1002,6 +1023,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/meta/channels/$id'
+    | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
     | '/api/webhooks/meta/whatsapp'
@@ -1074,6 +1096,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/send'
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
+    | '/api/messages/send'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1093,6 +1116,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/meta/channels/$id'
+    | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
     | '/api/webhooks/meta/whatsapp'
@@ -1149,6 +1173,7 @@ export interface RootRouteChildren {
   ApiMetaChannelsRoute: typeof ApiMetaChannelsRouteWithChildren
   ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
   ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRouteWithChildren
+  ApiMetaMessagesSendTextRoute: typeof ApiMetaMessagesSendTextRoute
   ApiPublicWebhooksEvolutionRoute: typeof ApiPublicWebhooksEvolutionRoute
   ApiPublicWebhooksMetaRoute: typeof ApiPublicWebhooksMetaRoute
 }
@@ -1371,6 +1396,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/meta/channels'
       preLoaderRoute: typeof ApiMetaChannelsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/messages/send': {
+      id: '/api/messages/send'
+      path: '/send'
+      fullPath: '/api/messages/send'
+      preLoaderRoute: typeof ApiMessagesSendRouteImport
+      parentRoute: typeof ApiMessagesRoute
     }
     '/api/internal-chat/users': {
       id: '/api/internal-chat/users'
@@ -1610,6 +1642,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhooksEvolutionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/meta/messages/send-text': {
+      id: '/api/meta/messages/send-text'
+      path: '/api/meta/messages/send-text'
+      fullPath: '/api/meta/messages/send-text'
+      preLoaderRoute: typeof ApiMetaMessagesSendTextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/meta/channels/$id': {
       id: '/api/meta/channels/$id'
       path: '/$id'
@@ -1619,10 +1658,10 @@ declare module '@tanstack/react-router' {
     }
     '/api/messages/send/evolution': {
       id: '/api/messages/send/evolution'
-      path: '/send/evolution'
+      path: '/evolution'
       fullPath: '/api/messages/send/evolution'
       preLoaderRoute: typeof ApiMessagesSendEvolutionRouteImport
-      parentRoute: typeof ApiMessagesRoute
+      parentRoute: typeof ApiMessagesSendRoute
     }
     '/api/messages/$messageId/media': {
       id: '/api/messages/$messageId/media'
@@ -1717,10 +1756,10 @@ declare module '@tanstack/react-router' {
     }
     '/api/messages/send/media/evolution': {
       id: '/api/messages/send/media/evolution'
-      path: '/send/media/evolution'
+      path: '/media/evolution'
       fullPath: '/api/messages/send/media/evolution'
       preLoaderRoute: typeof ApiMessagesSendMediaEvolutionRouteImport
-      parentRoute: typeof ApiMessagesRoute
+      parentRoute: typeof ApiMessagesSendRoute
     }
     '/api/internal-chat/messages/$id/attachment': {
       id: '/api/internal-chat/messages/$id/attachment'
@@ -1960,16 +1999,28 @@ const ApiDashboardRouteWithChildren = ApiDashboardRoute._addFileChildren(
   ApiDashboardRouteChildren,
 )
 
-interface ApiMessagesRouteChildren {
-  ApiMessagesMessageIdMediaRoute: typeof ApiMessagesMessageIdMediaRoute
+interface ApiMessagesSendRouteChildren {
   ApiMessagesSendEvolutionRoute: typeof ApiMessagesSendEvolutionRoute
   ApiMessagesSendMediaEvolutionRoute: typeof ApiMessagesSendMediaEvolutionRoute
 }
 
-const ApiMessagesRouteChildren: ApiMessagesRouteChildren = {
-  ApiMessagesMessageIdMediaRoute: ApiMessagesMessageIdMediaRoute,
+const ApiMessagesSendRouteChildren: ApiMessagesSendRouteChildren = {
   ApiMessagesSendEvolutionRoute: ApiMessagesSendEvolutionRoute,
   ApiMessagesSendMediaEvolutionRoute: ApiMessagesSendMediaEvolutionRoute,
+}
+
+const ApiMessagesSendRouteWithChildren = ApiMessagesSendRoute._addFileChildren(
+  ApiMessagesSendRouteChildren,
+)
+
+interface ApiMessagesRouteChildren {
+  ApiMessagesSendRoute: typeof ApiMessagesSendRouteWithChildren
+  ApiMessagesMessageIdMediaRoute: typeof ApiMessagesMessageIdMediaRoute
+}
+
+const ApiMessagesRouteChildren: ApiMessagesRouteChildren = {
+  ApiMessagesSendRoute: ApiMessagesSendRouteWithChildren,
+  ApiMessagesMessageIdMediaRoute: ApiMessagesMessageIdMediaRoute,
 }
 
 const ApiMessagesRouteWithChildren = ApiMessagesRoute._addFileChildren(
@@ -2111,6 +2162,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMetaChannelsRoute: ApiMetaChannelsRouteWithChildren,
   ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
   ApiWebhooksMetaRoute: ApiWebhooksMetaRouteWithChildren,
+  ApiMetaMessagesSendTextRoute: ApiMetaMessagesSendTextRoute,
   ApiPublicWebhooksEvolutionRoute: ApiPublicWebhooksEvolutionRoute,
   ApiPublicWebhooksMetaRoute: ApiPublicWebhooksMetaRoute,
 }

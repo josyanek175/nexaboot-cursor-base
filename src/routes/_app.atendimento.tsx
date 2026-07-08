@@ -1021,17 +1021,19 @@ function AtendimentoPage() {
     }
     setDraft("");
 
-    // Envio via REST local: POST /api/messages/send/evolution
+    // Envio via REST local: POST /api/messages/send (roteia Meta ou Evolution)
     const payload = { conversationId: selected.id, text };
-    console.log("send evolution payload", payload);
+    const channelProvider = guard.channel.provider;
+    console.log("send message payload", { ...payload, provider: channelProvider });
     try {
-      const result = await apiPost("/messages/send/evolution", payload);
-      console.log("send evolution result", result);
+      const result = await apiPost("/messages/send", payload);
+      console.log("send message result", { ...result, provider: result.provider ?? channelProvider });
       patchMsg(selected.id, msgId, { status: "delivered" });
       pushAudit({
         tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
         targetType: "message", targetId: msgId, targetName: contact.name,
-        action: "message.sent", result: "success", reason: "evolution rest",
+        action: "message.sent", result: "success",
+        reason: `${String(result.provider ?? channelProvider).toLowerCase()} rest`,
       });
       // Recarrega mensagens e conversas para refletir o estado oficial da API.
       reloadMessages(selected.id, { silent: true });

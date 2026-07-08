@@ -1,4 +1,4 @@
-// Provider Meta WhatsApp Cloud API — stub server-side (sem envio de mensagens).
+// Provider Meta WhatsApp Cloud API — envio server-side via Graph API.
 // Tokens ficam cifrados em whatsapp_channel_secrets; nunca expostos em logs/responses.
 
 import { encryptToken, hasTokenEncryptionKey } from "@/lib/crypto/token-crypto.server";
@@ -33,11 +33,72 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   }
 
   async sendText(
-    _channel: WhatsAppChannelRecord,
-    _to: string,
-    _body: string,
+    channel: WhatsAppChannelRecord,
+    to: string,
+    body: string,
   ): Promise<ProviderSendResult> {
-    return { ok: false, notImplemented: true, error: "not_implemented" };
+    const phoneNumberId = channel.phoneNumberId?.trim();
+    if (!phoneNumberId) {
+      return { ok: false, error: "missing_phone_number_id" };
+    }
+
+    const token = await loadMetaAccessToken(channel.id, channel.companyId);
+    if (!token) {
+      return { ok: false, error: "missing_access_token", errorCode: "missing_access_token" };
+    }
+
+    const toDigits = to.replace(/\D/g, "");
+    const graphVersion = process.env.META_GRAPH_API_VERSION?.trim() || "v20.0";
+    const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(phoneNumberId)}/messages`;
+
+    console.log("[META_SEND_START]", {
+      channelId: channel.id,
+      companyId: channel.companyId,
+    });
+    console.log("[META_SEND_PHONE_NUMBER_ID]", { phoneNumberId });
+    console.log("[META_SEND_INSTANCE]", { phoneNumberId, wabaId: channel.wabaId ?? null });
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: toDigits,
+          type: "text",
+          text: { preview_url: false, body },
+        }),
+      });
+
+      const raw = await res.text().catch(() => "");
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      } catch {
+        parsed = {};
+      }
+
+      if (!res.ok) {
+        const errObj = parsed.error as Record<string, unknown> | undefined;
+        const errorCode = errObj?.code != null ? String(errObj.code) : String(res.status);
+        const errorMessage =
+          errObj?.message != null ? String(errObj.message) : raw.slice(0, 500) || "meta_api_error";
+        console.error("[META_SEND_ERROR]", { status: res.status, errorCode, errorMessage });
+        return { ok: false, error: "meta_api_error", errorCode, errorMessage };
+      }
+
+      const messages = parsed.messages as Array<{ id?: string }> | undefined;
+      const providerMessageId = messages?.[0]?.id ?? null;
+      console.log("[META_SEND_RESPONSE]", { status: res.status, providerMessageId });
+      return { ok: true, providerMessageId };
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      console.error("[META_SEND_ERROR]", { message: errorMessage });
+      return { ok: false, error: "meta_fetch_failed", errorMessage };
+    }
   }
 
   /**
