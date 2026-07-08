@@ -109,9 +109,15 @@ export function handleMetaWebhookGET(request: Request): Response {
   const verifyToken = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
+  console.log("[META_WEBHOOK_GET_RECEIVED]", {
+    mode,
+    hasChallenge: !!challenge,
+    hasVerifyToken: !!verifyToken,
+  });
+
   const expected = metaAppVerifyToken();
   if (!expected) {
-    console.log("[META_WEBHOOK_VERIFY_FAILED]", { reason: "missing_verify_token_env" });
+    console.log("[META_WEBHOOK_VERIFY_FAIL]", { reason: "missing_verify_token_env" });
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -123,7 +129,7 @@ export function handleMetaWebhookGET(request: Request): Response {
     });
   }
 
-  console.log("[META_WEBHOOK_VERIFY_FAILED]", {
+  console.log("[META_WEBHOOK_VERIFY_FAIL]", {
     mode,
     hasChallenge: !!challenge,
     tokenMatch: verifyToken === expected,
@@ -155,6 +161,11 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     rawBody = await request.text();
     const signatureHeader = request.headers.get("x-hub-signature-256");
 
+    console.log("[META_WEBHOOK_POST_RECEIVED]", {
+      contentLength: rawBody.length,
+      hasSignature: !!signatureHeader,
+    });
+
     try {
       payload = rawBody ? JSON.parse(rawBody) : {};
     } catch {
@@ -170,7 +181,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
 
     auditPayload = buildMetaWebhookAuditPayload(payload, parsedPhones);
 
-    console.log("[META_WEBHOOK_RECEIVED]", {
+    console.log("[META_WEBHOOK_POST_BODY]", {
       object: (payload as Record<string, unknown>)?.object ?? null,
       phoneNumberIds,
       changes: parsedPhones.length,
@@ -289,6 +300,13 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       httpStatus: 200,
       payload: auditPayload,
       error: persistError,
+    });
+
+    console.log("[META_WEBHOOK_POST_PROCESSED]", {
+      phoneNumberId,
+      channelId,
+      processingStatus,
+      persistError,
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
