@@ -17,6 +17,7 @@ import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution
 import { Route as ApiUsersRouteImport } from './routes/api/users'
 import { Route as ApiPlansRouteImport } from './routes/api/plans'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiDashboardRouteImport } from './routes/api/dashboard'
 import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
 import { Route as ApiContactsRouteImport } from './routes/api/contacts'
@@ -136,6 +137,11 @@ const ApiPlansRoute = ApiPlansRouteImport.update({
 const ApiMessagesRoute = ApiMessagesRouteImport.update({
   id: '/api/messages',
   path: '/api/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDashboardRoute = ApiDashboardRouteImport.update({
@@ -586,6 +592,7 @@ export interface FileRoutesByFullPath {
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/dashboard': typeof ApiDashboardRouteWithChildren
+  '/api/health': typeof ApiHealthRoute
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
@@ -675,6 +682,7 @@ export interface FileRoutesByTo {
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/dashboard': typeof ApiDashboardRouteWithChildren
+  '/api/health': typeof ApiHealthRoute
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
@@ -767,6 +775,7 @@ export interface FileRoutesById {
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/dashboard': typeof ApiDashboardRouteWithChildren
+  '/api/health': typeof ApiHealthRoute
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
   '/api/users': typeof ApiUsersRouteWithChildren
@@ -859,6 +868,7 @@ export interface FileRouteTypes {
     | '/api/contacts'
     | '/api/conversations'
     | '/api/dashboard'
+    | '/api/health'
     | '/api/messages'
     | '/api/plans'
     | '/api/users'
@@ -948,6 +958,7 @@ export interface FileRouteTypes {
     | '/api/contacts'
     | '/api/conversations'
     | '/api/dashboard'
+    | '/api/health'
     | '/api/messages'
     | '/api/plans'
     | '/api/users'
@@ -1039,6 +1050,7 @@ export interface FileRouteTypes {
     | '/api/contacts'
     | '/api/conversations'
     | '/api/dashboard'
+    | '/api/health'
     | '/api/messages'
     | '/api/plans'
     | '/api/users'
@@ -1119,6 +1131,7 @@ export interface RootRouteChildren {
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRouteWithChildren
   ApiDashboardRoute: typeof ApiDashboardRouteWithChildren
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiMessagesRoute: typeof ApiMessagesRouteWithChildren
   ApiPlansRoute: typeof ApiPlansRoute
   ApiUsersRoute: typeof ApiUsersRouteWithChildren
@@ -1209,6 +1222,13 @@ declare module '@tanstack/react-router' {
       path: '/api/messages'
       fullPath: '/api/messages'
       preLoaderRoute: typeof ApiMessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/dashboard': {
@@ -2081,6 +2101,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiContactsRoute: ApiContactsRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRouteWithChildren,
   ApiDashboardRoute: ApiDashboardRouteWithChildren,
+  ApiHealthRoute: ApiHealthRoute,
   ApiMessagesRoute: ApiMessagesRouteWithChildren,
   ApiPlansRoute: ApiPlansRoute,
   ApiUsersRoute: ApiUsersRouteWithChildren,
