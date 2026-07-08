@@ -62,6 +62,9 @@ export interface ProviderSendResult {
   ok: boolean;
   error?: string;
   notImplemented?: boolean;
+  providerMessageId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
 }
 
 /** Interface mínima de provider — envio será implementado em fase posterior. */

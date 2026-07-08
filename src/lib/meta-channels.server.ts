@@ -214,3 +214,37 @@ export async function storeMetaAccessTokenSafe(
   }
   return null;
 }
+
+export async function recordMetaChannelError(
+  channelId: string,
+  companyId: string,
+  errorCode: string,
+  errorMessage: string,
+): Promise<void> {
+  await ensureCrmSchema();
+  const s = sql();
+  const safeMessage = errorMessage.length > 500 ? `${errorMessage.slice(0, 500)}…` : errorMessage;
+  await s`
+    UPDATE public.whatsapp_channels
+    SET last_error_code = ${errorCode},
+        last_error_message = ${safeMessage},
+        updated_at = now()
+    WHERE id = ${channelId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND lower(channel_type) = 'meta'
+  `;
+}
+
+export async function clearMetaChannelError(channelId: string, companyId: string): Promise<void> {
+  await ensureCrmSchema();
+  const s = sql();
+  await s`
+    UPDATE public.whatsapp_channels
+    SET last_error_code = NULL,
+        last_error_message = NULL,
+        updated_at = now()
+    WHERE id = ${channelId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND lower(channel_type) = 'meta'
+  `;
+}

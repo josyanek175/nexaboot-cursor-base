@@ -65,7 +65,11 @@ function mapChannelRow(row: ChannelRow): WhatsAppChannelRecord | null {
 }
 
 export function getProviderByKind(kind: WhatsAppProviderKind): WhatsAppProvider {
-  if (kind === "meta") return metaWhatsAppProvider;
+  if (kind === "meta") {
+    console.log("[PROVIDER_ROUTER_SELECTED_META]");
+    return metaWhatsAppProvider;
+  }
+  console.log("[PROVIDER_ROUTER_SELECTED_EVOLUTION]");
   return evolutionProvider;
 }
 
