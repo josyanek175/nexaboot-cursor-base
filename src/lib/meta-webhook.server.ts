@@ -111,83 +111,174 @@ export function handleMetaWebhookGET(request: Request): Response {
 
   const expected = metaAppVerifyToken();
   if (!expected) {
+    console.log("[META_WEBHOOK_VERIFY_FAILED]", { reason: "missing_verify_token_env" });
     return new Response("Forbidden", { status: 403 });
   }
 
-  if (mode !== "subscribe" || !verifyToken || !challenge || verifyToken !== expected) {
-    return new Response("Forbidden", { status: 403 });
+  if (mode === "subscribe" && verifyToken && challenge && verifyToken === expected) {
+    console.log("[META_WEBHOOK_VERIFY_SUCCESS]", { mode });
+    return new Response(challenge, {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   }
 
-  return new Response(challenge, {
+  console.log("[META_WEBHOOK_VERIFY_FAILED]", {
+    mode,
+    hasChallenge: !!challenge,
+    tokenMatch: verifyToken === expected,
+  });
+  return new Response("Forbidden", { status: 403 });
+}
+
+function metaWebhookOkResponse(): Response {
+  return new Response("OK", {
     status: 200,
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
 }
 
-/** POST — ingestão de eventos Meta com validação de assinatura. */
+/** POST — ingestão de eventos Meta. Sempre responde 200 para evitar reenvio infinito. */
 export async function handleMetaWebhookPOST(request: Request): Promise<Response> {
-  if (!metaAppSecret()) {
-    return new Response("Service unavailable", { status: 503 });
-  }
-
-  const rawBody = await request.text();
-  const signatureHeader = request.headers.get("x-hub-signature-256");
-
-  if (!validateMetaWebhookSignature(rawBody, signatureHeader)) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
+  let rawBody = "";
   let payload: unknown = {};
-  try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    payload = { parse_error: true };
-  }
-
-  const phoneNumberIds = extractMetaPhoneNumberIds(payload);
-  const phoneNumberId = phoneNumberIds[0] ?? null;
-  const eventTypes = extractMetaEventTypes(payload);
-  const eventType = eventTypes.length > 0 ? eventTypes.join(",") : null;
-  const parsedPhones = parseMetaWebhookPhones(payload);
-  const auditPayload = buildMetaWebhookAuditPayload(payload, parsedPhones);
-
+  let signatureValid = false;
+  let phoneNumberId: string | null = null;
   let channelId: string | null = null;
   let companyId: string | null = null;
+  let eventType: string | null = null;
   let processingStatus = "ignored";
-
-  if (phoneNumberId) {
-    const channel = await loadMetaChannelByPhoneNumberId(phoneNumberId);
-    if (channel) {
-      channelId = channel.id;
-      companyId = channel.companyId;
-      processingStatus = "processed";
-      await touchChannelLastWebhookAt(channel.id);
-    }
-  }
-
   let persistError: string | null = null;
-  if (companyId && channelId) {
-    try {
-      await ensureCrmSchema();
-      const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
-      const persistResult = await persistMetaInboundTextMessages(webhookBody);
-      if (persistResult.saved > 0) {
-        processingStatus = "persisted";
-      } else if (persistResult.processed === 0) {
-        processingStatus = "processed";
-      } else if (persistResult.errors > 0) {
-        processingStatus = "persist_error";
-        persistError = `errors=${persistResult.errors}`;
-      }
-      console.log("[META_INBOUND_PERSIST]", persistResult);
-    } catch (e) {
-      persistError = e instanceof Error ? e.message : String(e);
-      processingStatus = "persist_error";
-      console.error("[META_INBOUND_PERSIST_FAIL]", { error: persistError });
-    }
-  }
+  let auditPayload: Record<string, unknown> = { body: {} };
 
   try {
+    rawBody = await request.text();
+    const signatureHeader = request.headers.get("x-hub-signature-256");
+
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      payload = { parse_error: true };
+    }
+
+    const phoneNumberIds = extractMetaPhoneNumberIds(payload);
+    phoneNumberId = phoneNumberIds[0] ?? null;
+    const eventTypes = extractMetaEventTypes(payload);
+    eventType = eventTypes.length > 0 ? eventTypes.join(",") : null;
+    const parsedPhones = parseMetaWebhookPhones(payload);
+    const messageCount = parsedPhones.reduce((total, change) => total + change.messages.length, 0);
+
+    auditPayload = buildMetaWebhookAuditPayload(payload, parsedPhones);
+
+    console.log("[META_WEBHOOK_RECEIVED]", {
+      object: (payload as Record<string, unknown>)?.object ?? null,
+      phoneNumberIds,
+      changes: parsedPhones.length,
+      messageCount,
+      eventType,
+    });
+
+    if (!metaAppSecret()) {
+      console.error("[META_WEBHOOK_ERROR]", { reason: "missing_meta_app_secret" });
+      processingStatus = "error";
+      persistError = "missing_meta_app_secret";
+      await insertMetaWebhookLog({
+        companyId: null,
+        channelId: null,
+        phoneNumberId,
+        eventType,
+        signatureValid: false,
+        processingStatus,
+        httpStatus: 200,
+        payload: auditPayload,
+        error: persistError,
+      }).catch((e) => {
+        console.error("[META_WEBHOOK_ERROR]", {
+          reason: "audit_log_failed",
+          error: e instanceof Error ? e.message : String(e),
+        });
+      });
+      return metaWebhookOkResponse();
+    }
+
+    signatureValid = validateMetaWebhookSignature(rawBody, signatureHeader);
+    if (!signatureValid) {
+      console.error("[META_WEBHOOK_ERROR]", { reason: "invalid_signature" });
+      processingStatus = "unauthorized";
+      persistError = "invalid_signature";
+      await insertMetaWebhookLog({
+        companyId: null,
+        channelId: null,
+        phoneNumberId,
+        eventType,
+        signatureValid: false,
+        processingStatus,
+        httpStatus: 200,
+        payload: auditPayload,
+        error: persistError,
+      }).catch((e) => {
+        console.error("[META_WEBHOOK_ERROR]", {
+          reason: "audit_log_failed",
+          error: e instanceof Error ? e.message : String(e),
+        });
+      });
+      return metaWebhookOkResponse();
+    }
+
+    for (const change of parsedPhones) {
+      for (const message of change.messages) {
+        console.log("[META_MESSAGE_RECEIVED]", {
+          phoneNumberId: change.phone_number_id,
+          messageId: message.id,
+          from: message.from.e164,
+          type: message.type,
+        });
+      }
+    }
+
+    if (phoneNumberId) {
+      const channel = await loadMetaChannelByPhoneNumberId(phoneNumberId);
+      if (!channel) {
+        console.log("[META_CHANNEL_NOT_FOUND]", { phoneNumberId });
+      } else if (!channel.companyId) {
+        console.log("[META_CHANNEL_WITHOUT_COMPANY]", {
+          phoneNumberId,
+          channelId: channel.id,
+        });
+      } else {
+        channelId = channel.id;
+        companyId = channel.companyId;
+        processingStatus = "processed";
+        console.log("[META_CHANNEL_FOUND]", {
+          phoneNumberId,
+          channelId: channel.id,
+          companyId: channel.companyId,
+        });
+        await touchChannelLastWebhookAt(channel.id);
+      }
+    }
+
+    if (companyId && channelId) {
+      try {
+        await ensureCrmSchema();
+        const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
+        const persistResult = await persistMetaInboundTextMessages(webhookBody);
+        if (persistResult.saved > 0) {
+          processingStatus = "persisted";
+        } else if (persistResult.processed === 0) {
+          processingStatus = "processed";
+        } else if (persistResult.errors > 0) {
+          processingStatus = "persist_error";
+          persistError = `errors=${persistResult.errors}`;
+        }
+        console.log("[META_INBOUND_PERSIST]", persistResult);
+      } catch (e) {
+        persistError = e instanceof Error ? e.message : String(e);
+        processingStatus = "persist_error";
+        console.error("[META_WEBHOOK_ERROR]", { reason: "persist_failed", error: persistError });
+      }
+    }
+
     await insertMetaWebhookLog({
       companyId,
       channelId,
@@ -200,13 +291,27 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       error: persistError,
     });
   } catch (e) {
-    console.error("[META_WEBHOOK_LOG_FAIL]", {
-      error: e instanceof Error ? e.message : String(e),
-    });
+    const error = e instanceof Error ? e.message : String(e);
+    console.error("[META_WEBHOOK_ERROR]", { reason: "handler_exception", error });
+    try {
+      await insertMetaWebhookLog({
+        companyId,
+        channelId,
+        phoneNumberId,
+        eventType,
+        signatureValid,
+        processingStatus: "error",
+        httpStatus: 200,
+        payload: auditPayload,
+        error,
+      });
+    } catch (logErr) {
+      console.error("[META_WEBHOOK_ERROR]", {
+        reason: "audit_log_failed",
+        error: logErr instanceof Error ? logErr.message : String(logErr),
+      });
+    }
   }
 
-  return new Response("OK", {
-    status: 200,
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+  return metaWebhookOkResponse();
 }

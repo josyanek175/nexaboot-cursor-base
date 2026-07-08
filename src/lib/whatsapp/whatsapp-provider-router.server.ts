@@ -119,6 +119,7 @@ export async function loadMetaChannelByPhoneNumberId(
     FROM public.whatsapp_channels
     WHERE lower(channel_type) = 'meta'
       AND phone_number_id = ${phoneNumberId}
+      AND upper(status) = 'ACTIVE'
       AND deleted_at IS NULL
       AND active = true
     LIMIT 1
