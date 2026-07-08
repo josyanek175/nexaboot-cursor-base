@@ -71,6 +71,7 @@ import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/re
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
 import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
 import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
+import { Route as ApiWebhooksMetaWhatsappRouteImport } from './routes/api/webhooks/meta/whatsapp'
 import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
 import { Route as ApiMetaChannelsIdRouteImport } from './routes/api/meta/channels/$id'
@@ -411,6 +412,11 @@ const AppCampanhasIdRoute = AppCampanhasIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AppCampanhasRoute,
 } as any)
+const ApiWebhooksMetaWhatsappRoute = ApiWebhooksMetaWhatsappRouteImport.update({
+  id: '/whatsapp',
+  path: '/whatsapp',
+  getParentRoute: () => ApiWebhooksMetaRoute,
+} as any)
 const ApiPublicWebhooksMetaRoute = ApiPublicWebhooksMetaRouteImport.update({
   id: '/api/public/webhooks/meta',
   path: '/api/public/webhooks/meta',
@@ -618,7 +624,7 @@ export interface FileRoutesByFullPath {
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
-  '/api/webhooks/meta': typeof ApiWebhooksMetaRoute
+  '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
@@ -636,6 +642,7 @@ export interface FileRoutesByFullPath {
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
+  '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/campaigns/$id/import/confirm': typeof ApiCampaignsIdImportConfirmRoute
   '/api/campaigns/$id/import/preview': typeof ApiCampaignsIdImportPreviewRoute
@@ -706,7 +713,7 @@ export interface FileRoutesByTo {
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
-  '/api/webhooks/meta': typeof ApiWebhooksMetaRoute
+  '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
@@ -724,6 +731,7 @@ export interface FileRoutesByTo {
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
+  '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/campaigns/$id/import/confirm': typeof ApiCampaignsIdImportConfirmRoute
   '/api/campaigns/$id/import/preview': typeof ApiCampaignsIdImportPreviewRoute
@@ -797,7 +805,7 @@ export interface FileRoutesById {
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
-  '/api/webhooks/meta': typeof ApiWebhooksMetaRoute
+  '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/_app/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
@@ -815,6 +823,7 @@ export interface FileRoutesById {
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
+  '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
   '/api/campaigns/$id/import/confirm': typeof ApiCampaignsIdImportConfirmRoute
   '/api/campaigns/$id/import/preview': typeof ApiCampaignsIdImportPreviewRoute
@@ -906,6 +915,7 @@ export interface FileRouteTypes {
     | '/api/meta/channels/$id'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
+    | '/api/webhooks/meta/whatsapp'
     | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/campaigns/$id/import/confirm'
     | '/api/campaigns/$id/import/preview'
@@ -994,6 +1004,7 @@ export interface FileRouteTypes {
     | '/api/meta/channels/$id'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
+    | '/api/webhooks/meta/whatsapp'
     | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/campaigns/$id/import/confirm'
     | '/api/campaigns/$id/import/preview'
@@ -1084,6 +1095,7 @@ export interface FileRouteTypes {
     | '/api/meta/channels/$id'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
+    | '/api/webhooks/meta/whatsapp'
     | '/api/campaigns/$id/contacts/$contactRowId'
     | '/api/campaigns/$id/import/confirm'
     | '/api/campaigns/$id/import/preview'
@@ -1136,7 +1148,7 @@ export interface RootRouteChildren {
   ApiInternalChatUsersRoute: typeof ApiInternalChatUsersRoute
   ApiMetaChannelsRoute: typeof ApiMetaChannelsRouteWithChildren
   ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
-  ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRoute
+  ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRouteWithChildren
   ApiPublicWebhooksEvolutionRoute: typeof ApiPublicWebhooksEvolutionRoute
   ApiPublicWebhooksMetaRoute: typeof ApiPublicWebhooksMetaRoute
 }
@@ -1576,6 +1588,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/campanhas/$id'
       preLoaderRoute: typeof AppCampanhasIdRouteImport
       parentRoute: typeof AppCampanhasRoute
+    }
+    '/api/webhooks/meta/whatsapp': {
+      id: '/api/webhooks/meta/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/api/webhooks/meta/whatsapp'
+      preLoaderRoute: typeof ApiWebhooksMetaWhatsappRouteImport
+      parentRoute: typeof ApiWebhooksMetaRoute
     }
     '/api/public/webhooks/meta': {
       id: '/api/public/webhooks/meta'
@@ -2039,6 +2058,18 @@ const ApiMetaChannelsRouteWithChildren = ApiMetaChannelsRoute._addFileChildren(
   ApiMetaChannelsRouteChildren,
 )
 
+interface ApiWebhooksMetaRouteChildren {
+  ApiWebhooksMetaWhatsappRoute: typeof ApiWebhooksMetaWhatsappRoute
+}
+
+const ApiWebhooksMetaRouteChildren: ApiWebhooksMetaRouteChildren = {
+  ApiWebhooksMetaWhatsappRoute: ApiWebhooksMetaWhatsappRoute,
+}
+
+const ApiWebhooksMetaRouteWithChildren = ApiWebhooksMetaRoute._addFileChildren(
+  ApiWebhooksMetaRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
@@ -2079,7 +2110,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalChatUsersRoute: ApiInternalChatUsersRoute,
   ApiMetaChannelsRoute: ApiMetaChannelsRouteWithChildren,
   ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
-  ApiWebhooksMetaRoute: ApiWebhooksMetaRoute,
+  ApiWebhooksMetaRoute: ApiWebhooksMetaRouteWithChildren,
   ApiPublicWebhooksEvolutionRoute: ApiPublicWebhooksEvolutionRoute,
   ApiPublicWebhooksMetaRoute: ApiPublicWebhooksMetaRoute,
 }
