@@ -2,6 +2,7 @@
 // Tokens ficam cifrados em whatsapp_channel_secrets; nunca expostos em logs/responses.
 
 import { encryptToken, hasTokenEncryptionKey } from "@/lib/crypto/token-crypto.server";
+import { loadMetaAccessToken } from "@/lib/meta-access-token.server";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import type {
   ProviderSendResult,
@@ -42,7 +43,10 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       return { ok: false, error: "missing_phone_number_id" };
     }
 
-    const token = await loadMetaAccessToken(channel.id, channel.companyId);
+    const token = await loadMetaAccessToken(channel.id, channel.companyId, {
+      phoneNumberId: channel.phoneNumberId,
+      source: "sendText",
+    });
     if (!token) {
       return { ok: false, error: "missing_access_token", errorCode: "missing_access_token" };
     }
@@ -122,8 +126,8 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     await ensureCrmSchema();
     const s = sql();
 
-    const rows = await s<{ id: string }[]>`
-      SELECT id FROM public.whatsapp_channels
+    const rows = await s<{ id: string; phone_number_id: string | null }[]>`
+      SELECT id, phone_number_id FROM public.whatsapp_channels
       WHERE id = ${channelId}::uuid
         AND company_id = ${companyId}::uuid
         AND lower(channel_type) = 'meta'
@@ -132,6 +136,42 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     `;
     if (!rows[0]) {
       return { ok: false, error: "channel_not_found" };
+    }
+
+    const phoneNumberId = rows[0].phone_number_id?.trim() || null;
+    const graphVersion = process.env.META_GRAPH_API_VERSION?.trim() || "v20.0";
+
+    if (phoneNumberId) {
+      const probe = await fetch(
+        `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(phoneNumberId)}?fields=id`,
+        { headers: { Authorization: `Bearer ${trimmed}` } },
+      );
+      const probeBody = await probe.text().catch(() => "");
+      if (!probe.ok) {
+        let message = probeBody.slice(0, 300);
+        try {
+          const parsed = JSON.parse(probeBody) as { error?: { message?: string } };
+          message = parsed.error?.message ?? message;
+        } catch {
+          // mantém texto bruto
+        }
+        await s`
+          UPDATE public.whatsapp_channels
+          SET token_status = 'invalid',
+              last_error_code = ${String(probe.status)},
+              last_error_message = ${message},
+              updated_at = now()
+          WHERE id = ${channelId}::uuid AND company_id = ${companyId}::uuid
+        `;
+        console.error("[META_TOKEN_GRAPH_VALIDATION_FAILED]", {
+          channelId,
+          phoneNumberId,
+          status: probe.status,
+          message,
+        });
+        return { ok: false, error: "token_graph_validation_failed" };
+      }
+      console.log("[META_TOKEN_GRAPH_VALIDATION_OK]", { channelId, phoneNumberId });
     }
 
     const ciphertext = encryptToken(trimmed);
@@ -147,7 +187,10 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
     await s`
       UPDATE public.whatsapp_channels
-      SET token_status = 'valid', updated_at = now()
+      SET token_status = 'valid',
+          last_error_code = NULL,
+          last_error_message = NULL,
+          updated_at = now()
       WHERE id = ${channelId}::uuid AND company_id = ${companyId}::uuid
     `;
 
@@ -203,35 +246,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
 export const metaWhatsAppProvider = new MetaWhatsAppProvider();
 
-/** Decifra token apenas para uso interno server-side (ex.: envio futuro). Nunca logar retorno. */
-export async function loadMetaAccessToken(
-  channelId: string,
-  companyId: string,
-): Promise<string | null> {
-  await ensureCrmSchema();
-  const s = sql();
-
-  const rows = await s<{ ciphertext: string | null }[]>`
-    SELECT sec.access_token_ciphertext AS ciphertext
-    FROM public.whatsapp_channels ch
-    JOIN public.whatsapp_channel_secrets sec ON sec.channel_id = ch.id
-    WHERE ch.id = ${channelId}::uuid
-      AND ch.company_id = ${companyId}::uuid
-      AND lower(ch.channel_type) = 'meta'
-      AND ch.deleted_at IS NULL
-    LIMIT 1
-  `;
-
-  const ciphertext = rows[0]?.ciphertext;
-  if (!ciphertext) return null;
-
-  const { decryptToken } = await import("@/lib/crypto/token-crypto.server");
-  try {
-    return decryptToken(ciphertext);
-  } catch {
-    return null;
-  }
-}
+export { loadMetaAccessToken } from "@/lib/meta-access-token.server";
 
 export function mapMetaChannelRow(row: Record<string, unknown>): WhatsAppChannelRecord {
   const rawCompanyId = row.company_id;

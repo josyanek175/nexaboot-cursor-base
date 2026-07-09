@@ -5,7 +5,7 @@ import {
   ShieldAlert, X, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPost, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiDelete, apiPatch } from "@/lib/api";
 import { formatChannelPhoneForDisplay } from "@/lib/phone";
 
 type ChannelStatus = "disconnected" | "connecting" | "qrcode" | "connected" | "error" | string;
@@ -36,6 +36,7 @@ function CanaisPage() {
   const [evolutionConfigured, setEvolutionConfigured] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [qrChannel, setQrChannel] = useState<Channel | null>(null);
+  const [metaTokenChannel, setMetaTokenChannel] = useState<Channel | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -73,14 +74,7 @@ function CanaisPage() {
 
       if (isMeta) {
         if (r.metaError) {
-          const parts = [
-            r.metaError.message,
-            r.metaError.code != null ? `code=${r.metaError.code}` : null,
-            r.metaError.type ? `type=${r.metaError.type}` : null,
-            r.metaError.error_subcode != null ? `subcode=${r.metaError.error_subcode}` : null,
-            r.metaError.fbtrace_id ? `fbtrace=${r.metaError.fbtrace_id}` : null,
-          ].filter(Boolean);
-          toast.error(parts.join(" · ") || "Falha ao consultar status Meta");
+          toast.error(r.metaError.message || "Falha ao consultar status Meta");
         } else {
           const graph = r.graph as Record<string, unknown> | null | undefined;
           const verified = graph?.verified_name != null ? String(graph.verified_name) : null;
@@ -203,11 +197,11 @@ function CanaisPage() {
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
-                    onClick={() => setQrChannel(c)}
+                    onClick={() => (isMeta ? setMetaTokenChannel(c) : setQrChannel(c))}
                     className="inline-flex items-center gap-1.5 rounded-md bg-whatsapp px-2.5 py-1.5 text-xs font-medium text-whatsapp-foreground hover:opacity-90"
                   >
                     <QrCode className="h-3.5 w-3.5" />
-                    {c.status === "connected" ? "Reconectar" : "Conectar WhatsApp"}
+                    {isMeta ? "Conectar Meta" : c.status === "connected" ? "Reconectar" : "Conectar WhatsApp"}
                   </button>
                   <button
                     onClick={() => refreshStatus(c)}
@@ -254,6 +248,14 @@ function CanaisPage() {
             await load();
             setQrChannel(created);
           }}
+        />
+      )}
+
+      {metaTokenChannel && (
+        <MetaTokenModal
+          channel={metaTokenChannel}
+          onClose={() => { setMetaTokenChannel(null); void load(); }}
+          onSaved={() => { toast.success("Token Meta salvo"); setMetaTokenChannel(null); void load(); }}
         />
       )}
 
@@ -341,6 +343,68 @@ function AddChannelModal({
           className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-50"
         >
           {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar e conectar
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Modal: salvar token Meta ────────────────────────────────────────────────
+function MetaTokenModal({
+  channel, onClose, onSaved,
+}: {
+  channel: Channel;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [accessToken, setAccessToken] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!accessToken.trim()) {
+      toast.error("Cole o access token permanente do painel Meta");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiPatch(`/meta/channels/${channel.id}`, { access_token: accessToken.trim() });
+      onSaved();
+    } catch (e) {
+      toast.error(`Falha ao salvar token: ${e instanceof Error ? e.message : "erro"}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title={`Conectar Meta: ${channel.name}`} onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Cole o <b>access token permanente</b> do app Meta (WhatsApp → API Setup).
+          O token é cifrado e salvo em <code>whatsapp_channel_secrets</code> no nexaboot-web.
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">Access token</span>
+          <textarea
+            value={accessToken}
+            onChange={(e) => setAccessToken(e.target.value)}
+            rows={4}
+            placeholder="EAAxxxxxxxx..."
+            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-whatsapp"
+          />
+        </label>
+        <p className="text-[11px] text-muted-foreground">
+          Confirme também <code>META_TOKEN_ENCRYPTION_KEY</code> no serviço <b>nexaboot-web</b> (EasyPanel), não no Evolution.
+        </p>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-md px-3 py-2 text-sm hover:bg-accent">Cancelar</button>
+        <button
+          onClick={() => void save()}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar token
         </button>
       </div>
     </ModalShell>

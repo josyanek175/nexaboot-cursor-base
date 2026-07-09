@@ -48,6 +48,21 @@ export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
               /^(waba_id|business_id)(_real)?$/i.test(value) ||
               /_real$/i.test(value);
 
+            const secretRows = await s<
+              {
+                has_encrypted_token: boolean;
+                token_updated_at: Date | string | null;
+              }[]
+            >`
+              SELECT
+                (access_token_ciphertext IS NOT NULL AND length(access_token_ciphertext) > 0) AS has_encrypted_token,
+                token_updated_at
+              FROM public.whatsapp_channel_secrets
+              WHERE channel_id = ${row.id}::uuid
+              LIMIT 1
+            `;
+            const secret = secretRows[0];
+
             channel = {
               id: row.id,
               companyId: row.company_id,
@@ -61,6 +76,9 @@ export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
               wabaIdLooksInvalid: looksLikePlaceholder(wabaId),
               businessIdLooksInvalid: looksLikePlaceholder(businessId),
               tokenStatus: row.token_status,
+              hasSecretRow: !!secret,
+              hasEncryptedToken: !!secret?.has_encrypted_token,
+              tokenUpdatedAt: secret?.token_updated_at ? String(secret.token_updated_at) : null,
               lastWebhookAt: row.last_webhook_at ? String(row.last_webhook_at) : null,
               eligibleForWebhook:
                 String(row.channel_type).toLowerCase() === "meta" &&
@@ -114,6 +132,7 @@ export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
             "Use o domínio WEB de produção (nexaboot-web), nunca nexaboot-api.",
             "META_APP_SECRET deve ser o App Secret do app Meta (Settings > Basic).",
             "META_TOKEN_ENCRYPTION_KEY cifra tokens no banco; não é Bearer da Graph API.",
+            "Access token Meta fica em whatsapp_channel_secrets.access_token_ciphertext (nexaboot-web).",
             "POST sem x-hub-signature-256 é rejeitado (missing_signature).",
           ],
           channel,

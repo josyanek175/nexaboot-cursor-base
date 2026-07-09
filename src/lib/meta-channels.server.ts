@@ -209,8 +209,19 @@ export async function storeMetaAccessTokenSafe(
 ): Promise<Response | null> {
   const result = await metaWhatsAppProvider.storeAccessToken(channelId, companyId, accessToken);
   if (!result.ok) {
-    const status = result.error === "missing_encryption_key" ? 503 : 400;
-    return Response.json({ error: result.error ?? "token_store_failed" }, { status });
+    const status =
+      result.error === "missing_encryption_key"
+        ? 503
+        : result.error === "token_graph_validation_failed"
+          ? 400
+          : 400;
+    const message =
+      result.error === "token_graph_validation_failed"
+        ? "Token rejeitado pela Graph API. Verifique se pertence ao WABA/phone_number_id deste canal."
+        : result.error === "missing_encryption_key"
+          ? "META_TOKEN_ENCRYPTION_KEY não configurada no nexaboot-web."
+          : (result.error ?? "token_store_failed");
+    return Response.json({ error: result.error ?? "token_store_failed", message }, { status });
   }
   return null;
 }

@@ -9,7 +9,9 @@ export async function apiGet(path: string) {
     let detail = "";
     try {
       const data = await response.json();
-      if (data?.metaError?.message) {
+      if (data?.message) {
+        detail = `: ${data.message}`;
+      } else if (data?.metaError?.message) {
         detail = `: ${data.metaError.message}`;
       } else if (data?.error) {
         detail = ` (${data.error})`;
@@ -93,6 +95,34 @@ export async function apiDelete(path: string) {
   });
   if (!response.ok) {
     throw new Error(`Erro API: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function apiPatch(path: string, body?: unknown) {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      if (data?.message) {
+        detail = `: ${data.message}`;
+      } else if (data?.metaError?.message) {
+        detail = `: ${data.metaError.message}`;
+      } else if (data?.error) {
+        detail = ` (${data.error})`;
+      }
+    } catch {
+      // resposta sem corpo JSON
+    }
+    throw new Error(`Erro API: ${response.status}${detail}`);
   }
   return response.json();
 }

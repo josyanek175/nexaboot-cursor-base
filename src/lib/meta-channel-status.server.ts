@@ -1,11 +1,14 @@
 // Consulta status operacional do canal Meta via Graph API (server-only).
 
-import { decryptToken } from "@/lib/crypto/token-crypto.server";
+import {
+  loadMetaAccessTokenDetailed,
+  metaTokenErrorCode,
+  metaTokenUserMessage,
+} from "@/lib/meta-access-token.server";
 import {
   clearMetaChannelError,
   recordMetaChannelError,
 } from "@/lib/meta-channels.server";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import type {
   MetaGraphErrorDetail,
   WhatsAppChannelRecord,
@@ -41,31 +44,6 @@ function parseMetaGraphError(
   };
 }
 
-async function loadChannelAccessToken(
-  channelId: string,
-  companyId: string,
-): Promise<string | null> {
-  await ensureCrmSchema();
-  const s = sql();
-  const rows = await s<{ ciphertext: string | null }[]>`
-    SELECT sec.access_token_ciphertext AS ciphertext
-    FROM public.whatsapp_channels ch
-    JOIN public.whatsapp_channel_secrets sec ON sec.channel_id = ch.id
-    WHERE ch.id = ${channelId}::uuid
-      AND ch.company_id = ${companyId}::uuid
-      AND lower(ch.channel_type) = 'meta'
-      AND ch.deleted_at IS NULL
-    LIMIT 1
-  `;
-  const ciphertext = rows[0]?.ciphertext;
-  if (!ciphertext) return null;
-  try {
-    return decryptToken(ciphertext);
-  } catch {
-    return null;
-  }
-}
-
 async function graphGet(
   path: string,
   token: string,
@@ -93,7 +71,11 @@ export async function fetchMetaChannelLiveStatus(
   const wabaId = channel.wabaId?.trim() || null;
   const businessId = channel.businessId?.trim() || null;
   const version = graphVersion();
-  const token = await loadChannelAccessToken(channel.id, channel.companyId);
+  const tokenResult = await loadMetaAccessTokenDetailed(channel.id, channel.companyId, {
+    phoneNumberId,
+    source: "status",
+  });
+  const token = tokenResult.ok ? tokenResult.token : null;
   const hasToken = !!token;
 
   const urlSemToken = phoneNumberId
@@ -129,11 +111,13 @@ export async function fetchMetaChannelLiveStatus(
   }
 
   if (!token) {
+    const reason = tokenResult.ok ? "secret_not_found" : tokenResult.reason;
     const metaError: MetaGraphErrorDetail = {
-      code: "missing_access_token",
+      code: metaTokenErrorCode(reason),
       type: "local",
-      message: "Token Meta ausente ou falha ao decriptar (verifique META_TOKEN_ENCRYPTION_KEY)",
+      message: tokenResult.ok ? metaTokenUserMessage("secret_not_found") : metaTokenUserMessage(reason),
       source: "local",
+      tokenReason: reason,
     };
     console.error("[META_STATUS_ERROR]", metaError);
     await recordMetaChannelError(

@@ -54,6 +54,7 @@ export interface MetaGraphErrorDetail {
   fbtrace_id?: string | null;
   httpStatus?: number;
   source?: "phone_number" | "waba_phone_numbers" | "local";
+  tokenReason?: string;
 }
 
 export interface ProviderStatusResult {

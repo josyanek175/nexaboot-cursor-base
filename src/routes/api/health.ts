@@ -30,6 +30,7 @@ export const Route = createFileRoute("/api/health")({
           commit: readGitCommit(),
           hasMetaVerifyToken: !!process.env.META_APP_VERIFY_TOKEN?.trim(),
           hasMetaAppSecret: !!process.env.META_APP_SECRET?.trim(),
+          hasTokenEncryptionKey: !!process.env.META_TOKEN_ENCRYPTION_KEY?.trim(),
         });
       },
     },
