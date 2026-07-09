@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as PoliticaDePrivacidadeRouteImport } from './routes/politica-de-privacidade'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -107,6 +108,11 @@ import { Route as ApiCampaignsIdContactsContactRowIdRouteImport } from './routes
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PoliticaDePrivacidadeRoute = PoliticaDePrivacidadeRouteImport.update({
+  id: '/politica-de-privacidade',
+  path: '/politica-de-privacidade',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -598,6 +604,7 @@ const ApiCampaignsIdContactsContactRowIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/register': typeof RegisterRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
@@ -693,6 +700,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/register': typeof RegisterRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
@@ -789,6 +797,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/register': typeof RegisterRoute
   '/_app/atendimento': typeof AppAtendimentoRoute
   '/_app/automacoes': typeof AppAutomacoesRoute
@@ -886,6 +895,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/politica-de-privacidade'
     | '/register'
     | '/atendimento'
     | '/automacoes'
@@ -981,6 +991,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/politica-de-privacidade'
     | '/register'
     | '/atendimento'
     | '/automacoes'
@@ -1076,6 +1087,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/login'
+    | '/politica-de-privacidade'
     | '/register'
     | '/_app/atendimento'
     | '/_app/automacoes'
@@ -1173,6 +1185,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PoliticaDePrivacidadeRoute: typeof PoliticaDePrivacidadeRoute
   RegisterRoute: typeof RegisterRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
@@ -1223,6 +1236,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/politica-de-privacidade': {
+      id: '/politica-de-privacidade'
+      path: '/politica-de-privacidade'
+      fullPath: '/politica-de-privacidade'
+      preLoaderRoute: typeof PoliticaDePrivacidadeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -2188,6 +2208,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  PoliticaDePrivacidadeRoute: PoliticaDePrivacidadeRoute,
   RegisterRoute: RegisterRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,

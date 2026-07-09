@@ -99,7 +99,12 @@ function LoginPage() {
           </ul>
         </div>
 
-        <div className="text-xs opacity-70">© {new Date().getFullYear()} NexaBoot</div>
+        <div className="text-xs opacity-70">
+          © {new Date().getFullYear()} NexaBoot ·{" "}
+          <a href="/politica-de-privacidade" className="underline hover:opacity-100">
+            Política de Privacidade
+          </a>
+        </div>
       </aside>
 
       {/* Formulário */}
@@ -207,6 +212,11 @@ function LoginPage() {
             </button>
           </form>
 
+          <p className="mt-8 text-center text-xs text-muted-foreground">
+            <a href="/politica-de-privacidade" className="hover:text-foreground hover:underline">
+              Política de Privacidade
+            </a>
+          </p>
         </div>
       </section>
 
