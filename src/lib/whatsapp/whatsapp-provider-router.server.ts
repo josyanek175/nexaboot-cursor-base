@@ -133,6 +133,57 @@ export async function loadMetaChannelByPhoneNumberId(
   return mapMetaChannelRow(row as unknown as Record<string, unknown>);
 }
 
+/** Diagnóstico quando loadMetaChannelByPhoneNumberId falha — não expõe segredos. */
+export async function diagnoseMetaChannelByPhoneNumberId(
+  phoneNumberId: string,
+): Promise<Record<string, unknown>> {
+  await ensureCrmSchema();
+  const s = sql();
+  const rows = await s<{
+    id: string;
+    company_id: string | null;
+    channel_type: string;
+    status: string;
+    active: boolean;
+    deleted_at: Date | string | null;
+  }[]>`
+    SELECT id, company_id, channel_type, status, active, deleted_at
+    FROM public.whatsapp_channels
+    WHERE phone_number_id = ${phoneNumberId}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) {
+    return { found: false, phoneNumberId };
+  }
+
+  const isMeta = String(row.channel_type).toLowerCase() === "meta";
+  const isActiveStatus = String(row.status).toUpperCase() === "ACTIVE";
+  const isActiveFlag = row.active === true;
+  const isDeleted = row.deleted_at != null;
+  const hasCompany = !!row.company_id;
+
+  return {
+    found: true,
+    phoneNumberId,
+    channelId: row.id,
+    companyId: row.company_id,
+    channelType: row.channel_type,
+    status: row.status,
+    active: row.active,
+    deletedAt: row.deleted_at ? String(row.deleted_at) : null,
+    eligibleForWebhook:
+      isMeta && isActiveStatus && isActiveFlag && !isDeleted && hasCompany,
+    reasons: {
+      notMeta: !isMeta,
+      statusNotActive: !isActiveStatus,
+      inactiveFlag: !isActiveFlag,
+      deleted: isDeleted,
+      missingCompanyId: !hasCompany,
+    },
+  };
+}
+
 /** Verifica se phone_number_id já pertence a outra empresa (409 em registro futuro). */
 export async function metaPhoneNumberIdOwner(
   phoneNumberId: string,
