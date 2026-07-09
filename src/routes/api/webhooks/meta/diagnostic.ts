@@ -25,11 +25,15 @@ export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
               status: string;
               active: boolean;
               deleted_at: Date | string | null;
+              waba_id: string | null;
+              business_id: string | null;
+              display_phone_number: string | null;
               token_status: string | null;
               last_webhook_at: Date | string | null;
             }[]
           >`
             SELECT id, company_id, channel_type, status, active, deleted_at,
+                   waba_id, business_id, display_phone_number,
                    token_status, last_webhook_at
             FROM public.whatsapp_channels
             WHERE phone_number_id = ${phoneNumberId}
@@ -37,6 +41,13 @@ export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
           `;
           const row = rows[0];
           if (row) {
+            const wabaId = row.waba_id?.trim() || null;
+            const businessId = row.business_id?.trim() || null;
+            const looksLikePlaceholder = (value: string | null) =>
+              !value ||
+              /^(waba_id|business_id)(_real)?$/i.test(value) ||
+              /_real$/i.test(value);
+
             channel = {
               id: row.id,
               companyId: row.company_id,
@@ -44,6 +55,11 @@ export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
               status: row.status,
               active: row.active,
               deletedAt: row.deleted_at ? String(row.deleted_at) : null,
+              wabaId,
+              businessId,
+              displayPhoneNumber: row.display_phone_number,
+              wabaIdLooksInvalid: looksLikePlaceholder(wabaId),
+              businessIdLooksInvalid: looksLikePlaceholder(businessId),
               tokenStatus: row.token_status,
               lastWebhookAt: row.last_webhook_at ? String(row.last_webhook_at) : null,
               eligibleForWebhook:

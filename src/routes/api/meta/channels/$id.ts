@@ -19,6 +19,8 @@ const PatchMetaChannelBody = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     status: MetaStatusSchema.optional(),
+    waba_id: z.string().trim().min(1).max(120).optional(),
+    business_id: z.string().trim().min(1).max(120).optional(),
     display_phone_number: z.string().trim().min(1).max(40).optional(),
     webhook_verify_token: z.string().trim().min(1).max(256).optional(),
     access_token: z.string().trim().min(1).max(4096).optional(),
@@ -27,6 +29,8 @@ const PatchMetaChannelBody = z
     (body) =>
       body.name !== undefined ||
       body.status !== undefined ||
+      body.waba_id !== undefined ||
+      body.business_id !== undefined ||
       body.display_phone_number !== undefined ||
       body.webhook_verify_token !== undefined ||
       body.access_token !== undefined,
@@ -57,7 +61,15 @@ export const Route = createFileRoute("/api/meta/channels/$id")({
           return Response.json({ error: "invalid_input", detail: parsed.error.flatten() }, { status: 400 });
         }
 
-        const { name, status, display_phone_number, webhook_verify_token, access_token } = parsed.data;
+        const {
+          name,
+          status,
+          waba_id,
+          business_id,
+          display_phone_number,
+          webhook_verify_token,
+          access_token,
+        } = parsed.data;
 
         if (status && !isMetaChannelStatus(status)) {
           return Response.json({ error: "invalid_status" }, { status: 400 });
@@ -76,6 +88,8 @@ export const Route = createFileRoute("/api/meta/channels/$id")({
             name = COALESCE(${name ?? null}, name),
             display_name = COALESCE(${name ?? null}, display_name),
             status = COALESCE(${status ?? null}, status),
+            waba_id = COALESCE(${waba_id ?? null}, waba_id),
+            business_id = COALESCE(${business_id ?? null}, business_id),
             display_phone_number = COALESCE(${display_phone_number ?? null}, display_phone_number),
             webhook_verify_token = COALESCE(${webhook_verify_token ?? null}, webhook_verify_token),
             updated_at = now()

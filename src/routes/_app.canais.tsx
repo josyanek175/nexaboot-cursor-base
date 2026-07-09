@@ -63,9 +63,40 @@ function CanaisPage() {
   useEffect(() => { void load(); }, [load]);
 
   async function refreshStatus(c: Channel) {
+    const isMeta = c.channel_type?.toLowerCase() === "meta";
     setBusy(c.id);
     try {
-      const r = await apiGet(`/evolution/channels/${c.id}/status`);
+      const path = isMeta
+        ? `/meta/channels/${c.id}/status`
+        : `/evolution/channels/${c.id}/status`;
+      const r = await apiGet(path);
+
+      if (isMeta) {
+        if (r.metaError) {
+          const parts = [
+            r.metaError.message,
+            r.metaError.code != null ? `code=${r.metaError.code}` : null,
+            r.metaError.type ? `type=${r.metaError.type}` : null,
+            r.metaError.error_subcode != null ? `subcode=${r.metaError.error_subcode}` : null,
+            r.metaError.fbtrace_id ? `fbtrace=${r.metaError.fbtrace_id}` : null,
+          ].filter(Boolean);
+          toast.error(parts.join(" · ") || "Falha ao consultar status Meta");
+        } else {
+          const graph = r.graph as Record<string, unknown> | null | undefined;
+          const verified = graph?.verified_name != null ? String(graph.verified_name) : null;
+          const display = graph?.display_phone_number != null ? String(graph.display_phone_number) : null;
+          const quality = graph?.quality_rating != null ? String(graph.quality_rating) : null;
+          const summary = [verified, display, quality ? `qualidade: ${quality}` : null]
+            .filter(Boolean)
+            .join(" · ");
+          toast.success(summary ? `Meta OK: ${summary}` : `Status Meta: ${labelOf(r.status)}`);
+        }
+        setChannels((prev) =>
+          prev.map((x) => (x.id === c.id ? { ...x, status: r.status ?? x.status } : x)),
+        );
+        return;
+      }
+
       setChannels((prev) => prev.map((x) => (x.id === c.id ? { ...x, status: r.status } : x)));
       toast.message(`Status: ${labelOf(r.status)}`);
     } catch (e) {
@@ -431,6 +462,12 @@ function labelOf(status: ChannelStatus): string {
     qrcode: "Aguardando QR",
     disconnected: "Desconectado",
     error: "Erro",
+    ACTIVE: "Ativo",
+    PAUSED: "Pausado",
+    BLOCKED: "Bloqueado",
+    DISCONNECTED: "Desconectado",
+    PENDING_REVIEW: "Em revisão",
+    ERROR: "Erro",
   };
   return map[status] ?? status;
 }
@@ -438,10 +475,16 @@ function labelOf(status: ChannelStatus): string {
 function StatusBadge({ status }: { status: ChannelStatus }) {
   const map: Record<string, string> = {
     connected: "bg-whatsapp/15 text-whatsapp",
+    ACTIVE: "bg-whatsapp/15 text-whatsapp",
     connecting: "bg-amber-500/15 text-amber-600",
     qrcode: "bg-blue-500/15 text-blue-600",
     disconnected: "bg-muted text-muted-foreground",
+    DISCONNECTED: "bg-muted text-muted-foreground",
+    PAUSED: "bg-amber-500/15 text-amber-600",
     error: "bg-destructive/15 text-destructive",
+    ERROR: "bg-destructive/15 text-destructive",
+    BLOCKED: "bg-destructive/15 text-destructive",
+    PENDING_REVIEW: "bg-blue-500/15 text-blue-600",
   };
   return (
     <span className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-medium ${map[status] ?? "bg-muted text-muted-foreground"}`}>

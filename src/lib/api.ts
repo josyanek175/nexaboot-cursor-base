@@ -6,7 +6,18 @@ const API_URL = import.meta.env.VITE_API_URL || "/api";
 export async function apiGet(path: string) {
   const response = await fetch(`${API_URL}${path}`, { credentials: "include" });
   if (!response.ok) {
-    throw new Error(`Erro API: ${response.status}`);
+    let detail = "";
+    try {
+      const data = await response.json();
+      if (data?.metaError?.message) {
+        detail = `: ${data.metaError.message}`;
+      } else if (data?.error) {
+        detail = ` (${data.error})`;
+      }
+    } catch {
+      // resposta sem corpo JSON
+    }
+    throw new Error(`Erro API: ${response.status}${detail}`);
   }
   return response.json();
 }

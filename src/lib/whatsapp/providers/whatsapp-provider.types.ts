@@ -46,6 +46,16 @@ export interface WhatsAppChannelRecord {
   lastConnectedAt: string | null;
 }
 
+export interface MetaGraphErrorDetail {
+  code?: string | number | null;
+  type?: string | null;
+  message?: string | null;
+  error_subcode?: string | number | null;
+  fbtrace_id?: string | null;
+  httpStatus?: number;
+  source?: "phone_number" | "waba_phone_numbers" | "local";
+}
+
 export interface ProviderStatusResult {
   ok: boolean;
   provider: WhatsAppProviderKind;
@@ -56,6 +66,9 @@ export interface ProviderStatusResult {
   lastWebhookAt?: string | null;
   configured?: boolean;
   error?: string;
+  graphData?: Record<string, unknown> | null;
+  wabaPhoneNumbers?: unknown;
+  metaError?: MetaGraphErrorDetail | null;
 }
 
 export interface ProviderSendResult {

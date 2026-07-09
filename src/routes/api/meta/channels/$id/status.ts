@@ -1,12 +1,14 @@
-// GET /api/meta/channels/:id/status — status operacional do canal Meta (sem token).
+// GET /api/meta/channels/:id/status — consulta Graph API e status operacional (sem token).
 import { createFileRoute } from "@tanstack/react-router";
 import { ensureCrmSchema } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { fetchMetaChannelLiveStatus } from "@/lib/meta-channel-status.server";
 import {
   META_CHANNEL_UUID_RE,
   buildMetaChannelStatusPublic,
   getMetaChannelRowForCompany,
 } from "@/lib/meta-channels.server";
+import { loadChannelForCompany } from "@/lib/whatsapp/whatsapp-provider-router.server";
 
 export const Route = createFileRoute("/api/meta/channels/$id/status")({
   server: {
@@ -26,8 +28,21 @@ export const Route = createFileRoute("/api/meta/channels/$id/status")({
           return Response.json({ error: "not_found" }, { status: 404 });
         }
 
-        const status = await buildMetaChannelStatusPublic(row);
-        return Response.json({ ok: true, ...status });
+        const channel = await loadChannelForCompany(params.id, companyId);
+        if (!channel || channel.channelType !== "meta") {
+          return Response.json({ error: "not_meta_channel" }, { status: 400 });
+        }
+
+        const live = await fetchMetaChannelLiveStatus(channel);
+        const base = await buildMetaChannelStatusPublic(row);
+
+        return Response.json({
+          ok: live.ok,
+          ...base,
+          graph: live.graphData ?? null,
+          wabaPhoneNumbers: live.wabaPhoneNumbers ?? null,
+          metaError: live.metaError ?? null,
+        });
       },
     },
   },
