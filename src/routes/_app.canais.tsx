@@ -367,6 +367,7 @@ function MetaTokenModal({
     }
     setSaving(true);
     try {
+      await apiDelete(`/meta/channels/${channel.id}/token`);
       await apiPatch(`/meta/channels/${channel.id}`, { access_token: accessToken.trim() });
       onSaved();
     } catch (e) {
@@ -381,7 +382,8 @@ function MetaTokenModal({
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Cole o <b>access token permanente</b> do app Meta (WhatsApp → API Setup).
-          O token é cifrado e salvo em <code>whatsapp_channel_secrets</code> no nexaboot-web.
+          O token antigo será removido e um novo será cifrado com a{" "}
+          <code>META_TOKEN_ENCRYPTION_KEY</code> atual do <b>nexaboot-web</b>.
         </p>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted-foreground">Access token</span>

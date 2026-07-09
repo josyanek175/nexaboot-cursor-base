@@ -195,6 +195,46 @@ export async function assertMetaPhoneNumberIdAvailable(
   return null;
 }
 
+export async function clearMetaChannelToken(
+  channelId: string,
+  companyId: string,
+  reason = "manual_clear",
+): Promise<Response | null> {
+  await ensureCrmSchema();
+  const s = sql();
+
+  const rows = await s<{ id: string }[]>`
+    SELECT id FROM public.whatsapp_channels
+    WHERE id = ${channelId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND lower(channel_type) = 'meta'
+      AND deleted_at IS NULL
+    LIMIT 1
+  `;
+  if (!rows[0]) {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
+  await s`
+    DELETE FROM public.whatsapp_channel_secrets
+    WHERE channel_id = ${channelId}::uuid
+  `;
+
+  await s`
+    UPDATE public.whatsapp_channels
+    SET token_status = 'missing',
+        last_error_code = 'token_cleared',
+        last_error_message = ${`Token removido (${reason}) para recadastro com a chave atual`},
+        updated_at = now()
+    WHERE id = ${channelId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND lower(channel_type) = 'meta'
+  `;
+
+  console.log("[META_TOKEN_CLEARED]", { channelId, companyId, reason });
+  return null;
+}
+
 export function ensureMetaTokenEncryptionConfigured(): Response | null {
   if (!hasTokenEncryptionKey()) {
     return Response.json({ error: "missing_encryption_key" }, { status: 503 });

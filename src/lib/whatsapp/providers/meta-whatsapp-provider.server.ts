@@ -141,6 +141,13 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     const phoneNumberId = rows[0].phone_number_id?.trim() || null;
     const graphVersion = process.env.META_GRAPH_API_VERSION?.trim() || "v20.0";
 
+    console.log("[META_TOKEN_STORE_START]", {
+      channelId,
+      companyId,
+      phoneNumberId,
+      hasEncryptionKey: hasTokenEncryptionKey(),
+    });
+
     if (phoneNumberId) {
       const probe = await fetch(
         `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(phoneNumberId)}?fields=id`,
@@ -176,13 +183,15 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
     const ciphertext = encryptToken(trimmed);
 
+    // Substitui ciphertext antigo (ex.: chave de criptografia mudou).
+    await s`
+      DELETE FROM public.whatsapp_channel_secrets
+      WHERE channel_id = ${channelId}::uuid
+    `;
+
     await s`
       INSERT INTO public.whatsapp_channel_secrets (channel_id, access_token_ciphertext, token_updated_at, updated_at)
       VALUES (${channelId}::uuid, ${ciphertext}, now(), now())
-      ON CONFLICT (channel_id) DO UPDATE SET
-        access_token_ciphertext = EXCLUDED.access_token_ciphertext,
-        token_updated_at = now(),
-        updated_at = now()
     `;
 
     await s`
@@ -194,6 +203,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       WHERE id = ${channelId}::uuid AND company_id = ${companyId}::uuid
     `;
 
+    console.log("[META_TOKEN_STORE_OK]", { channelId, phoneNumberId });
     return { ok: true };
   }
 

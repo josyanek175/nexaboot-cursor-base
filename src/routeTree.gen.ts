@@ -92,6 +92,7 @@ import { Route as ApiCampaignsTemplatesIdRouteImport } from './routes/api/campai
 import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaigns/$id/schedule'
 import { Route as ApiCampaignsIdReuseRouteImport } from './routes/api/campaigns/$id/reuse'
 import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
+import { Route as ApiMetaChannelsIdTokenRouteImport } from './routes/api/meta/channels/$id/token'
 import { Route as ApiMetaChannelsIdStatusRouteImport } from './routes/api/meta/channels/$id/status'
 import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
 import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
@@ -529,6 +530,11 @@ const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
   path: '/contacts',
   getParentRoute: () => ApiCampaignsIdRoute,
 } as any)
+const ApiMetaChannelsIdTokenRoute = ApiMetaChannelsIdTokenRouteImport.update({
+  id: '/token',
+  path: '/token',
+  getParentRoute: () => ApiMetaChannelsIdRoute,
+} as any)
 const ApiMetaChannelsIdStatusRoute = ApiMetaChannelsIdStatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -682,6 +688,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
+  '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -775,6 +782,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
+  '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -871,6 +879,7 @@ export interface FileRoutesById {
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
+  '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -967,6 +976,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
     | '/api/meta/channels/$id/status'
+    | '/api/meta/channels/$id/token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1060,6 +1070,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
     | '/api/meta/channels/$id/status'
+    | '/api/meta/channels/$id/token'
   id:
     | '__root__'
     | '/'
@@ -1155,6 +1166,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
     | '/api/meta/channels/$id/status'
+    | '/api/meta/channels/$id/token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1787,6 +1799,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCampaignsIdContactsRouteImport
       parentRoute: typeof ApiCampaignsIdRoute
     }
+    '/api/meta/channels/$id/token': {
+      id: '/api/meta/channels/$id/token'
+      path: '/token'
+      fullPath: '/api/meta/channels/$id/token'
+      preLoaderRoute: typeof ApiMetaChannelsIdTokenRouteImport
+      parentRoute: typeof ApiMetaChannelsIdRoute
+    }
     '/api/meta/channels/$id/status': {
       id: '/api/meta/channels/$id/status'
       path: '/status'
@@ -2128,10 +2147,12 @@ const ApiInternalChatMessagesRouteWithChildren =
 
 interface ApiMetaChannelsIdRouteChildren {
   ApiMetaChannelsIdStatusRoute: typeof ApiMetaChannelsIdStatusRoute
+  ApiMetaChannelsIdTokenRoute: typeof ApiMetaChannelsIdTokenRoute
 }
 
 const ApiMetaChannelsIdRouteChildren: ApiMetaChannelsIdRouteChildren = {
   ApiMetaChannelsIdStatusRoute: ApiMetaChannelsIdStatusRoute,
+  ApiMetaChannelsIdTokenRoute: ApiMetaChannelsIdTokenRoute,
 }
 
 const ApiMetaChannelsIdRouteWithChildren =
