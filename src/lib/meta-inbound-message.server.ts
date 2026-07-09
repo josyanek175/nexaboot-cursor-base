@@ -58,10 +58,14 @@ export async function persistMetaInboundTextMessages(
 
 async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Promise<boolean> {
   const channel = await loadMetaChannelByPhoneNumberId(msg.phoneNumberId);
-  if (!channel?.companyId) {
+  if (!channel?.companyId?.trim() || channel.companyId === "null") {
     console.log("[META_INBOUND_SKIPPED]", {
       reason: "channel_not_found",
       phoneNumberId: msg.phoneNumberId,
+    });
+    console.log("[META_WEBHOOK_CHANNEL_NOT_FOUND]", {
+      phoneNumberId: msg.phoneNumberId,
+      stage: "persist",
     });
     return false;
   }
@@ -105,6 +109,14 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
     conversationId,
     contactId,
     phone: msg.phone,
+    externalMessageId: msg.externalMessageId,
+  });
+  console.log("[META_WEBHOOK_PERSISTED]", {
+    messageId,
+    conversationId,
+    contactId,
+    phone: msg.phone,
+    phoneNumberId: msg.phoneNumberId,
     externalMessageId: msg.externalMessageId,
   });
   return true;

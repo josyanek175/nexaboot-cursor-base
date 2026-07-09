@@ -59,31 +59,89 @@ export function sanitizeMetaWebhookPayload(value: unknown, depth = 0): unknown {
   return out;
 }
 
+function unwrapPayloadRoot(payload: unknown): Record<string, unknown> | null {
+  const root = asRecord(payload);
+  if (!root) return null;
+  if (Array.isArray(root.entry)) return root;
+  const body = asRecord(root.body);
+  if (body && Array.isArray(body.entry)) return body;
+  return root;
+}
+
+export type MetaWebhookChangeSummary = {
+  field: string | null;
+  phoneNumberId: string | null;
+  messageCount: number;
+  statusCount: number;
+  messageIds: string[];
+  statusIds: string[];
+};
+
+/** Resume cada change do payload (messages, statuses, etc.). */
+export function extractMetaWebhookChanges(payload: unknown): MetaWebhookChangeSummary[] {
+  const root = unwrapPayloadRoot(payload);
+  if (!root) return [];
+
+  const summaries: MetaWebhookChangeSummary[] = [];
+
+  for (const entry of asArray(root.entry)) {
+    const entryRec = asRecord(entry);
+    if (!entryRec) continue;
+
+    for (const change of asArray(entryRec.changes)) {
+      const changeRec = asRecord(change);
+      if (!changeRec) continue;
+
+      const value = asRecord(changeRec.value);
+      const metadata = value ? asRecord(value.metadata) : null;
+      const phoneNumberId = metadata ? readString(metadata.phone_number_id) : null;
+      const field = readString(changeRec.field);
+
+      const messageIds: string[] = [];
+      for (const message of asArray(value?.messages)) {
+        const id = readString(asRecord(message)?.id);
+        if (id) messageIds.push(id);
+      }
+
+      const statusIds: string[] = [];
+      for (const status of asArray(value?.statuses)) {
+        const id = readString(asRecord(status)?.id);
+        if (id) statusIds.push(id);
+      }
+
+      summaries.push({
+        field,
+        phoneNumberId,
+        messageCount: messageIds.length,
+        statusCount: statusIds.length,
+        messageIds,
+        statusIds,
+      });
+    }
+  }
+
+  return summaries;
+}
+
 /** Extrai phone_number_id(s) do payload padrão da Meta Cloud API. */
 export function extractMetaPhoneNumberIds(payload: unknown): string[] {
   const ids = new Set<string>();
-  if (!payload || typeof payload !== "object") return [];
+  const root = unwrapPayloadRoot(payload);
+  if (!root) return [];
 
-  const entries = Array.isArray((payload as Record<string, unknown>).entry)
-    ? ((payload as Record<string, unknown>).entry as unknown[])
-    : [];
+  for (const entry of asArray(root.entry)) {
+    const entryRec = asRecord(entry);
+    if (!entryRec) continue;
 
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") continue;
-    const changes = Array.isArray((entry as Record<string, unknown>).changes)
-      ? ((entry as Record<string, unknown>).changes as unknown[])
-      : [];
-
-    for (const change of changes) {
-      if (!change || typeof change !== "object") continue;
-      const value = (change as Record<string, unknown>).value;
-      if (!value || typeof value !== "object") continue;
-      const metadata = (value as Record<string, unknown>).metadata;
-      if (!metadata || typeof metadata !== "object") continue;
-      const phoneNumberId = (metadata as Record<string, unknown>).phone_number_id;
-      if (typeof phoneNumberId === "string" && phoneNumberId.trim()) {
-        ids.add(phoneNumberId.trim());
-      }
+    for (const change of asArray(entryRec.changes)) {
+      const changeRec = asRecord(change);
+      if (!changeRec) continue;
+      const value = asRecord(changeRec.value);
+      if (!value) continue;
+      const metadata = asRecord(value.metadata);
+      if (!metadata) continue;
+      const phoneNumberId = readString(metadata.phone_number_id);
+      if (phoneNumberId) ids.add(phoneNumberId);
     }
   }
 
@@ -93,29 +151,21 @@ export function extractMetaPhoneNumberIds(payload: unknown): string[] {
 /** Extrai tipos de evento (fields) do payload Meta. */
 export function extractMetaEventTypes(payload: unknown): string[] {
   const types = new Set<string>();
-  if (!payload || typeof payload !== "object") return [];
+  const root = unwrapPayloadRoot(payload);
+  if (!root) return [];
 
-  const objectType = (payload as Record<string, unknown>).object;
-  if (typeof objectType === "string" && objectType.trim()) {
-    types.add(objectType.trim());
-  }
+  const objectType = readString(root.object);
+  if (objectType) types.add(objectType);
 
-  const entries = Array.isArray((payload as Record<string, unknown>).entry)
-    ? ((payload as Record<string, unknown>).entry as unknown[])
-    : [];
+  for (const entry of asArray(root.entry)) {
+    const entryRec = asRecord(entry);
+    if (!entryRec) continue;
 
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") continue;
-    const changes = Array.isArray((entry as Record<string, unknown>).changes)
-      ? ((entry as Record<string, unknown>).changes as unknown[])
-      : [];
-
-    for (const change of changes) {
-      if (!change || typeof change !== "object") continue;
-      const field = (change as Record<string, unknown>).field;
-      if (typeof field === "string" && field.trim()) {
-        types.add(field.trim());
-      }
+    for (const change of asArray(entryRec.changes)) {
+      const changeRec = asRecord(change);
+      if (!changeRec) continue;
+      const field = readString(changeRec.field);
+      if (field) types.add(field);
     }
   }
 
@@ -156,7 +206,7 @@ export function parseMetaPhoneField(raw: unknown): MetaParsedPhoneField | null {
 /** Extrai e normaliza telefones de cada change do payload Meta Cloud API. */
 export function parseMetaWebhookPhones(payload: unknown): MetaWebhookParsedChange[] {
   const parsed: MetaWebhookParsedChange[] = [];
-  const root = asRecord(payload);
+  const root = unwrapPayloadRoot(payload);
   if (!root) return parsed;
 
   for (const entry of asArray(root.entry)) {

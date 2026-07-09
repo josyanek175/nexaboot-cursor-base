@@ -234,9 +234,15 @@ export async function loadMetaAccessToken(
 }
 
 export function mapMetaChannelRow(row: Record<string, unknown>): WhatsAppChannelRecord {
+  const rawCompanyId = row.company_id;
+  const companyId =
+    rawCompanyId != null && String(rawCompanyId).trim() && String(rawCompanyId) !== "null"
+      ? String(rawCompanyId)
+      : "";
+
   return {
     id: String(row.id),
-    companyId: String(row.company_id),
+    companyId,
     name: row.name != null ? String(row.name) : null,
     channelType: "meta",
     status: String(row.status ?? "DISCONNECTED"),
