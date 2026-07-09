@@ -3,23 +3,52 @@
 // Mantém compatibilidade: se VITE_API_URL for definido, ele é respeitado.
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 
+export type ApiErrorBody = {
+  error?: string;
+  code?: string;
+  reason?: string;
+  message?: string;
+  provider?: string;
+  details?: Record<string, unknown>;
+};
+
+/** Erro HTTP da API local com corpo JSON preservado para a UI. */
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly body: ApiErrorBody;
+
+  constructor(status: number, body: ApiErrorBody) {
+    const userMessage =
+      body.message?.trim() ||
+      body.error?.trim() ||
+      `Erro API: ${status}`;
+    super(userMessage);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function parseErrorResponse(response: Response): Promise<ApiRequestError> {
+  let body: ApiErrorBody = {};
+  try {
+    body = (await response.json()) as ApiErrorBody;
+  } catch {
+    body = {};
+  }
+  return new ApiRequestError(response.status, body);
+}
+
+export function getApiErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError) return error.message;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return "Falha na requisição.";
+}
+
 export async function apiGet(path: string) {
   const response = await fetch(`${API_URL}${path}`, { credentials: "include" });
   if (!response.ok) {
-    let detail = "";
-    try {
-      const data = await response.json();
-      if (data?.message) {
-        detail = `: ${data.message}`;
-      } else if (data?.metaError?.message) {
-        detail = `: ${data.metaError.message}`;
-      } else if (data?.error) {
-        detail = ` (${data.error})`;
-      }
-    } catch {
-      // resposta sem corpo JSON
-    }
-    throw new Error(`Erro API: ${response.status}${detail}`);
+    throw await parseErrorResponse(response);
   }
   return response.json();
 }
@@ -34,14 +63,7 @@ export async function apiPost(path: string, body?: any) {
     body: JSON.stringify(body || {}),
   });
   if (!response.ok) {
-    let detail = "";
-    try {
-      const data = await response.json();
-      detail = data?.error ? ` (${data.error})` : "";
-    } catch {
-      // resposta sem corpo JSON
-    }
-    throw new Error(`Erro API: ${response.status}${detail}`);
+    throw await parseErrorResponse(response);
   }
   return response.json();
 }
@@ -54,14 +76,7 @@ export async function apiPostForm(path: string, form: FormData) {
     body: form,
   });
   if (!response.ok) {
-    let detail = "";
-    try {
-      const data = await response.json();
-      detail = data?.error ? ` (${data.error})` : "";
-    } catch {
-      // resposta sem corpo JSON
-    }
-    throw new Error(`Erro API: ${response.status}${detail}`);
+    throw await parseErrorResponse(response);
   }
   return response.json();
 }
@@ -76,14 +91,7 @@ export async function apiPut(path: string, body?: any) {
     body: JSON.stringify(body || {}),
   });
   if (!response.ok) {
-    let detail = "";
-    try {
-      const data = await response.json();
-      detail = data?.error ? ` (${data.error})` : "";
-    } catch {
-      // resposta sem corpo JSON
-    }
-    throw new Error(`Erro API: ${response.status}${detail}`);
+    throw await parseErrorResponse(response);
   }
   return response.json();
 }
@@ -94,7 +102,7 @@ export async function apiDelete(path: string) {
     credentials: "include",
   });
   if (!response.ok) {
-    throw new Error(`Erro API: ${response.status}`);
+    throw await parseErrorResponse(response);
   }
   return response.json();
 }
@@ -109,20 +117,7 @@ export async function apiPatch(path: string, body?: unknown) {
     body: JSON.stringify(body ?? {}),
   });
   if (!response.ok) {
-    let detail = "";
-    try {
-      const data = await response.json();
-      if (data?.message) {
-        detail = `: ${data.message}`;
-      } else if (data?.metaError?.message) {
-        detail = `: ${data.metaError.message}`;
-      } else if (data?.error) {
-        detail = ` (${data.error})`;
-      }
-    } catch {
-      // resposta sem corpo JSON
-    }
-    throw new Error(`Erro API: ${response.status}${detail}`);
+    throw await parseErrorResponse(response);
   }
   return response.json();
 }

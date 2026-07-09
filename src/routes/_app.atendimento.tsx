@@ -12,7 +12,7 @@ import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { canSeeAllConversations, inTenantScope } from "@/lib/permissions";
 import { pushAudit } from "@/lib/audit-log";
-import { apiGet, apiPost, apiPostForm } from "@/lib/api";
+import { apiGet, apiPost, apiPostForm, getApiErrorMessage } from "@/lib/api";
 import { ensureNotificationPermission, showBrowserNotification, playNotificationSound, isTabHidden } from "@/lib/notifications";
 import { setUnread } from "@/lib/unread-store";
 import {
@@ -242,14 +242,26 @@ function upsertChannelFromApi(c: any, tenantId: string) {
   });
 }
 
-/** Mapeia o status textual da Evolution/DB para o ChannelStatus da UI. */
-function mapChannelStatus(s: unknown): ChannelStatus {
-  const v = String(s ?? "").toLowerCase();
-  if (v === "connected" || v === "open") return "connected";
-  if (v === "connecting") return "connecting";
-  if (v.includes("qr")) return "qrcode";
-  if (v === "error") return "error";
+/** Mapeia status do banco para UI; Meta ACTIVE = operacional (não usa QR Evolution). */
+function mapChannelStatus(s: unknown, channelType?: unknown): ChannelStatus {
+  const type = String(channelType ?? "").toLowerCase();
+  const v = String(s ?? "").toUpperCase();
+  if (type === "meta") {
+    if (v === "ACTIVE") return "connected";
+    if (v === "PAUSED" || v === "PENDING_REVIEW") return "connecting";
+    if (v === "ERROR" || v === "BLOCKED") return "error";
+    if (v === "DISCONNECTED") return "disconnected";
+  }
+  const lower = v.toLowerCase();
+  if (lower === "connected" || lower === "open") return "connected";
+  if (lower === "connecting") return "connecting";
+  if (lower.includes("qr")) return "qrcode";
+  if (lower === "error") return "error";
   return "disconnected";
+}
+
+function isChannelOperational(channel: Channel): boolean {
+  return channel.status === "connected";
 }
 
 /** Upsert de um canal real vindo de /api/evolution/channels (autoritativo). */
@@ -271,7 +283,7 @@ function upsertRealChannel(
       phoneNumber: c.phone_number,
     }),
     provider,
-    status: mapChannelStatus(c.status),
+    status: mapChannelStatus(c.status, c.channel_type),
   };
   const idx = channels.findIndex((x) => x.id === channel.id);
   if (idx >= 0) channels[idx] = { ...channels[idx], ...channel };
@@ -1040,7 +1052,7 @@ function AtendimentoPage() {
       reloadConversations({ silent: true });
     } catch (e) {
       patchMsg(selected.id, msgId, { status: "error" });
-      toast.error("Falha ao enviar mensagem. Verifique a conexão e tente novamente.");
+      toast.error(getApiErrorMessage(e));
       pushAudit({
         tenantId: selected.tenantId, actorId: actor.id, actorName: user.name,
         targetType: "message", targetId: msgId, action: "message.send_error", result: "error",
@@ -1652,14 +1664,15 @@ function ChatHeader({
 }
 
 function ChannelModeBadge({ channel }: { channel: Channel }) {
-  const connected = channel.status === "connected";
+  const connected = isChannelOperational(channel);
   const phoneHint = channel.phone ? ` · ${channel.phone}` : "";
+  const metaHint = channel.provider === "META" ? " · Cloud API" : "";
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
         connected ? "bg-whatsapp/10 text-whatsapp" : "bg-destructive/10 text-destructive"
       }`}
-      title={`${channel.provider}${phoneHint} ${connected ? "conectado" : "desconectado"}`}
+      title={`${channel.provider}${phoneHint}${metaHint} ${connected ? "operacional" : "indisponível"}`}
     >
       {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
       {channel.provider}

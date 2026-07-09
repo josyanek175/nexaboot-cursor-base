@@ -49,11 +49,15 @@ export const Route = createFileRoute("/api/messages/send")({
         });
 
         if (!result.ok) {
+          const code = result.code ?? result.error;
           return Response.json(
             {
               error: result.error,
+              code,
+              reason: result.reason ?? code,
               message: result.message ?? undefined,
               provider: result.provider ?? undefined,
+              details: result.details ?? undefined,
             },
             { status: result.status },
           );

@@ -27,7 +27,14 @@ export type MetaSendRejectReason =
 
 export type MetaManualSendResult =
   | { ok: true; message: Record<string, unknown> }
-  | { ok: false; status: number; error: string; message?: string };
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      reason?: MetaSendRejectReason | string;
+      message?: string;
+      details?: Record<string, unknown>;
+    };
 
 export function metaSendRejectionMessage(reason: MetaSendRejectReason | string): string {
   switch (reason) {
@@ -84,36 +91,85 @@ type MetaSendRejectContext = {
   conversationId: string;
   companyId: string;
   channelId?: string | null;
+  channelType?: string | null;
+  provider?: string;
   contactId?: string | null;
   phone?: string | null;
   phoneNumberId?: string | null;
   channelStatus?: string | null;
   tokenStatus?: string | null;
+  active?: boolean | null;
+  deletedAt?: string | null;
+  lastWebhookAt?: string | null;
+  lastConnectionAt?: string | null;
+  hasToken?: boolean | null;
   lastInboundAt?: Date | null;
   text?: string;
 };
+
+async function loadChannelOpsRow(
+  channelId: string,
+  companyId: string,
+): Promise<{
+  active: boolean;
+  deleted_at: Date | string | null;
+  last_webhook_at: Date | string | null;
+  last_connected_at: Date | string | null;
+} | null> {
+  const s = sql();
+  const rows = await s<
+    {
+      active: boolean;
+      deleted_at: Date | string | null;
+      last_webhook_at: Date | string | null;
+      last_connected_at: Date | string | null;
+    }[]
+  >`
+    SELECT active, deleted_at, last_webhook_at, last_connected_at
+    FROM public.whatsapp_channels
+    WHERE id = ${channelId}::uuid
+      AND company_id = ${companyId}::uuid
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
 
 function rejectMetaSend(ctx: MetaSendRejectContext): MetaManualSendResult {
   console.log("[META_SEND_REJECTED]", {
     reason: ctx.reason,
     conversationId: ctx.conversationId,
     channelId: ctx.channelId ?? null,
+    channelType: ctx.channelType ?? null,
+    provider: ctx.provider ?? "meta",
     companyId: ctx.companyId,
-    contactId: ctx.contactId ?? null,
-    phone: ctx.phone ?? null,
-    phoneNumberId: ctx.phoneNumberId ?? null,
     channelStatus: ctx.channelStatus ?? null,
+    active: ctx.active ?? null,
+    deletedAt: ctx.deletedAt ?? null,
     tokenStatus: ctx.tokenStatus ?? null,
+    lastWebhookAt: ctx.lastWebhookAt ?? null,
+    lastConnectionAt: ctx.lastConnectionAt ?? null,
+    phoneNumberId: ctx.phoneNumberId ?? null,
+    hasToken: ctx.hasToken ?? null,
     lastInboundAt: ctx.lastInboundAt?.toISOString() ?? null,
     windowAgeHours: computeWindowAgeHours(ctx.lastInboundAt ?? null),
     messagePreview: ctx.text ? ctx.text.slice(0, 80) : null,
   });
 
+  const details: Record<string, unknown> = {};
+  if (ctx.reason === "service_window_closed") {
+    details.lastInboundAt = ctx.lastInboundAt?.toISOString() ?? null;
+    details.windowAgeHours = computeWindowAgeHours(ctx.lastInboundAt ?? null);
+  }
+  if (ctx.phoneNumberId) details.phoneNumberId = ctx.phoneNumberId;
+  if (ctx.channelId) details.channelId = ctx.channelId;
+
   return {
     ok: false,
     status: ctx.status,
     error: ctx.error,
+    reason: ctx.reason,
     message: metaSendRejectionMessage(ctx.reason),
+    details: Object.keys(details).length > 0 ? details : undefined,
   };
 }
 
@@ -133,16 +189,46 @@ async function getLastInboundMessageAt(conversationId: string): Promise<Date | n
 function channelRejectContext(
   channel: WhatsAppChannelRecord,
   base: Pick<MetaSendRejectContext, "conversationId" | "companyId" | "contactId" | "phone" | "text">,
+  ops?: {
+    active: boolean;
+    deleted_at: Date | string | null;
+    last_webhook_at: Date | string | null;
+    last_connected_at: Date | string | null;
+  } | null,
+  hasToken?: boolean,
 ): Pick<
   MetaSendRejectContext,
-  "channelId" | "phoneNumberId" | "channelStatus" | "tokenStatus" | "conversationId" | "companyId" | "contactId" | "phone" | "text"
+  | "channelId"
+  | "channelType"
+  | "provider"
+  | "phoneNumberId"
+  | "channelStatus"
+  | "tokenStatus"
+  | "active"
+  | "deletedAt"
+  | "lastWebhookAt"
+  | "lastConnectionAt"
+  | "hasToken"
+  | "conversationId"
+  | "companyId"
+  | "contactId"
+  | "phone"
+  | "text"
 > {
   return {
     ...base,
     channelId: channel.id,
+    channelType: channel.channelType,
+    provider: "meta",
     phoneNumberId: channel.phoneNumberId,
     channelStatus: channel.status,
     tokenStatus: channel.tokenStatus,
+    active: ops?.active ?? null,
+    deletedAt: ops?.deleted_at != null ? String(ops.deleted_at) : null,
+    lastWebhookAt: ops?.last_webhook_at != null ? String(ops.last_webhook_at) : channel.lastWebhookAt,
+    lastConnectionAt:
+      ops?.last_connected_at != null ? String(ops.last_connected_at) : channel.lastConnectedAt,
+    hasToken: hasToken ?? null,
   };
 }
 
@@ -220,10 +306,17 @@ export async function sendMetaManualText(params: {
   }
 
   const channel = resolved.channel;
-  const channelCtx = channelRejectContext(channel, {
-    ...baseCtx,
-    phone: conv.phone ?? conv.external_jid,
-  });
+  const channelOps = await loadChannelOpsRow(channel.id, companyId);
+  const hasToken = await metaWhatsAppProvider.hasAccessToken(channel.id, companyId);
+  const channelCtx = channelRejectContext(
+    channel,
+    {
+      ...baseCtx,
+      phone: conv.phone ?? conv.external_jid,
+    },
+    channelOps,
+    hasToken,
+  );
 
   if (String(channel.status).toUpperCase() !== "ACTIVE") {
     return rejectMetaSend({
@@ -243,14 +336,15 @@ export async function sendMetaManualText(params: {
     });
   }
 
-  const hasToken = await metaWhatsAppProvider.hasAccessToken(channel.id, companyId);
-  const decryptedToken = hasToken ? await loadMetaAccessToken(channel.id, companyId) : null;
-  if (!hasToken || !decryptedToken || channel.tokenStatus === "missing") {
+  const hasTokenResolved = hasToken;
+  const decryptedToken = hasTokenResolved ? await loadMetaAccessToken(channel.id, companyId) : null;
+  if (!hasTokenResolved || !decryptedToken || channel.tokenStatus === "missing") {
     return rejectMetaSend({
       reason: "missing_token",
       status: 409,
       error: "missing_token",
       ...channelCtx,
+      hasToken: !!decryptedToken,
     });
   }
 
@@ -287,7 +381,9 @@ export async function sendMetaManualText(params: {
       ok: false,
       status: 502,
       error: sendResult.error ?? "meta_send_failed",
+      reason: errorCode,
       message: friendlyMetaSendError(errorCode, errorMessage),
+      details: { phoneNumberId: channel.phoneNumberId, graphErrorCode: errorCode },
     };
   }
 

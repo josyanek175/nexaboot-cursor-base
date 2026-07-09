@@ -21,6 +21,7 @@ interface Channel {
   evolution_instance_name: string | null;
   status: ChannelStatus;
   last_connected_at: string | null;
+  last_webhook_at?: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -43,14 +44,31 @@ function CanaisPage() {
     try {
       const [data, metaData] = await Promise.all([
         apiGet("/evolution/channels"),
-        apiGet("/meta/channels").catch(() => ({ channels: [] as { id: string; display_phone_number?: string | null }[] })),
+        apiGet("/meta/channels").catch(() => ({
+          channels: [] as {
+            id: string;
+            display_phone_number?: string | null;
+            last_webhook_at?: string | null;
+          }[],
+        })),
       ]);
       const metaById = new Map(
-        (metaData.channels ?? []).map((m: { id: string; display_phone_number?: string | null }) => [m.id, m]),
+        (metaData.channels ?? []).map(
+          (m: { id: string; display_phone_number?: string | null; last_webhook_at?: string | null }) => [
+            m.id,
+            m,
+          ],
+        ),
       );
       const merged = (data.channels ?? []).map((c: Channel) => {
         const meta = metaById.get(c.id);
-        return meta ? { ...c, display_phone_number: meta.display_phone_number ?? c.display_phone_number } : c;
+        return meta
+          ? {
+              ...c,
+              display_phone_number: meta.display_phone_number ?? c.display_phone_number,
+              last_webhook_at: meta.last_webhook_at ?? null,
+            }
+          : c;
       });
       setChannels(merged);
       setEvolutionConfigured(data.evolutionConfigured ?? false);
@@ -192,7 +210,17 @@ function CanaisPage() {
                 </div>
 
                 <p className="mt-3 text-[11px] text-muted-foreground">
-                  Última conexão: {c.last_connected_at ? new Date(c.last_connected_at).toLocaleString("pt-BR") : "nunca"}
+                  {isMeta
+                    ? `Último webhook: ${
+                        c.last_webhook_at
+                          ? new Date(c.last_webhook_at).toLocaleString("pt-BR")
+                          : "nenhum recebido ainda"
+                      }`
+                    : `Última conexão: ${
+                        c.last_connected_at
+                          ? new Date(c.last_connected_at).toLocaleString("pt-BR")
+                          : "nunca"
+                      }`}
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">

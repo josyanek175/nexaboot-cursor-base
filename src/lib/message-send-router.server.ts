@@ -9,7 +9,16 @@ import {
 
 export type SendConversationTextResult =
   | { ok: true; provider: "meta" | "evolution"; message: Record<string, unknown> }
-  | { ok: false; status: number; error: string; message?: string; provider?: string };
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      code?: string;
+      reason?: string;
+      message?: string;
+      provider?: string;
+      details?: Record<string, unknown>;
+    };
 
 export async function sendConversationText(params: {
   companyId: string;
@@ -72,7 +81,12 @@ export async function sendConversationText(params: {
       sentByName,
     });
     if (!result.ok) {
-      return { ...result, provider: "meta" };
+      return {
+        ...result,
+        code: result.reason ?? result.error,
+        reason: result.reason ?? result.error,
+        provider: "meta",
+      };
     }
     return { ok: true, provider: "meta", message: result.message };
   }
