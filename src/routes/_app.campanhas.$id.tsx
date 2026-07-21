@@ -13,6 +13,7 @@ type Campaign = {
   name: string;
   status: string;
   message_text: string | null;
+  message_type?: string;
   whatsapp_channel_id: string | null;
   schedule_date: string | null;
   window_start_time: string | null;
@@ -26,6 +27,10 @@ type Campaign = {
   total_opt_out?: number;
   channel_name: string | null;
   channel_unavailable: boolean;
+  meta_template_id?: string | null;
+  meta_template_name?: string | null;
+  meta_language_code?: string | null;
+  meta_variable_mappings?: Record<string, string> | null;
 };
 
 type CampaignContact = {
@@ -53,6 +58,24 @@ type ChannelOption = {
   channel_type: string;
   status: string;
 };
+
+type MetaTemplateOption = {
+  id: string;
+  metaTemplateId: string | null;
+  name: string;
+  language: string;
+  category: string | null;
+  status: string;
+  active: boolean;
+  bodyText: string | null;
+  buttons: string[];
+  variables: string[];
+};
+
+const CONTACT_FIELD_OPTIONS = [
+  { value: "name", label: "Nome do contato" },
+  { value: "phone", label: "Telefone" },
+] as const;
 
 export const Route = createFileRoute("/_app/campanhas/$id")({
   component: EditarCampanhaPage,
@@ -95,6 +118,10 @@ function EditarCampanhaPage() {
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
+  const [metaTemplates, setMetaTemplates] = useState<MetaTemplateOption[]>([]);
+  const [selectedMetaTemplateId, setSelectedMetaTemplateId] = useState("");
+  const [metaVariableMappings, setMetaVariableMappings] = useState<Record<string, string>>({});
+  const [syncingMeta, setSyncingMeta] = useState(false);
 
   const [audience, setAudience] = useState<CampaignContact[]>([]);
   const [audienceTotal, setAudienceTotal] = useState(0);
@@ -108,14 +135,79 @@ function EditarCampanhaPage() {
   const [channelUnavailable, setChannelUnavailable] = useState(false);
 
   const isDraft = campaign?.status === "draft";
+  const selectedChannel = useMemo(
+    () => channels.find((c) => c.id === channelId) ?? null,
+    [channels, channelId],
+  );
+  const isMetaChannel =
+    String(selectedChannel?.channel_type ?? "").toLowerCase() === "meta" ||
+    campaign?.message_type === "meta_template";
+  const selectedMetaTemplate = useMemo(
+    () => metaTemplates.find((t) => t.id === selectedMetaTemplateId) ?? null,
+    [metaTemplates, selectedMetaTemplateId],
+  );
 
   const messagePreview = useMemo(() => {
+    if (isMetaChannel) return selectedMetaTemplate?.bodyText ?? messageText;
     const sample = parseSpreadsheetRow(
       { nome: "Maria Silva", telefone: "5534999999999", produto: "Plano Pro" },
       0,
     );
     return previewMessage(messageText, sample);
-  }, [messageText]);
+  }, [messageText, isMetaChannel, selectedMetaTemplate]);
+
+  async function loadMetaTemplates(chId: string) {
+    const res = await fetch(
+      `/api/meta/channels/${encodeURIComponent(chId)}/templates?approved=1`,
+      { credentials: "include" },
+    );
+    if (!res.ok) {
+      setMetaTemplates([]);
+      return;
+    }
+    const data = (await res.json()) as { templates: MetaTemplateOption[] };
+    setMetaTemplates(data.templates ?? []);
+  }
+
+  async function syncMetaTemplates() {
+    if (!channelId) return;
+    setSyncingMeta(true);
+    try {
+      const res = await fetch(
+        `/api/meta/channels/${encodeURIComponent(channelId)}/templates/sync`,
+        { method: "POST", credentials: "include" },
+      );
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        synced?: number;
+        approved?: number;
+      };
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      toast.success(`Sincronizados ${j.synced ?? 0} (${j.approved ?? 0} aprovados)`);
+      await loadMetaTemplates(channelId);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncingMeta(false);
+    }
+  }
+
+  function applyMetaTemplate(tpl: MetaTemplateOption | null, mappings?: Record<string, string>) {
+    if (!tpl) {
+      setSelectedMetaTemplateId("");
+      return;
+    }
+    setSelectedMetaTemplateId(tpl.id);
+    setMessageText(tpl.bodyText ?? "");
+    if (mappings && Object.keys(mappings).length) {
+      setMetaVariableMappings(mappings);
+      return;
+    }
+    const next: Record<string, string> = {};
+    for (const v of tpl.variables) next[v] = "name";
+    if (tpl.name === "abordagem_inicial_troca_refil") next["1"] = "name";
+    setMetaVariableMappings(next);
+  }
 
   async function handleReuse() {
     if (!canManage) return;
@@ -155,6 +247,7 @@ function EditarCampanhaPage() {
     setName(data.campaign.name);
     setMessageText(data.campaign.message_text ?? "");
     setChannelId(data.campaign.whatsapp_channel_id ?? "");
+    setMetaVariableMappings(data.campaign.meta_variable_mappings ?? {});
     setScheduleDate(
       data.campaign.schedule_date ? String(data.campaign.schedule_date).slice(0, 10) : "",
     );
@@ -202,9 +295,10 @@ function EditarCampanhaPage() {
         if (chRes.ok) {
           const chData = (await chRes.json()) as { channels: ChannelOption[] };
           setChannels(
-            (chData.channels ?? []).filter(
-              (ch) => String(ch.channel_type).toLowerCase() === "evolution",
-            ),
+            (chData.channels ?? []).filter((ch) => {
+              const t = String(ch.channel_type).toLowerCase();
+              return t === "evolution" || t === "meta";
+            }),
           );
         }
         await loadAudience();
@@ -218,6 +312,48 @@ function EditarCampanhaPage() {
     })();
   }, [canAccess, loadCampaign, loadAudience, companyId]);
 
+  useEffect(() => {
+    if (!channelId || !isMetaChannel) return;
+    void (async () => {
+      await loadMetaTemplates(channelId);
+    })();
+  }, [channelId, isMetaChannel]);
+
+  useEffect(() => {
+    if (!metaTemplates.length || !campaign) return;
+    const match = metaTemplates.find(
+      (t) =>
+        t.name === campaign.meta_template_name &&
+        t.language === campaign.meta_language_code,
+    );
+    if (match) {
+      setSelectedMetaTemplateId(match.id);
+      if (!messageText && match.bodyText) setMessageText(match.bodyText);
+    }
+  }, [metaTemplates, campaign]);
+
+  function campaignPayload() {
+    return {
+      name: name.trim(),
+      message_text: messageText.trim() || null,
+      whatsapp_channel_id: channelId || null,
+      schedule_date: scheduleDate || null,
+      window_start_time: windowStart || null,
+      window_end_time: windowEnd || null,
+      message_type: isMetaChannel ? ("meta_template" as const) : ("text" as const),
+      meta_template_id: isMetaChannel
+        ? selectedMetaTemplate?.metaTemplateId ?? campaign?.meta_template_id ?? null
+        : null,
+      meta_template_name: isMetaChannel
+        ? selectedMetaTemplate?.name ?? campaign?.meta_template_name ?? null
+        : null,
+      meta_language_code: isMetaChannel
+        ? selectedMetaTemplate?.language ?? campaign?.meta_language_code ?? null
+        : null,
+      meta_variable_mappings: isMetaChannel ? metaVariableMappings : null,
+    };
+  }
+
   async function handleSave() {
     if (!canManage || !isDraft) return;
     setSaving(true);
@@ -226,14 +362,7 @@ function EditarCampanhaPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          message_text: messageText.trim() || null,
-          whatsapp_channel_id: channelId || null,
-          schedule_date: scheduleDate || null,
-          window_start_time: windowStart || null,
-          window_end_time: windowEnd || null,
-        }),
+        body: JSON.stringify(campaignPayload()),
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -261,7 +390,12 @@ function EditarCampanhaPage() {
       toast.error("Selecione o canal de envio.");
       return;
     }
-    if (!messageText.trim()) {
+    if (isMetaChannel) {
+      if (!selectedMetaTemplate && !campaign?.meta_template_name) {
+        toast.error("Selecione um template Meta aprovado.");
+        return;
+      }
+    } else if (!messageText.trim()) {
       toast.error("Informe a mensagem modelo.");
       return;
     }
@@ -271,14 +405,7 @@ function EditarCampanhaPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          message_text: messageText.trim() || null,
-          whatsapp_channel_id: channelId || null,
-          schedule_date: scheduleDate || null,
-          window_start_time: windowStart || null,
-          window_end_time: windowEnd || null,
-        }),
+        body: JSON.stringify(campaignPayload()),
       });
       if (!saveRes.ok) {
         const j = (await saveRes.json().catch(() => ({}))) as { error?: string };
@@ -298,6 +425,7 @@ function EditarCampanhaPage() {
           no_pending_contacts: "Adicione contatos pendentes ao público antes de agendar.",
           missing_channel: "Selecione o canal de envio.",
           missing_message: "Informe a mensagem modelo.",
+          missing_meta_template: "Selecione um template Meta aprovado.",
           missing_schedule_date: "Informe a data de envio.",
           missing_window: "Informe horário inicial e final.",
           not_schedulable: "Esta campanha não pode ser agendada.",
@@ -525,40 +653,131 @@ function EditarCampanhaPage() {
               </span>
               <select
                 value={channelId}
-                onChange={(e) => setChannelId(e.target.value)}
+                onChange={(e) => {
+                  setChannelId(e.target.value);
+                  setSelectedMetaTemplateId("");
+                }}
                 disabled={!canManage || !isDraft}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
               >
                 <option value="">Selecione o canal</option>
                 {channels.map((ch) => (
                   <option key={ch.id} value={ch.id}>
-                    {ch.name} ({ch.status})
+                    {ch.name} · {String(ch.channel_type).toUpperCase()} ({ch.status})
                   </option>
                 ))}
               </select>
             </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                Mensagem modelo (tags da planilha)
-              </span>
-              <textarea
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                disabled={!canManage || !isDraft}
-                rows={5}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
-                placeholder="Corpo principal. Use {nome} e outras tags da planilha."
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Saudação e fechamento variam automaticamente; o corpo principal é preservado.
-              </p>
-              {messagePreview && isDraft && (
-                <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Prévia (exemplo)</p>
-                  <pre className="whitespace-pre-wrap text-xs">{messagePreview}</pre>
+
+            {isMetaChannel ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Canal Meta: apenas templates aprovados. Sem mensagem livre fora da janela 24h.
+                  </p>
+                  {canManage && isDraft && (
+                    <button
+                      type="button"
+                      onClick={() => void syncMetaTemplates()}
+                      disabled={syncingMeta || !channelId}
+                      className="inline-flex items-center gap-2 rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-60"
+                    >
+                      {syncingMeta && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Sincronizar modelos da Meta
+                    </button>
+                  )}
                 </div>
-              )}
-            </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                    Template aprovado
+                  </span>
+                  <select
+                    value={selectedMetaTemplateId}
+                    onChange={(e) => {
+                      const tpl = metaTemplates.find((t) => t.id === e.target.value) ?? null;
+                      applyMetaTemplate(tpl);
+                    }}
+                    disabled={!canManage || !isDraft}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
+                  >
+                    <option value="">Selecione o template</option>
+                    {metaTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} · {t.language} · {t.category ?? "—"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedMetaTemplate && (
+                  <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3 text-sm">
+                    <pre className="whitespace-pre-wrap text-xs">
+                      {selectedMetaTemplate.bodyText || "—"}
+                    </pre>
+                    {selectedMetaTemplate.buttons.length > 0 && (
+                      <ul className="list-disc pl-4 text-xs text-muted-foreground">
+                        {selectedMetaTemplate.buttons.map((b) => (
+                          <li key={b}>{b}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {(selectedMetaTemplate.variables.length > 0 ||
+                      selectedMetaTemplate.name === "abordagem_inicial_troca_refil") && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Variáveis</p>
+                        {(selectedMetaTemplate.variables.length
+                          ? selectedMetaTemplate.variables
+                          : ["1"]
+                        ).map((v) => (
+                          <label key={v} className="flex items-center gap-2 text-xs">
+                            <span className="w-12 font-mono">{`{{${v}}}`}</span>
+                            <select
+                              value={metaVariableMappings[v] ?? "name"}
+                              onChange={(e) =>
+                                setMetaVariableMappings((prev) => ({
+                                  ...prev,
+                                  [v]: e.target.value,
+                                }))
+                              }
+                              disabled={!canManage || !isDraft}
+                              className="flex-1 rounded-md border border-input bg-background px-2 py-1"
+                            >
+                              {CONTACT_FIELD_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Mensagem modelo (tags da planilha)
+                </span>
+                <textarea
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  disabled={!canManage || !isDraft}
+                  rows={5}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
+                  placeholder="Corpo principal. Use {nome} e outras tags da planilha."
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Saudação e fechamento variam automaticamente; o corpo principal é preservado.
+                </p>
+                {messagePreview && isDraft && (
+                  <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Prévia (exemplo)</p>
+                    <pre className="whitespace-pre-wrap text-xs">{messagePreview}</pre>
+                  </div>
+                )}
+              </label>
+            )}
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">
                 Data de envio

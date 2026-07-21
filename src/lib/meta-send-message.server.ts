@@ -444,3 +444,158 @@ export async function sendMetaManualText(params: {
     },
   };
 }
+
+export type MetaTemplateSendInput = {
+  companyId: string;
+  channelId: string;
+  toPhone: string;
+  templateName: string;
+  languageCode: string;
+  bodyParameters: string[];
+};
+
+export type MetaTemplateSendResult =
+  | { ok: true; wamid: string | null; raw: unknown }
+  | { ok: false; error: string; errorCode?: string; errorMessage?: string };
+
+/**
+ * Envia template HSM aprovado via Graph API.
+ * Não exige janela de 24h (templates abrem conversa).
+ * Reutiliza loadMetaAccessToken — sem nova criptografia.
+ */
+export async function sendMetaTemplateMessage(
+  input: MetaTemplateSendInput,
+): Promise<MetaTemplateSendResult> {
+  await ensureCrmSchema();
+
+  const toDigits = input.toPhone.replace(/\D/g, "");
+  console.log("[META_TEMPLATE_SEND_START]", {
+    companyId: input.companyId,
+    channelId: input.channelId,
+    templateName: input.templateName,
+    languageCode: input.languageCode,
+    bodyParamCount: input.bodyParameters.length,
+  });
+
+  const rows = await sql<
+    {
+      id: string;
+      phone_number_id: string | null;
+      status: string;
+      active: boolean;
+      deleted_at: Date | string | null;
+    }[]
+  >`
+    SELECT id, phone_number_id, status, active, deleted_at
+    FROM public.whatsapp_channels
+    WHERE id = ${input.channelId}::uuid
+      AND company_id = ${input.companyId}::uuid
+      AND lower(channel_type) = 'meta'
+    LIMIT 1
+  `;
+  const channel = rows[0];
+  if (!channel || channel.deleted_at != null || !channel.active) {
+    console.error("[META_TEMPLATE_SEND_ERROR]", { error: "channel_unavailable" });
+    return { ok: false, error: "channel_unavailable" };
+  }
+
+  const phoneNumberId = channel.phone_number_id?.trim();
+  if (!phoneNumberId) {
+    console.error("[META_TEMPLATE_SEND_ERROR]", { error: "missing_phone_number_id" });
+    return { ok: false, error: "missing_phone_number_id" };
+  }
+
+  const token = await loadMetaAccessToken(input.channelId, input.companyId, {
+    phoneNumberId,
+    source: "template_send",
+  });
+  if (!token) {
+    console.error("[META_TEMPLATE_SEND_ERROR]", { error: "missing_token" });
+    return { ok: false, error: "missing_token" };
+  }
+
+  if (!toDigits) {
+    console.error("[META_TEMPLATE_SEND_ERROR]", { error: "invalid_recipient_phone" });
+    return { ok: false, error: "invalid_recipient_phone" };
+  }
+
+  const graphVersion = process.env.META_GRAPH_API_VERSION?.trim() || "v25.0";
+  const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(phoneNumberId)}/messages`;
+
+  const template: Record<string, unknown> = {
+    name: input.templateName,
+    language: { code: input.languageCode },
+  };
+
+  if (input.bodyParameters.length > 0) {
+    const cleaned = input.bodyParameters.map((t) => String(t ?? "").trim());
+    if (cleaned.some((t) => !t)) {
+      console.error("[META_TEMPLATE_SEND_ERROR]", { error: "empty_body_parameter" });
+      return { ok: false, error: "empty_body_parameter" };
+    }
+    template.components = [
+      {
+        type: "body",
+        parameters: cleaned.map((text) => ({
+          type: "text",
+          text,
+        })),
+      },
+    ];
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: toDigits,
+    type: "template",
+    template,
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const rawText = await res.text().catch(() => "");
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {};
+    } catch {
+      parsed = {};
+    }
+
+    if (!res.ok) {
+      const errObj = parsed.error as Record<string, unknown> | undefined;
+      const errorCode = errObj?.code != null ? String(errObj.code) : String(res.status);
+      const errorMessage =
+        errObj?.message != null ? String(errObj.message) : rawText.slice(0, 500) || "meta_api_error";
+      console.error("[META_TEMPLATE_SEND_ERROR]", {
+        status: res.status,
+        errorCode,
+        errorMessage,
+        channelId: input.channelId,
+      });
+      await recordMetaChannelError(input.channelId, input.companyId, errorCode, errorMessage);
+      return { ok: false, error: "meta_api_error", errorCode, errorMessage };
+    }
+
+    const messages = parsed.messages as Array<{ id?: string }> | undefined;
+    const wamid = messages?.[0]?.id ?? null;
+    await clearMetaChannelError(input.channelId, input.companyId);
+    console.log("[META_TEMPLATE_SEND_SUCCESS]", {
+      channelId: input.channelId,
+      wamid,
+      templateName: input.templateName,
+    });
+    return { ok: true, wamid, raw: sanitizeMetaWebhookPayload(parsed) };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("[META_TEMPLATE_SEND_ERROR]", { error: errorMessage });
+    return { ok: false, error: "meta_fetch_failed", errorMessage };
+  }
+}
+

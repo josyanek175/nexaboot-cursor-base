@@ -94,6 +94,7 @@ import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaig
 import { Route as ApiCampaignsIdReuseRouteImport } from './routes/api/campaigns/$id/reuse'
 import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
 import { Route as ApiMetaChannelsIdTokenRouteImport } from './routes/api/meta/channels/$id/token'
+import { Route as ApiMetaChannelsIdTemplatesRouteImport } from './routes/api/meta/channels/$id/templates'
 import { Route as ApiMetaChannelsIdStatusRouteImport } from './routes/api/meta/channels/$id/status'
 import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
 import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
@@ -104,6 +105,7 @@ import { Route as ApiEvolutionChannelsIdConnectRouteImport } from './routes/api/
 import { Route as ApiCampaignsIdImportPreviewRouteImport } from './routes/api/campaigns/$id/import/preview'
 import { Route as ApiCampaignsIdImportConfirmRouteImport } from './routes/api/campaigns/$id/import/confirm'
 import { Route as ApiCampaignsIdContactsContactRowIdRouteImport } from './routes/api/campaigns/$id/contacts/$contactRowId'
+import { Route as ApiMetaChannelsIdTemplatesSyncRouteImport } from './routes/api/meta/channels/$id/templates.sync'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -541,6 +543,12 @@ const ApiMetaChannelsIdTokenRoute = ApiMetaChannelsIdTokenRouteImport.update({
   path: '/token',
   getParentRoute: () => ApiMetaChannelsIdRoute,
 } as any)
+const ApiMetaChannelsIdTemplatesRoute =
+  ApiMetaChannelsIdTemplatesRouteImport.update({
+    id: '/templates',
+    path: '/templates',
+    getParentRoute: () => ApiMetaChannelsIdRoute,
+  } as any)
 const ApiMetaChannelsIdStatusRoute = ApiMetaChannelsIdStatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -599,6 +607,12 @@ const ApiCampaignsIdContactsContactRowIdRoute =
     id: '/$contactRowId',
     path: '/$contactRowId',
     getParentRoute: () => ApiCampaignsIdContactsRoute,
+  } as any)
+const ApiMetaChannelsIdTemplatesSyncRoute =
+  ApiMetaChannelsIdTemplatesSyncRouteImport.update({
+    id: '/sync',
+    path: '/sync',
+    getParentRoute: () => ApiMetaChannelsIdTemplatesRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -695,7 +709,9 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
+  '/api/meta/channels/$id/templates': typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
+  '/api/meta/channels/$id/templates/sync': typeof ApiMetaChannelsIdTemplatesSyncRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -790,7 +806,9 @@ export interface FileRoutesByTo {
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
+  '/api/meta/channels/$id/templates': typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
+  '/api/meta/channels/$id/templates/sync': typeof ApiMetaChannelsIdTemplatesSyncRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -888,7 +906,9 @@ export interface FileRoutesById {
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
+  '/api/meta/channels/$id/templates': typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
+  '/api/meta/channels/$id/templates/sync': typeof ApiMetaChannelsIdTemplatesSyncRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -986,7 +1006,9 @@ export interface FileRouteTypes {
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
     | '/api/meta/channels/$id/status'
+    | '/api/meta/channels/$id/templates'
     | '/api/meta/channels/$id/token'
+    | '/api/meta/channels/$id/templates/sync'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1081,7 +1103,9 @@ export interface FileRouteTypes {
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
     | '/api/meta/channels/$id/status'
+    | '/api/meta/channels/$id/templates'
     | '/api/meta/channels/$id/token'
+    | '/api/meta/channels/$id/templates/sync'
   id:
     | '__root__'
     | '/'
@@ -1178,7 +1202,9 @@ export interface FileRouteTypes {
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
     | '/api/meta/channels/$id/status'
+    | '/api/meta/channels/$id/templates'
     | '/api/meta/channels/$id/token'
+    | '/api/meta/channels/$id/templates/sync'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1826,6 +1852,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMetaChannelsIdTokenRouteImport
       parentRoute: typeof ApiMetaChannelsIdRoute
     }
+    '/api/meta/channels/$id/templates': {
+      id: '/api/meta/channels/$id/templates'
+      path: '/templates'
+      fullPath: '/api/meta/channels/$id/templates'
+      preLoaderRoute: typeof ApiMetaChannelsIdTemplatesRouteImport
+      parentRoute: typeof ApiMetaChannelsIdRoute
+    }
     '/api/meta/channels/$id/status': {
       id: '/api/meta/channels/$id/status'
       path: '/status'
@@ -1895,6 +1928,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/campaigns/$id/contacts/$contactRowId'
       preLoaderRoute: typeof ApiCampaignsIdContactsContactRowIdRouteImport
       parentRoute: typeof ApiCampaignsIdContactsRoute
+    }
+    '/api/meta/channels/$id/templates/sync': {
+      id: '/api/meta/channels/$id/templates/sync'
+      path: '/sync'
+      fullPath: '/api/meta/channels/$id/templates/sync'
+      preLoaderRoute: typeof ApiMetaChannelsIdTemplatesSyncRouteImport
+      parentRoute: typeof ApiMetaChannelsIdTemplatesRoute
     }
   }
 }
@@ -2165,13 +2205,29 @@ const ApiInternalChatMessagesRouteWithChildren =
     ApiInternalChatMessagesRouteChildren,
   )
 
+interface ApiMetaChannelsIdTemplatesRouteChildren {
+  ApiMetaChannelsIdTemplatesSyncRoute: typeof ApiMetaChannelsIdTemplatesSyncRoute
+}
+
+const ApiMetaChannelsIdTemplatesRouteChildren: ApiMetaChannelsIdTemplatesRouteChildren =
+  {
+    ApiMetaChannelsIdTemplatesSyncRoute: ApiMetaChannelsIdTemplatesSyncRoute,
+  }
+
+const ApiMetaChannelsIdTemplatesRouteWithChildren =
+  ApiMetaChannelsIdTemplatesRoute._addFileChildren(
+    ApiMetaChannelsIdTemplatesRouteChildren,
+  )
+
 interface ApiMetaChannelsIdRouteChildren {
   ApiMetaChannelsIdStatusRoute: typeof ApiMetaChannelsIdStatusRoute
+  ApiMetaChannelsIdTemplatesRoute: typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   ApiMetaChannelsIdTokenRoute: typeof ApiMetaChannelsIdTokenRoute
 }
 
 const ApiMetaChannelsIdRouteChildren: ApiMetaChannelsIdRouteChildren = {
   ApiMetaChannelsIdStatusRoute: ApiMetaChannelsIdStatusRoute,
+  ApiMetaChannelsIdTemplatesRoute: ApiMetaChannelsIdTemplatesRouteWithChildren,
   ApiMetaChannelsIdTokenRoute: ApiMetaChannelsIdTokenRoute,
 }
 

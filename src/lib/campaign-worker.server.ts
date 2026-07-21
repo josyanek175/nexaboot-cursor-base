@@ -4,7 +4,7 @@
  * Não lê intervalo/velocidade da API pública.
  */
 import { sql, ensureCampaignsSchema, ensureCrmSchema } from "@/lib/pg.server";
-import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
+import { normalizePhone, normalizePhoneE164, normalizePhoneForMatch, isValidE164Digits } from "@/lib/phone";
 import {
   isWithinSendWindow,
   nextAllowedSendAt,
@@ -19,6 +19,11 @@ import {
   syncCampaignContactCounters,
 } from "@/lib/campaign.server";
 import { isPhoneInOptOutList } from "@/lib/campaign-response.server";
+import { sendMetaTemplateMessage } from "@/lib/meta-send-message.server";
+import {
+  assertApprovedMetaTemplate,
+  buildMetaTemplateBodyParameters,
+} from "@/lib/meta-message-templates.server";
 
 const SYSTEM_SENDER_NAME = "Disparo Automático";
 
@@ -27,13 +32,18 @@ type WorkerCampaign = {
   company_id: string;
   whatsapp_channel_id: string;
   name: string;
-  message_text: string;
+  message_text: string | null;
+  message_type: string;
   status: string;
   schedule_date: string | null;
   window_start_time: string | null;
   window_end_time: string | null;
   sent_count: number;
   evolution_instance_name: string | null;
+  channel_type: string;
+  meta_template_name: string | null;
+  meta_language_code: string | null;
+  meta_variable_mappings: Record<string, string>;
   started_at: string | null;
 };
 
@@ -43,6 +53,7 @@ type PendingContact = {
   name: string | null;
   contact_id: string | null;
   rendered_message: string | null;
+  variables?: Record<string, unknown> | null;
 };
 
 export type WorkerTickResult = {
@@ -246,56 +257,98 @@ async function loadDueCampaigns(): Promise<WorkerCampaign[]> {
   const rows = await s<Record<string, unknown>[]>`
     SELECT
       c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
-      c.status, c.schedule_date, c.window_start_time, c.window_end_time,
+      c.message_type, c.status, c.schedule_date, c.window_start_time, c.window_end_time,
       c.sent_count, c.started_at,
-      ch.evolution_instance_name
+      c.meta_template_name, c.meta_language_code,
+      COALESCE(c.meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
+      ch.evolution_instance_name,
+      lower(ch.channel_type) AS channel_type
     FROM public.campaigns c
     JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
     WHERE c.deleted_at IS NULL
       AND c.status IN ('scheduled', 'running', 'paused')
       AND c.whatsapp_channel_id IS NOT NULL
-      AND c.message_text IS NOT NULL
-      AND btrim(c.message_text) <> ''
       AND COALESCE(c.send_mode, 'auto_safe') = 'auto_safe'
       AND ch.deleted_at IS NULL
       AND COALESCE(ch.active, true) = true
+      AND (
+        (
+          lower(ch.channel_type) = 'evolution'
+          AND c.message_text IS NOT NULL
+          AND btrim(c.message_text) <> ''
+        )
+        OR (
+          lower(ch.channel_type) = 'meta'
+          AND c.meta_template_name IS NOT NULL
+          AND btrim(c.meta_template_name) <> ''
+          AND c.meta_language_code IS NOT NULL
+          AND btrim(c.meta_language_code) <> ''
+        )
+      )
     ORDER BY
       CASE c.status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
       c.updated_at ASC
     LIMIT 20
   `;
 
-  return rows.map((r) => ({
-    id: String(r.id),
-    company_id: String(r.company_id),
-    whatsapp_channel_id: String(r.whatsapp_channel_id),
-    name: String(r.name),
-    message_text: String(r.message_text),
-    status: String(r.status),
-    schedule_date: dateStr(r.schedule_date),
-    window_start_time: timeStr(r.window_start_time),
-    window_end_time: timeStr(r.window_end_time),
-    sent_count: Number(r.sent_count ?? 0),
-    evolution_instance_name: r.evolution_instance_name
-      ? String(r.evolution_instance_name)
-      : null,
-    started_at: r.started_at ? String(r.started_at) : null,
-  }));
+  return rows.map((r) => {
+    const mappingsRaw = r.meta_variable_mappings;
+    const mappings: Record<string, string> = {};
+    if (mappingsRaw && typeof mappingsRaw === "object" && !Array.isArray(mappingsRaw)) {
+      for (const [k, v] of Object.entries(mappingsRaw as Record<string, unknown>)) {
+        if (typeof v === "string") mappings[k] = v;
+      }
+    }
+    return {
+      id: String(r.id),
+      company_id: String(r.company_id),
+      whatsapp_channel_id: String(r.whatsapp_channel_id),
+      name: String(r.name),
+      message_text: r.message_text != null ? String(r.message_text) : null,
+      message_type: String(r.message_type ?? "text"),
+      status: String(r.status),
+      schedule_date: dateStr(r.schedule_date),
+      window_start_time: timeStr(r.window_start_time),
+      window_end_time: timeStr(r.window_end_time),
+      sent_count: Number(r.sent_count ?? 0),
+      evolution_instance_name: r.evolution_instance_name
+        ? String(r.evolution_instance_name)
+        : null,
+      channel_type: String(r.channel_type ?? "evolution"),
+      meta_template_name: r.meta_template_name ? String(r.meta_template_name) : null,
+      meta_language_code: r.meta_language_code ? String(r.meta_language_code) : null,
+      meta_variable_mappings: mappings,
+      started_at: r.started_at ? String(r.started_at) : null,
+    };
+  });
 }
 
-async function loadNextPendingContact(
+async function claimNextPendingContact(
   companyId: string,
   campaignId: string,
 ): Promise<PendingContact | null> {
   const s = sql();
+  // Reserva atômica: pending → processing (SKIP LOCKED evita dois ticks no mesmo contato).
   const rows = await s<PendingContact[]>`
-    SELECT id, phone, name, contact_id, rendered_message
-    FROM public.campaign_contacts
-    WHERE campaign_id = ${campaignId}::uuid
-      AND company_id = ${companyId}::uuid
-      AND status = 'pending'
-    ORDER BY created_at ASC
-    LIMIT 1
+    WITH next AS (
+      SELECT id
+      FROM public.campaign_contacts
+      WHERE campaign_id = ${campaignId}::uuid
+        AND company_id = ${companyId}::uuid
+        AND status = 'pending'
+        AND (provider_message_id IS NULL OR btrim(provider_message_id) = '')
+      ORDER BY created_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    UPDATE public.campaign_contacts cc
+    SET status = 'processing'
+    FROM next
+    WHERE cc.id = next.id
+      AND cc.company_id = ${companyId}::uuid
+      AND cc.status = 'pending'
+      AND (cc.provider_message_id IS NULL OR btrim(cc.provider_message_id) = '')
+    RETURNING cc.id, cc.phone, cc.name, cc.contact_id, cc.rendered_message, cc.variables
   `;
   return rows[0] ?? null;
 }
@@ -336,17 +389,22 @@ async function markContactSent(
   companyId: string,
   contactRowId: string,
   providerId: string | null,
-): Promise<void> {
+): Promise<boolean> {
   const s = sql();
-  await s`
+  const rows = await s<{ id: string }[]>`
     UPDATE public.campaign_contacts
     SET status = 'sent',
         sent_at = now(),
-        provider_message_id = ${providerId},
+        provider_message_id = COALESCE(${providerId}, provider_message_id),
         error_code = NULL,
         error_message = NULL
-    WHERE id = ${contactRowId}::uuid AND company_id = ${companyId}::uuid
+    WHERE id = ${contactRowId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status IN ('processing', 'pending')
+      AND (provider_message_id IS NULL OR btrim(provider_message_id) = '' OR provider_message_id = ${providerId})
+    RETURNING id
   `;
+  return rows.length > 0;
 }
 
 async function markContactFailed(
@@ -360,7 +418,10 @@ async function markContactFailed(
     SET status = 'failed',
         error_code = 'erro_envio',
         error_message = ${error.slice(0, 1000)}
-    WHERE id = ${contactRowId}::uuid AND company_id = ${companyId}::uuid
+    WHERE id = ${contactRowId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status IN ('processing', 'pending')
+      AND (provider_message_id IS NULL OR btrim(provider_message_id) = '')
   `;
 }
 
@@ -376,7 +437,8 @@ async function markContactSkipped(
         skip_reason = ${reason}
     WHERE id = ${contactRowId}::uuid
       AND company_id = ${companyId}::uuid
-      AND status = 'pending'
+      AND status IN ('pending', 'processing')
+      AND (provider_message_id IS NULL OR btrim(provider_message_id) = '')
   `;
 }
 
@@ -473,8 +535,26 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       campaign.status = "running";
     }
 
-    const contact = await loadNextPendingContact(campaign.company_id, campaign.id);
+    const contact = await claimNextPendingContact(campaign.company_id, campaign.id);
     if (!contact) {
+      // Sem pending reservável — verifica se ainda há processing (outro tick) ou finaliza.
+      const s = sql();
+      const pendingLeft = await s<{ count: string }[]>`
+        SELECT COUNT(*)::text AS count
+        FROM public.campaign_contacts
+        WHERE campaign_id = ${campaign.id}::uuid
+          AND company_id = ${campaign.company_id}::uuid
+          AND status IN ('pending', 'processing')
+      `;
+      if (parseInt(pendingLeft[0]?.count ?? "0", 10) > 0) {
+        return {
+          ok: true,
+          action: "idle",
+          campaignId: campaign.id,
+          delayMs: 2_000,
+          message: "Contatos em processamento por outro tick",
+        };
+      }
       await setCampaignStatus(campaign.company_id, campaign.id, "completed", { finished: true });
       await syncCampaignContactCounters(campaign.id, campaign.company_id);
       await insertCampaignEvent(campaign.company_id, campaign.id, "campaign.completed", null, {
@@ -491,8 +571,15 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       };
     }
 
-    const phone = normalizePhone(contact.phone);
-    if (isInvalidCampaignPhone(phone)) {
+    const isMeta = campaign.channel_type === "meta";
+    const phone = isMeta
+      ? normalizePhoneE164(contact.phone, { defaultCountry: "BR" })
+      : normalizePhone(contact.phone);
+
+    if (
+      isInvalidCampaignPhone(phone) ||
+      (isMeta && (!phone || !isValidE164Digits(phone)))
+    ) {
       await markContactSkipped(campaign.company_id, contact.id, "invalid_phone");
       await syncCampaignContactCounters(campaign.id, campaign.company_id);
       await insertCampaignEvent(
@@ -534,70 +621,239 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       };
     }
 
-    // Prepara variação se ainda não existir.
-    let text = contact.rendered_message;
-    if (!text) {
-      const prepared = await prepareCampaignContactMessage(
-        campaign.company_id,
-        campaign.id,
-        contact.id,
-      );
-      text = prepared?.rendered_message ?? null;
+    // Prepara conteúdo conforme o tipo de canal.
+    let text: string | null = null;
+    let bodyParams: string[] = [];
+
+    if (isMeta) {
+      const templateName = campaign.meta_template_name?.trim();
+      const languageCode = campaign.meta_language_code?.trim();
+      if (!templateName || !languageCode) {
+        await markContactFailed(campaign.company_id, contact.id, "missing_meta_template");
+        return {
+          ok: false,
+          action: "error",
+          campaignId: campaign.id,
+          delayMs: 10_000,
+          message: "Template Meta não configurado na campanha",
+        };
+      }
+
+      const approved = await assertApprovedMetaTemplate({
+        companyId: campaign.company_id,
+        channelId: campaign.whatsapp_channel_id,
+        templateName,
+        languageCode,
+      });
+      if (!approved.ok) {
+        await markContactFailed(campaign.company_id, contact.id, approved.error);
+        await syncCampaignContactCounters(campaign.id, campaign.company_id);
+        return {
+          ok: true,
+          action: "failed",
+          campaignId: campaign.id,
+          contactId: contact.id,
+          delayMs: 1_000,
+          message: approved.error,
+        };
+      }
+
+      const contactVars =
+        contact.variables && typeof contact.variables === "object"
+          ? contact.variables
+          : {};
+      const built = buildMetaTemplateBodyParameters({
+        templateName: approved.row.template_name,
+        components: approved.row.components,
+        mappings: campaign.meta_variable_mappings ?? {},
+        contact: {
+          name: contact.name,
+          phone,
+          variables: contactVars,
+        },
+      });
+      if (!built.ok) {
+        await markContactFailed(campaign.company_id, contact.id, built.error);
+        await syncCampaignContactCounters(campaign.id, campaign.company_id);
+        await insertCampaignEvent(
+          campaign.company_id,
+          campaign.id,
+          "contact.failed",
+          null,
+          { reason: built.error, empty_key: built.emptyKey },
+          contact.id,
+        );
+        return {
+          ok: true,
+          action: "failed",
+          campaignId: campaign.id,
+          contactId: contact.id,
+          delayMs: 200,
+          message: built.error,
+        };
+      }
+      bodyParams = built.parameters;
+      text =
+        `[Template Meta: ${approved.row.template_name}/${approved.row.language_code}] ` +
+        bodyParams.join(" | ");
+    } else {
+      text = contact.rendered_message;
+      if (!text) {
+        const prepared = await prepareCampaignContactMessage(
+          campaign.company_id,
+          campaign.id,
+          contact.id,
+        );
+        text = prepared?.rendered_message ?? null;
+      }
+      if (!text?.trim()) {
+        await markContactFailed(campaign.company_id, contact.id, "empty_message");
+        await syncCampaignContactCounters(campaign.id, campaign.company_id);
+        await insertCampaignEvent(
+          campaign.company_id,
+          campaign.id,
+          "contact.failed",
+          null,
+          { reason: "empty_message" },
+          contact.id,
+        );
+        return {
+          ok: true,
+          action: "failed",
+          campaignId: campaign.id,
+          contactId: contact.id,
+          delayMs: 200,
+          message: "Mensagem vazia",
+        };
+      }
     }
-    if (!text?.trim()) {
-      await markContactFailed(campaign.company_id, contact.id, "empty_message");
-      await syncCampaignContactCounters(campaign.id, campaign.company_id);
-      await insertCampaignEvent(
-        campaign.company_id,
-        campaign.id,
-        "contact.failed",
-        null,
-        { reason: "empty_message" },
-        contact.id,
-      );
-      return {
-        ok: true,
-        action: "failed",
+
+    let providerId: string | null = null;
+    let sendError: string | null = null;
+
+    if (isMeta) {
+      const templateName = campaign.meta_template_name!.trim();
+      const languageCode = campaign.meta_language_code!.trim();
+
+      console.log("[CAMPAIGN_WORKER_SEND]", {
         campaignId: campaign.id,
-        contactId: contact.id,
-        delayMs: 200,
-        message: "Mensagem vazia",
-      };
-    }
+        contactRowId: contact.id,
+        phone,
+        provider: "meta",
+        templateName,
+      });
 
-    const instance =
-      campaign.evolution_instance_name || process.env.EVOLUTION_INSTANCE_NAME || "";
-    if (!instance) {
-      return {
-        ok: false,
-        action: "error",
+      const meta = await sendMetaTemplateMessage({
+        companyId: campaign.company_id,
+        channelId: campaign.whatsapp_channel_id,
+        toPhone: phone,
+        templateName,
+        languageCode,
+        bodyParameters: bodyParams,
+      });
+
+      if (!meta.ok) {
+        sendError = meta.errorMessage || meta.error;
+      } else {
+        providerId = meta.wamid;
+        // Persistir sent+wamid ANTES de gravar CRM — evita reenvio se save falhar.
+        const marked = await markContactSent(campaign.company_id, contact.id, providerId);
+        if (!marked) {
+          console.error("[CAMPAIGN_WORKER_META_ALREADY_SENT]", {
+            campaignId: campaign.id,
+            contactId: contact.id,
+            wamid: providerId,
+          });
+          return {
+            ok: true,
+            action: "sent",
+            campaignId: campaign.id,
+            contactId: contact.id,
+            delayMs: 200,
+            message: "Já enviado (dedupe)",
+          };
+        }
+        try {
+          const s = sql();
+          await s`
+            INSERT INTO public.campaign_send_queue (
+              campaign_id, campaign_contact_id, company_id,
+              scheduled_for, attempts, status
+            ) VALUES (
+              ${campaign.id}::uuid,
+              ${contact.id}::uuid,
+              ${campaign.company_id}::uuid,
+              now(),
+              1,
+              'sent'
+            )
+          `;
+        } catch (e) {
+          console.error("[CAMPAIGN_QUEUE_META_SAVE_FAIL]", e);
+        }
+      }
+    } else {
+      const instance =
+        campaign.evolution_instance_name || process.env.EVOLUTION_INSTANCE_NAME || "";
+      if (!instance) {
+        await markContactFailed(campaign.company_id, contact.id, "missing_evolution_instance");
+        return {
+          ok: false,
+          action: "error",
+          campaignId: campaign.id,
+          delayMs: 10_000,
+          message: "Instância Evolution não configurada",
+        };
+      }
+
+      console.log("[CAMPAIGN_WORKER_SEND]", {
         campaignId: campaign.id,
-        delayMs: 10_000,
-        message: "Instância Evolution não configurada",
-      };
+        contactRowId: contact.id,
+        phone,
+        instance,
+      });
+
+      const evo = await sendTextEvolution(instance, phone, text!);
+      if (!evo.ok) {
+        sendError = evo.error;
+      } else {
+        providerId = evo.providerId;
+      }
     }
 
-    console.log("[CAMPAIGN_WORKER_SEND]", {
-      campaignId: campaign.id,
-      contactRowId: contact.id,
-      phone,
-      instance,
-    });
-
-    const evo = await sendTextEvolution(instance, phone, text);
     const block = getBlockState(campaign.id);
 
-    if (!evo.ok) {
-      await markContactFailed(campaign.company_id, contact.id, evo.error);
+    if (sendError) {
+      await markContactFailed(campaign.company_id, contact.id, sendError);
       await syncCampaignContactCounters(campaign.id, campaign.company_id);
       await insertCampaignEvent(
         campaign.company_id,
         campaign.id,
         "contact.failed",
         null,
-        { error: evo.error, phone },
+        { error: sendError, phone, provider: isMeta ? "meta" : "evolution" },
         contact.id,
       );
+      if (isMeta) {
+        try {
+          const s = sql();
+          await s`
+            INSERT INTO public.campaign_send_queue (
+              campaign_id, campaign_contact_id, company_id,
+              scheduled_for, attempts, status
+            ) VALUES (
+              ${campaign.id}::uuid,
+              ${contact.id}::uuid,
+              ${campaign.company_id}::uuid,
+              now(),
+              1,
+              'failed'
+            )
+          `;
+        } catch {
+          // ignore
+        }
+      }
       const pause = nextPauseAfterSend({
         sentInCampaign: campaign.sent_count,
         messagesInCurrentBlock: block.messagesInBlock,
@@ -606,7 +862,7 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       console.error("[CAMPAIGN_WORKER_SEND_FAIL]", {
         campaignId: campaign.id,
         contactId: contact.id,
-        error: evo.error,
+        error: sendError,
       });
       return {
         ok: true,
@@ -614,11 +870,11 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
         campaignId: campaign.id,
         contactId: contact.id,
         delayMs: Math.min(pause.delayMs, 15_000),
-        message: evo.error,
+        message: sendError,
       };
     }
 
-    // Sucesso: grava contato + conversa + mensagem no NexaBoot.
+    // Sucesso: grava conversa/mensagem. Meta já está sent+wamid (sem reenvio se falhar aqui).
     try {
       const contactId = await ensureContactForCampaign(
         campaign.company_id,
@@ -633,32 +889,38 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       );
       await saveOutboundCampaignMessage({
         conversationId,
-        text,
-        providerId: evo.providerId,
+        text: text!,
+        providerId,
         campaignId: campaign.id,
         campaignContactId: contact.id,
       });
     } catch (e) {
       console.error("[CAMPAIGN_WORKER_SAVE_FAIL]", e);
-      // Envio na Evolution ok; ainda marca como enviado e registra aviso.
       await insertCampaignEvent(
         campaign.company_id,
         campaign.id,
         "contact.save_warning",
         null,
-        { error: e instanceof Error ? e.message : String(e) },
+        { error: e instanceof Error ? e.message : String(e), wamid: providerId },
         contact.id,
       );
     }
 
-    await markContactSent(campaign.company_id, contact.id, evo.providerId);
+    if (!isMeta) {
+      await markContactSent(campaign.company_id, contact.id, providerId);
+    }
     await syncCampaignContactCounters(campaign.id, campaign.company_id);
     await insertCampaignEvent(
       campaign.company_id,
       campaign.id,
       "contact.sent",
       null,
-      { phone, provider_id: evo.providerId },
+      {
+        phone,
+        provider_id: providerId,
+        provider: isMeta ? "meta" : "evolution",
+        template_name: isMeta ? campaign.meta_template_name : undefined,
+      },
       contact.id,
     );
 
@@ -692,6 +954,7 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       contactId: contact.id,
       phone,
       nextDelayMs: pause.delayMs,
+      provider: isMeta ? "meta" : "evolution",
     });
 
     return {
@@ -700,7 +963,7 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       campaignId: campaign.id,
       contactId: contact.id,
       delayMs: pause.delayMs,
-      message: "Mensagem enviada",
+      message: isMeta ? "Template Meta enviado" : "Mensagem enviada",
     };
   }
 
