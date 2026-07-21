@@ -12,6 +12,9 @@ import {
 } from "@/lib/permissions";
 import { normalizePhone } from "@/lib/phone";
 import {
+  assertApprovedMetaTemplate,
+} from "@/lib/meta-message-templates.server";
+import {
   CAMPAIGN_SEND_MODE,
   buildVariedMessage,
   isInvalidCampaignPhone,
@@ -46,6 +49,10 @@ export type CampaignRow = {
   created_at: string;
   updated_at: string;
   channel_name?: string | null;
+  meta_template_id?: string | null;
+  meta_template_name?: string | null;
+  meta_language_code?: string | null;
+  meta_variable_mappings?: Record<string, string> | null;
 };
 
 export type CampaignDetail = CampaignRow & {
@@ -88,6 +95,53 @@ function normalizeDateInput(v: string | null | undefined): string | null {
   return s;
 }
 
+function parseMappings(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && v.trim()) out[k] = v.trim();
+  }
+  return out;
+}
+
+/** Garante template Meta APPROVED+active do mesmo canal/empresa. */
+async function resolveValidatedMetaTemplateFields(opts: {
+  companyId: string;
+  channelId: string | null | undefined;
+  templateName: string | null | undefined;
+  languageCode: string | null | undefined;
+  mappings?: Record<string, string> | null;
+}): Promise<{
+  meta_template_id: string;
+  meta_template_name: string;
+  meta_language_code: string;
+  meta_variable_mappings: Record<string, string>;
+}> {
+  if (!opts.channelId) throw new Error("invalid_channel");
+  if (!opts.templateName?.trim() || !opts.languageCode?.trim()) {
+    throw new Error("missing_meta_template");
+  }
+  const checked = await assertApprovedMetaTemplate({
+    companyId: opts.companyId,
+    channelId: opts.channelId,
+    templateName: opts.templateName,
+    languageCode: opts.languageCode,
+  });
+  if (!checked.ok) {
+    throw new Error(checked.error);
+  }
+  const mappings = parseMappings(opts.mappings);
+  if (checked.row.template_name === "abordagem_inicial_troca_refil" && !mappings["1"]) {
+    mappings["1"] = "name";
+  }
+  return {
+    meta_template_id: checked.row.meta_template_id ?? checked.row.id,
+    meta_template_name: checked.row.template_name,
+    meta_language_code: checked.row.language_code,
+    meta_variable_mappings: mappings,
+  };
+}
+
 export type CampaignWriteInput = {
   name?: string;
   message_text?: string | null;
@@ -97,6 +151,11 @@ export type CampaignWriteInput = {
   window_end_time?: string | null;
   template_id?: string | null;
   source_campaign_id?: string | null;
+  meta_template_id?: string | null;
+  meta_template_name?: string | null;
+  meta_language_code?: string | null;
+  meta_variable_mappings?: Record<string, string> | null;
+  message_type?: "text" | "meta_template";
 };
 
 type ActorContext = {
@@ -119,11 +178,12 @@ export async function listCampaigns(companyId: string, status?: string): Promise
             COALESCE(c.total_interested, 0) AS total_interested,
             COALESCE(c.total_opt_out, 0) AS total_opt_out,
             c.created_by_user_id, c.created_at, c.updated_at,
+            c.meta_template_id, c.meta_template_name, c.meta_language_code,
+            COALESCE(c.meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
             ch.name AS channel_name
           FROM public.campaigns c
           LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
             AND ch.company_id = c.company_id
-            AND lower(ch.channel_type) = 'evolution'
           WHERE c.company_id = ${companyId}::uuid
             AND c.deleted_at IS NULL
             AND c.status = ${status}
@@ -140,11 +200,12 @@ export async function listCampaigns(companyId: string, status?: string): Promise
             COALESCE(c.total_interested, 0) AS total_interested,
             COALESCE(c.total_opt_out, 0) AS total_opt_out,
             c.created_by_user_id, c.created_at, c.updated_at,
+            c.meta_template_id, c.meta_template_name, c.meta_language_code,
+            COALESCE(c.meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
             ch.name AS channel_name
           FROM public.campaigns c
           LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
             AND ch.company_id = c.company_id
-            AND lower(ch.channel_type) = 'evolution'
           WHERE c.company_id = ${companyId}::uuid
             AND c.deleted_at IS NULL
           ORDER BY c.created_at DESC
@@ -358,12 +419,35 @@ export async function validateEvolutionChannel(
   return { ok: true, id: rows[0].id };
 }
 
+/** Canal Evolution ou Meta ativo da empresa (campanhas). */
+export async function validateCampaignChannel(
+  companyId: string,
+  channelId: string,
+): Promise<
+  | { ok: true; id: string; channel_type: "evolution" | "meta" }
+  | { ok: false; error: string }
+> {
+  const rows = await sql<{ id: string; channel_type: string }[]>`
+    SELECT id, lower(channel_type) AS channel_type
+    FROM public.whatsapp_channels
+    WHERE id = ${channelId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND deleted_at IS NULL
+      AND COALESCE(active, true) = true
+      AND lower(channel_type) IN ('evolution', 'meta')
+    LIMIT 1
+  `;
+  if (!rows[0]) return { ok: false, error: "invalid_channel" };
+  const channel_type = rows[0].channel_type === "meta" ? "meta" : "evolution";
+  return { ok: true, id: rows[0].id, channel_type };
+}
+
 export async function isSavedChannelAvailable(
   companyId: string,
   channelId: string | null,
 ): Promise<boolean> {
   if (!channelId) return true;
-  const result = await validateEvolutionChannel(companyId, channelId);
+  const result = await validateCampaignChannel(companyId, channelId);
   return result.ok;
 }
 
@@ -451,14 +535,35 @@ export async function scheduleCampaign(
     throw new Error("not_schedulable");
   }
   if (!existing.whatsapp_channel_id) throw new Error("missing_channel");
-  if (!existing.message_text?.trim()) throw new Error("missing_message");
+  const isMetaTemplate =
+    existing.message_type === "meta_template" || !!existing.meta_template_name?.trim();
+  if (isMetaTemplate) {
+    if (!existing.meta_template_name?.trim() || !existing.meta_language_code?.trim()) {
+      throw new Error("missing_meta_template");
+    }
+    const checked = await assertApprovedMetaTemplate({
+      companyId,
+      channelId: existing.whatsapp_channel_id,
+      templateName: existing.meta_template_name,
+      languageCode: existing.meta_language_code,
+    });
+    if (!checked.ok) throw new Error(checked.error);
+  } else if (!existing.message_text?.trim()) {
+    throw new Error("missing_message");
+  }
   if (!existing.schedule_date) throw new Error("missing_schedule_date");
   if (!existing.window_start_time || !existing.window_end_time) {
     throw new Error("missing_window");
   }
 
-  const ch = await validateEvolutionChannel(companyId, existing.whatsapp_channel_id);
+  const ch = await validateCampaignChannel(companyId, existing.whatsapp_channel_id);
   if (!ch.ok) throw new Error("invalid_channel");
+  if (isMetaTemplate && ch.channel_type !== "meta") {
+    throw new Error("invalid_channel");
+  }
+  if (!isMetaTemplate && ch.channel_type !== "evolution") {
+    throw new Error("invalid_channel");
+  }
 
   const s = sql();
   const pending = await s<{ count: string }[]>`
@@ -482,6 +587,8 @@ export async function scheduleCampaign(
               send_interval_ms, schedule_date, window_start_time, window_end_time,
               send_mode, total_contacts, sent_count, failed_count, skipped_count,
               total_replied, total_interested, total_opt_out,
+              meta_template_id, meta_template_name, meta_language_code,
+              COALESCE(meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
               created_by_user_id, created_at, updated_at
   `;
   if (!rows[0]) return null;
@@ -509,11 +616,12 @@ export async function getCampaignById(
       COALESCE(c.total_interested, 0) AS total_interested,
       COALESCE(c.total_opt_out, 0) AS total_opt_out,
       c.created_by_user_id, c.created_at, c.updated_at,
+      c.meta_template_id, c.meta_template_name, c.meta_language_code,
+      COALESCE(c.meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
       ch.name AS channel_name
     FROM public.campaigns c
     LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
       AND ch.company_id = c.company_id
-      AND lower(ch.channel_type) = 'evolution'
     WHERE c.id = ${campaignId}::uuid
       AND c.company_id = ${companyId}::uuid
       AND c.deleted_at IS NULL
@@ -536,9 +644,11 @@ export async function createCampaign(
   userId: string | null,
   data: CampaignWriteInput & { name: string },
 ): Promise<CampaignDetail> {
+  let channelType: "evolution" | "meta" | null = null;
   if (data.whatsapp_channel_id) {
-    const ch = await validateEvolutionChannel(companyId, data.whatsapp_channel_id);
+    const ch = await validateCampaignChannel(companyId, data.whatsapp_channel_id);
     if (!ch.ok) throw new Error(ch.error);
+    channelType = ch.channel_type;
   }
 
   const scheduleDate = normalizeDateInput(data.schedule_date);
@@ -548,12 +658,43 @@ export async function createCampaign(
     throw new Error("invalid_window");
   }
 
+  const isMeta =
+    data.message_type === "meta_template" ||
+    channelType === "meta" ||
+    !!data.meta_template_name?.trim();
+  const messageType = isMeta ? "meta_template" : "text";
+
+  let metaFields: {
+    meta_template_id: string | null;
+    meta_template_name: string | null;
+    meta_language_code: string | null;
+    meta_variable_mappings: Record<string, string>;
+  } = {
+    meta_template_id: null,
+    meta_template_name: null,
+    meta_language_code: null,
+    meta_variable_mappings: {},
+  };
+
+  if (isMeta && data.meta_template_name?.trim() && data.meta_language_code?.trim()) {
+    metaFields = await resolveValidatedMetaTemplateFields({
+      companyId,
+      channelId: data.whatsapp_channel_id,
+      templateName: data.meta_template_name,
+      languageCode: data.meta_language_code,
+      mappings: data.meta_variable_mappings,
+    });
+  } else if (isMeta && data.meta_template_name?.trim() && !data.meta_language_code?.trim()) {
+    throw new Error("missing_meta_template");
+  }
+
   const rows = await sql<CampaignRow[]>`
     INSERT INTO public.campaigns (
       company_id, whatsapp_channel_id, name, message_text,
       message_type, status, send_interval_ms, send_mode,
       schedule_date, window_start_time, window_end_time,
       template_id, source_campaign_id,
+      meta_template_id, meta_template_name, meta_language_code, meta_variable_mappings,
       created_by_user_id
     )
     VALUES (
@@ -561,15 +702,19 @@ export async function createCampaign(
       ${data.whatsapp_channel_id ?? null}::uuid,
       ${data.name},
       ${data.message_text ?? null},
-      'text',
+      ${messageType},
       'draft',
       5000,
       ${CAMPAIGN_SEND_MODE},
       ${scheduleDate}::date,
       ${windowStart}::time,
       ${windowEnd}::time,
-      ${data.template_id ?? null}::uuid,
+      ${isMeta ? null : (data.template_id ?? null)}::uuid,
       ${data.source_campaign_id ?? null}::uuid,
+      ${metaFields.meta_template_id},
+      ${metaFields.meta_template_name},
+      ${metaFields.meta_language_code},
+      ${JSON.stringify(metaFields.meta_variable_mappings)}::jsonb,
       ${userId ?? null}::uuid
     )
     RETURNING id, company_id, whatsapp_channel_id, name, message_text,
@@ -577,12 +722,15 @@ export async function createCampaign(
               send_interval_ms, schedule_date, window_start_time, window_end_time,
               send_mode, total_contacts, sent_count, failed_count, skipped_count,
               total_replied, total_interested, total_opt_out,
+              meta_template_id, meta_template_name, meta_language_code,
+              COALESCE(meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
               created_by_user_id, created_at, updated_at
   `;
   const campaign = rows[0];
   await insertCampaignEvent(companyId, campaign.id, "campaign.created", userId, {
     name: data.name,
     send_mode: CAMPAIGN_SEND_MODE,
+    message_type: messageType,
   });
   return withChannelStatus(companyId, campaign);
 }
@@ -599,9 +747,14 @@ export async function updateCampaign(
     throw new Error("not_draft");
   }
 
+  let channelType: "evolution" | "meta" | null = null;
   if (data.whatsapp_channel_id) {
-    const ch = await validateEvolutionChannel(companyId, data.whatsapp_channel_id);
+    const ch = await validateCampaignChannel(companyId, data.whatsapp_channel_id);
     if (!ch.ok) throw new Error(ch.error);
+    channelType = ch.channel_type;
+  } else if (existing.whatsapp_channel_id) {
+    const ch = await validateCampaignChannel(companyId, existing.whatsapp_channel_id);
+    if (ch.ok) channelType = ch.channel_type;
   }
 
   const nextName = data.name ?? existing.name;
@@ -629,6 +782,49 @@ export async function updateCampaign(
     throw new Error("invalid_window");
   }
 
+  const nextMetaName =
+    data.meta_template_name !== undefined
+      ? data.meta_template_name
+      : existing.meta_template_name ?? null;
+  const nextMetaLang =
+    data.meta_language_code !== undefined
+      ? data.meta_language_code
+      : existing.meta_language_code ?? null;
+  const nextMappings =
+    data.meta_variable_mappings !== undefined
+      ? parseMappings(data.meta_variable_mappings)
+      : parseMappings(existing.meta_variable_mappings);
+
+  const isMeta =
+    data.message_type === "meta_template" ||
+    channelType === "meta" ||
+    !!nextMetaName?.trim();
+  const messageType = isMeta ? "meta_template" : "text";
+
+  let metaFields: {
+    meta_template_id: string | null;
+    meta_template_name: string | null;
+    meta_language_code: string | null;
+    meta_variable_mappings: Record<string, string>;
+  } = {
+    meta_template_id: null,
+    meta_template_name: null,
+    meta_language_code: null,
+    meta_variable_mappings: {},
+  };
+
+  if (isMeta && nextMetaName?.trim() && nextMetaLang?.trim()) {
+    metaFields = await resolveValidatedMetaTemplateFields({
+      companyId,
+      channelId: nextChannel,
+      templateName: nextMetaName,
+      languageCode: nextMetaLang,
+      mappings: nextMappings,
+    });
+  } else if (isMeta && nextMetaName?.trim() && !nextMetaLang?.trim()) {
+    throw new Error("missing_meta_template");
+  }
+
   const rows = await sql<CampaignRow[]>`
     UPDATE public.campaigns
     SET name = ${nextName},
@@ -637,6 +833,11 @@ export async function updateCampaign(
         schedule_date = ${nextSchedule}::date,
         window_start_time = ${nextStart}::time,
         window_end_time = ${nextEnd}::time,
+        message_type = ${messageType},
+        meta_template_id = ${metaFields.meta_template_id},
+        meta_template_name = ${metaFields.meta_template_name},
+        meta_language_code = ${metaFields.meta_language_code},
+        meta_variable_mappings = ${JSON.stringify(metaFields.meta_variable_mappings)}::jsonb,
         send_mode = ${CAMPAIGN_SEND_MODE},
         updated_at = now()
     WHERE id = ${campaignId}::uuid
@@ -648,6 +849,8 @@ export async function updateCampaign(
               send_interval_ms, schedule_date, window_start_time, window_end_time,
               send_mode, total_contacts, sent_count, failed_count, skipped_count,
               total_replied, total_interested, total_opt_out,
+              meta_template_id, meta_template_name, meta_language_code,
+              COALESCE(meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
               created_by_user_id, created_at, updated_at
   `;
   if (!rows[0]) return null;

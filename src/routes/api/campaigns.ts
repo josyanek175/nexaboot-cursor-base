@@ -24,6 +24,11 @@ const CreateBody = z.object({
   window_end_time: TimeStr,
   template_id: z.string().uuid().optional().nullable(),
   source_campaign_id: z.string().uuid().optional().nullable(),
+  message_type: z.enum(["text", "meta_template"]).optional(),
+  meta_template_id: z.string().trim().max(120).optional().nullable(),
+  meta_template_name: z.string().trim().max(200).optional().nullable(),
+  meta_language_code: z.string().trim().max(20).optional().nullable(),
+  meta_variable_mappings: z.record(z.string(), z.string()).optional().nullable(),
 });
 
 export const Route = createFileRoute("/api/campaigns")({
@@ -75,6 +80,13 @@ export const Route = createFileRoute("/api/campaigns")({
             }
             if (msg === "invalid_window") {
               return Response.json({ error: "invalid_window" }, { status: 400 });
+            }
+            if (
+              msg === "missing_meta_template" ||
+              msg === "invalid_meta_template" ||
+              msg === "meta_template_not_approved"
+            ) {
+              return Response.json({ error: msg }, { status: 400 });
             }
             console.error("[CAMPAIGNS_CREATE_FAIL]", e);
             return Response.json({ error: "create_failed" }, { status: 500 });

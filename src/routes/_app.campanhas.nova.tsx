@@ -23,6 +23,24 @@ type TemplateOption = {
   message_body: string;
 };
 
+type MetaTemplateOption = {
+  id: string;
+  metaTemplateId: string | null;
+  name: string;
+  language: string;
+  category: string | null;
+  status: string;
+  active: boolean;
+  bodyText: string | null;
+  buttons: string[];
+  variables: string[];
+};
+
+const CONTACT_FIELD_OPTIONS = [
+  { value: "name", label: "Nome do contato" },
+  { value: "phone", label: "Telefone" },
+] as const;
+
 const STEPS = [
   { id: 1, label: "Dados / modelo" },
   { id: 2, label: "Mensagem" },
@@ -86,6 +104,21 @@ function NovaCampanhaPage() {
   const [templateName, setTemplateName] = useState("");
   const [saving, setSaving] = useState(false);
   const [channelsError, setChannelsError] = useState<string | null>(null);
+  const [metaTemplates, setMetaTemplates] = useState<MetaTemplateOption[]>([]);
+  const [selectedMetaTemplateId, setSelectedMetaTemplateId] = useState("");
+  const [metaVariableMappings, setMetaVariableMappings] = useState<Record<string, string>>({});
+  const [syncingMeta, setSyncingMeta] = useState(false);
+
+  const selectedChannel = useMemo(
+    () => channels.find((c) => c.id === channelId) ?? null,
+    [channels, channelId],
+  );
+  const isMetaChannel =
+    String(selectedChannel?.channel_type ?? "").toLowerCase() === "meta";
+  const selectedMetaTemplate = useMemo(
+    () => metaTemplates.find((t) => t.id === selectedMetaTemplateId) ?? null,
+    [metaTemplates, selectedMetaTemplateId],
+  );
 
   useEffect(() => {
     if (!canManage) return;
@@ -104,11 +137,12 @@ function NovaCampanhaPage() {
           return r.json() as Promise<{ channels: ChannelOption[] }>;
         })
         .then((data) => {
-          const evo = (data.channels ?? []).filter(
-            (ch) => String(ch.channel_type).toLowerCase() === "evolution",
-          );
-          setChannels(evo);
-          if (evo[0]) setChannelId(evo[0].id);
+          const list = (data.channels ?? []).filter((ch) => {
+            const t = String(ch.channel_type).toLowerCase();
+            return t === "evolution" || t === "meta";
+          });
+          setChannels(list);
+          if (list[0]) setChannelId(list[0].id);
         })
         .catch(() => setChannelsError("Não foi possível carregar os canais WhatsApp.")),
       fetch("/api/campaigns/templates", { credentials: "include", signal: controller.signal })
@@ -122,6 +156,82 @@ function NovaCampanhaPage() {
       clearTimeout(timer);
     };
   }, [canManage]);
+
+  async function loadMetaTemplates(chId: string) {
+    if (!chId) {
+      setMetaTemplates([]);
+      return;
+    }
+    const res = await fetch(
+      `/api/meta/channels/${encodeURIComponent(chId)}/templates?approved=1`,
+      { credentials: "include" },
+    );
+    if (!res.ok) {
+      setMetaTemplates([]);
+      return;
+    }
+    const data = (await res.json()) as { templates: MetaTemplateOption[] };
+    setMetaTemplates(data.templates ?? []);
+  }
+
+  useEffect(() => {
+    if (!isMetaChannel || !channelId) {
+      setMetaTemplates([]);
+      setSelectedMetaTemplateId("");
+      setMetaVariableMappings({});
+      return;
+    }
+    void loadMetaTemplates(channelId);
+  }, [isMetaChannel, channelId]);
+
+  function applyMetaTemplate(tpl: MetaTemplateOption | null) {
+    if (!tpl) {
+      setSelectedMetaTemplateId("");
+      setMetaVariableMappings({});
+      setMessageText("");
+      return;
+    }
+    setSelectedMetaTemplateId(tpl.id);
+    setMessageText(tpl.bodyText ?? "");
+    const mappings: Record<string, string> = {};
+    for (const v of tpl.variables) {
+      mappings[v] = "name";
+    }
+    if (tpl.name === "abordagem_inicial_troca_refil") {
+      mappings["1"] = "name";
+    }
+    if (tpl.variables.length === 0 && tpl.name === "abordagem_inicial_troca_refil") {
+      mappings["1"] = "name";
+    }
+    setMetaVariableMappings(mappings);
+  }
+
+  async function syncMetaTemplates() {
+    if (!channelId || !isMetaChannel) return;
+    setSyncingMeta(true);
+    try {
+      const res = await fetch(
+        `/api/meta/channels/${encodeURIComponent(channelId)}/templates/sync`,
+        { method: "POST", credentials: "include" },
+      );
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        approved?: number;
+        synced?: number;
+      };
+      if (!res.ok) {
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      toast.success(
+        `Sincronizados ${j.synced ?? 0} modelos (${j.approved ?? 0} aprovados)`,
+      );
+      await loadMetaTemplates(channelId);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncingMeta(false);
+    }
+  }
 
   useEffect(() => {
     if (searchTemplateId && templates.length) {
@@ -180,8 +290,15 @@ function NovaCampanhaPage() {
       schedule_date: scheduleDate || null,
       window_start_time: windowStart ? toTimeInput(windowStart) : null,
       window_end_time: windowEnd ? toTimeInput(windowEnd) : null,
-      template_id: selectedTemplateId || null,
+      template_id: isMetaChannel ? null : selectedTemplateId || null,
       source_campaign_id: searchFrom || null,
+      message_type: isMetaChannel ? ("meta_template" as const) : ("text" as const),
+      meta_template_id: isMetaChannel
+        ? selectedMetaTemplate?.metaTemplateId ?? null
+        : null,
+      meta_template_name: isMetaChannel ? selectedMetaTemplate?.name ?? null : null,
+      meta_language_code: isMetaChannel ? selectedMetaTemplate?.language ?? null : null,
+      meta_variable_mappings: isMetaChannel ? metaVariableMappings : null,
     };
 
     if (campaignId) {
@@ -240,8 +357,17 @@ function NovaCampanhaPage() {
         await persistCampaign(true);
         setStep(2);
       } else if (step === 2) {
+        if (isMetaChannel) {
+          if (!selectedMetaTemplate) {
+            toast.error("Selecione um template aprovado da Meta");
+            return;
+          }
+        } else if (!messageText.trim()) {
+          toast.error("Informe a mensagem modelo");
+          return;
+        }
         await persistCampaign(true);
-        await saveTemplateIfRequested();
+        if (!isMetaChannel) await saveTemplateIfRequested();
         setStep(3);
       } else if (step === 3) {
         const id = campaignId ?? (await persistCampaign(true));
@@ -282,6 +408,7 @@ function NovaCampanhaPage() {
           no_pending_contacts: "Importe contatos válidos antes de agendar.",
           missing_channel: "Selecione o canal de envio.",
           missing_message: "Informe a mensagem modelo.",
+          missing_meta_template: "Selecione um template Meta aprovado.",
           missing_schedule_date: "Informe a data de envio.",
           missing_window: "Informe horário inicial e final.",
         };
@@ -363,18 +490,23 @@ function NovaCampanhaPage() {
               {channelsError && <p className="mb-1 text-xs text-destructive">{channelsError}</p>}
               <select
                 value={channelId}
-                onChange={(e) => setChannelId(e.target.value)}
+                onChange={(e) => {
+                  setChannelId(e.target.value);
+                  setSelectedMetaTemplateId("");
+                  setMetaVariableMappings({});
+                  setSelectedTemplateId("");
+                }}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">Selecione o canal</option>
                 {channels.map((ch) => (
                   <option key={ch.id} value={ch.id}>
-                    {ch.name} ({ch.status})
+                    {ch.name} · {String(ch.channel_type).toUpperCase()} ({ch.status})
                   </option>
                 ))}
               </select>
             </label>
-            {templates.length > 0 && (
+            {!isMetaChannel && templates.length > 0 && (
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">
                   Usar modelo salvo (opcional)
@@ -396,7 +528,99 @@ function NovaCampanhaPage() {
           </>
         )}
 
-        {step === 2 && (
+        {step === 2 && isMetaChannel && (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
+                Canal Meta: use apenas templates aprovados (HSM). Mensagem livre não é permitida
+                fora da janela de 24h.
+              </p>
+              <button
+                type="button"
+                onClick={() => void syncMetaTemplates()}
+                disabled={syncingMeta || !channelId}
+                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-60"
+              >
+                {syncingMeta && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Sincronizar modelos da Meta
+              </button>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                Template aprovado
+              </span>
+              <select
+                value={selectedMetaTemplateId}
+                onChange={(e) => {
+                  const tpl = metaTemplates.find((t) => t.id === e.target.value) ?? null;
+                  applyMetaTemplate(tpl);
+                }}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Selecione o template</option>
+                {metaTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} · {t.language} · {t.category ?? "—"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedMetaTemplate && (
+              <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Corpo</p>
+                  <pre className="mt-1 whitespace-pre-wrap text-xs">
+                    {selectedMetaTemplate.bodyText || "—"}
+                  </pre>
+                </div>
+                {selectedMetaTemplate.buttons.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Botões (já no template)</p>
+                    <ul className="mt-1 list-disc pl-4 text-xs">
+                      {selectedMetaTemplate.buttons.map((b) => (
+                        <li key={b}>{b}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(selectedMetaTemplate.variables.length > 0 ||
+                  selectedMetaTemplate.name === "abordagem_inicial_troca_refil") && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Mapeamento de variáveis
+                    </p>
+                    {(selectedMetaTemplate.variables.length
+                      ? selectedMetaTemplate.variables
+                      : ["1"]
+                    ).map((v) => (
+                      <label key={v} className="flex items-center gap-2 text-xs">
+                        <span className="w-12 font-mono">{`{{${v}}}`}</span>
+                        <select
+                          value={metaVariableMappings[v] ?? "name"}
+                          onChange={(e) =>
+                            setMetaVariableMappings((prev) => ({
+                              ...prev,
+                              [v]: e.target.value,
+                            }))
+                          }
+                          className="flex-1 rounded-md border border-input bg-background px-2 py-1"
+                        >
+                          {CONTACT_FIELD_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {step === 2 && !isMetaChannel && (
           <>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Mensagem modelo</span>
@@ -440,7 +664,7 @@ function NovaCampanhaPage() {
         {step === 3 && campaignId && (
           <CampaignAudienceImport
             campaignId={campaignId}
-            messageTemplate={messageText}
+            messageTemplate={isMetaChannel ? selectedMetaTemplate?.bodyText ?? "" : messageText}
             onImported={() => refreshAudienceCount(campaignId)}
           />
         )}
