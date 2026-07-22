@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -22,6 +22,9 @@ type Campaign = {
   total_contacts: number;
   skipped_count: number;
   sent_count?: number;
+  failed_count?: number;
+  pending_count?: number;
+  processing_count?: number;
   total_replied?: number;
   total_interested?: number;
   total_opt_out?: number;
@@ -71,6 +74,17 @@ type MetaTemplateOption = {
   buttons: string[];
   variables: string[];
 };
+
+const CAMPAIGN_POLL_MS = 5000;
+
+function isCampaignTrackable(status: string | undefined): boolean {
+  return (
+    status === "scheduled" ||
+    status === "running" ||
+    status === "paused" ||
+    status === "completed"
+  );
+}
 
 const CONTACT_FIELD_OPTIONS = [
   { value: "name", label: "Nome do contato" },
@@ -262,8 +276,8 @@ function EditarCampanhaPage() {
     setChannelUnavailable(data.campaign.channel_unavailable ?? false);
   }, [id]);
 
-  const loadAudience = useCallback(async () => {
-    setAudienceLoading(true);
+  const loadAudience = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setAudienceLoading(true);
     try {
       const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/contacts?limit=100`, {
         credentials: "include",
@@ -276,11 +290,22 @@ function EditarCampanhaPage() {
       setAudience(data.contacts ?? []);
       setAudienceTotal(data.total ?? 0);
     } catch (e) {
-      toast.error((e as Error).message);
+      if (!opts?.silent) toast.error((e as Error).message);
     } finally {
-      setAudienceLoading(false);
+      if (!opts?.silent) setAudienceLoading(false);
     }
   }, [id]);
+
+  const refreshCampaignStats = useCallback(async () => {
+    const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
+      credentials: "include",
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { campaign: Campaign };
+    setCampaign(data.campaign);
+  }, [id]);
+
+  const pollInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!canAccess) {
@@ -311,6 +336,42 @@ function EditarCampanhaPage() {
       }
     })();
   }, [canAccess, loadCampaign, loadAudience, companyId]);
+
+  useEffect(() => {
+    if (!canAccess || !campaign || !isCampaignTrackable(campaign.status)) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function pollOnce() {
+      if (cancelled || pollInFlightRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        timer = setTimeout(pollOnce, CAMPAIGN_POLL_MS);
+        return;
+      }
+
+      pollInFlightRef.current = true;
+      try {
+        await Promise.all([
+          refreshCampaignStats(),
+          loadAudience({ silent: true }),
+        ]);
+      } catch {
+        // Polling silencioso — não interrompe o loop.
+      } finally {
+        pollInFlightRef.current = false;
+        if (!cancelled) {
+          timer = setTimeout(pollOnce, CAMPAIGN_POLL_MS);
+        }
+      }
+    }
+
+    timer = setTimeout(pollOnce, CAMPAIGN_POLL_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [canAccess, campaign?.status, id, refreshCampaignStats, loadAudience]);
 
   useEffect(() => {
     if (!channelId || !isMetaChannel) return;
@@ -824,11 +885,14 @@ function EditarCampanhaPage() {
 
         {tab === "publico" && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+              <StatCard label="Pendente" value={campaign.pending_count ?? 0} />
+              <StatCard label="Processando" value={campaign.processing_count ?? 0} />
+              <StatCard label="Enviados" value={campaign.sent_count ?? 0} />
+              <StatCard label="Falhou" value={campaign.failed_count ?? 0} />
               <StatCard label="Respondidos" value={campaign.total_replied ?? 0} />
               <StatCard label="Interessados" value={campaign.total_interested ?? 0} />
               <StatCard label="Opt-out" value={campaign.total_opt_out ?? 0} />
-              <StatCard label="Enviados" value={campaign.sent_count ?? 0} />
             </div>
             <p className="text-xs text-muted-foreground">
               O público inclui todos os contatos adicionados ({campaign.total_contacts} total
@@ -903,10 +967,12 @@ function EditarCampanhaPage() {
                               </span>
                             ) : row.status === "responded" ? (
                               <span className="text-primary">Respondido</span>
+                            ) : row.status === "processing" ? (
+                              <span className="text-blue-600">Processando</span>
                             ) : row.status === "sent" ? (
                               <span className="text-whatsapp">Enviado</span>
                             ) : row.status === "failed" || row.status === "erro_envio" ? (
-                              <span className="text-destructive">Erro envio</span>
+                              <span className="text-destructive">Falhou</span>
                             ) : (
                               "Pendente"
                             )}

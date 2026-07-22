@@ -3,6 +3,7 @@
 // Em desenvolvimento, se o secret não estiver definido, permite sem auth.
 import { createFileRoute } from "@tanstack/react-router";
 import { processCampaignWorkerTick } from "@/lib/campaign-worker.server";
+import { mapCampaignWorkerTickResponse } from "@/lib/campaign-worker-tick-response";
 
 function authorizeWorker(request: Request): boolean {
   const secret = process.env.CAMPAIGN_WORKER_SECRET;
@@ -23,16 +24,16 @@ export const Route = createFileRoute("/api/campaigns/worker/tick")({
         }
         try {
           const result = await processCampaignWorkerTick();
-          return Response.json(result);
+          return Response.json(mapCampaignWorkerTickResponse(result));
         } catch (e) {
           console.error("[CAMPAIGN_WORKER_TICK_HTTP_FAIL]", e);
           return Response.json(
-            {
+            mapCampaignWorkerTickResponse({
               ok: false,
               action: "error",
               delayMs: 10_000,
               message: e instanceof Error ? e.message : String(e),
-            },
+            }),
             { status: 500 },
           );
         }
