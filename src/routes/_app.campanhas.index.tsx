@@ -27,6 +27,7 @@ const STATUS_LABEL: Record<string, string> = {
   scheduled: "Agendada",
   running: "Enviando",
   paused: "Pausada (janela)",
+  manual_paused: "Pausada manualmente",
   completed: "Finalizada",
   canceled: "Cancelada",
   failed: "Falhou",

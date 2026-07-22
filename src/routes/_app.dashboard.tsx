@@ -203,6 +203,7 @@ const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   scheduled: "Agendada",
   running: "Em envio",
   paused: "Pausada",
+  manual_paused: "Pausada manualmente",
   completed: "Concluída",
   canceled: "Cancelada",
   failed: "Falhou",

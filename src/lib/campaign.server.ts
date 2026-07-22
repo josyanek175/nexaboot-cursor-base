@@ -21,6 +21,12 @@ import {
   isOptOutContact,
 } from "@/lib/campaign-send-policy";
 import { getCampaignTemplate } from "@/lib/campaign-template.server";
+import {
+  isCampaignManualPauseAllowed,
+  isCampaignManualResumeAllowed,
+  isCampaignManualStartAllowed,
+  MANUAL_PAUSED_STATUS,
+} from "@/lib/campaign-manual-control";
 
 export type CampaignRow = {
   id: string;
@@ -601,6 +607,280 @@ export async function scheduleCampaign(
     window_end_time: existing.window_end_time,
   });
   return withChannelStatus(companyId, rows[0]);
+}
+
+async function countPendingCampaignContacts(
+  companyId: string,
+  campaignId: string,
+): Promise<number> {
+  const rows = await sql<{ count: string }[]>`
+    SELECT COUNT(*)::text AS count
+    FROM public.campaign_contacts
+    WHERE campaign_id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status = 'pending'
+  `;
+  return parseInt(rows[0]?.count ?? "0", 10);
+}
+
+async function validateCampaignReadyToSend(
+  existing: CampaignRow,
+  companyId: string,
+): Promise<void> {
+  if (!existing.whatsapp_channel_id) throw new Error("missing_channel");
+
+  const isMetaTemplate =
+    existing.message_type === "meta_template" || !!existing.meta_template_name?.trim();
+
+  if (isMetaTemplate) {
+    if (!existing.meta_template_name?.trim() || !existing.meta_language_code?.trim()) {
+      throw new Error("missing_meta_template");
+    }
+    const checked = await assertApprovedMetaTemplate({
+      companyId,
+      channelId: existing.whatsapp_channel_id,
+      templateName: existing.meta_template_name,
+      languageCode: existing.meta_language_code,
+    });
+    if (!checked.ok) throw new Error(checked.error);
+  } else if (!existing.message_text?.trim()) {
+    throw new Error("missing_message");
+  }
+
+  if (!existing.window_start_time || !existing.window_end_time) {
+    throw new Error("missing_window");
+  }
+
+  const ch = await validateCampaignChannel(companyId, existing.whatsapp_channel_id);
+  if (!ch.ok) throw new Error("invalid_channel");
+  if (isMetaTemplate && ch.channel_type !== "meta") throw new Error("invalid_channel");
+  if (!isMetaTemplate && ch.channel_type !== "evolution") throw new Error("invalid_channel");
+}
+
+/** Inicia disparo manual imediato (draft/scheduled/paused → running). */
+export async function startCampaignNow(
+  companyId: string,
+  campaignId: string,
+  userId: string | null,
+): Promise<{ campaign: CampaignDetail; pendingCount: number; previousStatus: string }> {
+  const existing = await getCampaignById(companyId, campaignId);
+  if (!existing) throw new Error("not_found");
+
+  console.log("[CAMPAIGN_MANUAL_START_REQUEST]", {
+    campaignId,
+    companyId,
+    userId,
+    previousStatus: existing.status,
+    pending_count: existing.pending_count ?? 0,
+  });
+
+  if (existing.status === "running") {
+    console.log("[CAMPAIGN_MANUAL_START_REJECTED]", {
+      campaignId,
+      companyId,
+      userId,
+      reason: "already_running",
+      previousStatus: existing.status,
+    });
+    throw new Error("already_running");
+  }
+
+  if (existing.status === "completed") {
+    console.log("[CAMPAIGN_MANUAL_START_REJECTED]", {
+      campaignId,
+      companyId,
+      userId,
+      reason: "already_completed",
+      previousStatus: existing.status,
+    });
+    throw new Error("already_completed");
+  }
+
+  if (!isCampaignManualStartAllowed(existing.status)) {
+    console.log("[CAMPAIGN_MANUAL_START_REJECTED]", {
+      campaignId,
+      companyId,
+      userId,
+      reason: "not_startable",
+      previousStatus: existing.status,
+    });
+    throw new Error("not_startable");
+  }
+
+  await validateCampaignReadyToSend(existing, companyId);
+
+  const pendingCount = await countPendingCampaignContacts(companyId, campaignId);
+  if (pendingCount < 1) {
+    console.log("[CAMPAIGN_MANUAL_START_REJECTED]", {
+      campaignId,
+      companyId,
+      userId,
+      reason: "no_pending_contacts",
+      previousStatus: existing.status,
+      pending_count: pendingCount,
+    });
+    throw new Error("no_pending_contacts");
+  }
+
+  const detail = await withChannelStatus(companyId, existing);
+  if (detail.channel_unavailable) {
+    console.log("[CAMPAIGN_MANUAL_START_REJECTED]", {
+      campaignId,
+      companyId,
+      userId,
+      reason: "invalid_channel",
+      previousStatus: existing.status,
+    });
+    throw new Error("invalid_channel");
+  }
+
+  const previousStatus = existing.status;
+  const scheduleDate =
+    existing.schedule_date != null
+      ? String(existing.schedule_date).slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+  const rows = await sql<CampaignRow[]>`
+    UPDATE public.campaigns
+    SET status = 'running',
+        send_mode = 'auto_safe',
+        scheduled_at = now(),
+        started_at = COALESCE(started_at, now()),
+        schedule_date = COALESCE(schedule_date, ${scheduleDate}::date),
+        updated_at = now()
+    WHERE id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND deleted_at IS NULL
+      AND status IN ('draft', 'scheduled', 'paused', ${MANUAL_PAUSED_STATUS})
+    RETURNING id, company_id, whatsapp_channel_id, name, message_text,
+              message_type, status, scheduled_at, started_at, finished_at,
+              send_interval_ms, schedule_date, window_start_time, window_end_time,
+              send_mode, total_contacts, sent_count, failed_count, skipped_count,
+              total_replied, total_interested, total_opt_out,
+              meta_template_id, meta_template_name, meta_language_code,
+              COALESCE(meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
+              created_by_user_id, created_at, updated_at
+  `;
+
+  if (!rows[0]) {
+    const current = await getCampaignById(companyId, campaignId);
+    if (current?.status === "running") {
+      throw new Error("already_running");
+    }
+    throw new Error("not_startable");
+  }
+
+  await insertCampaignEvent(companyId, campaignId, "campaign.manual_started", userId, {
+    previous_status: previousStatus,
+    pending_count: pendingCount,
+    schedule_date: scheduleDate,
+  });
+
+  const campaign = await getCampaignDetail(companyId, campaignId);
+  if (!campaign) throw new Error("not_found");
+
+  console.log("[CAMPAIGN_MANUAL_START_SUCCESS]", {
+    campaignId,
+    companyId,
+    userId,
+    previousStatus,
+    newStatus: campaign.status,
+    pending_count: pendingCount,
+  });
+
+  return { campaign, pendingCount, previousStatus };
+}
+
+/** Pausa manual — impede novos envios até retomar. */
+export async function pauseCampaignManually(
+  companyId: string,
+  campaignId: string,
+  userId: string | null,
+): Promise<CampaignDetail> {
+  const existing = await getCampaignById(companyId, campaignId);
+  if (!existing) throw new Error("not_found");
+
+  if (!isCampaignManualPauseAllowed(existing.status)) {
+    throw new Error("not_pausable");
+  }
+
+  const previousStatus = existing.status;
+  const rows = await sql<CampaignRow[]>`
+    UPDATE public.campaigns
+    SET status = ${MANUAL_PAUSED_STATUS},
+        updated_at = now()
+    WHERE id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND deleted_at IS NULL
+      AND status IN ('running', 'scheduled')
+    RETURNING id
+  `;
+  if (!rows[0]) throw new Error("not_pausable");
+
+  await insertCampaignEvent(companyId, campaignId, "campaign.manual_paused", userId, {
+    previous_status: previousStatus,
+  });
+
+  console.log("[CAMPAIGN_MANUAL_PAUSE]", {
+    campaignId,
+    companyId,
+    userId,
+    previousStatus,
+    newStatus: MANUAL_PAUSED_STATUS,
+    pending_count: existing.pending_count ?? 0,
+  });
+
+  const campaign = await getCampaignDetail(companyId, campaignId);
+  if (!campaign) throw new Error("not_found");
+  return campaign;
+}
+
+/** Retoma disparo manualmente. */
+export async function resumeCampaignManually(
+  companyId: string,
+  campaignId: string,
+  userId: string | null,
+): Promise<CampaignDetail> {
+  const existing = await getCampaignById(companyId, campaignId);
+  if (!existing) throw new Error("not_found");
+
+  if (!isCampaignManualResumeAllowed(existing.status)) {
+    throw new Error("not_resumable");
+  }
+
+  const pendingCount = await countPendingCampaignContacts(companyId, campaignId);
+  const previousStatus = existing.status;
+
+  const rows = await sql<CampaignRow[]>`
+    UPDATE public.campaigns
+    SET status = 'running',
+        started_at = COALESCE(started_at, now()),
+        updated_at = now()
+    WHERE id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND deleted_at IS NULL
+      AND status IN ('paused', ${MANUAL_PAUSED_STATUS})
+    RETURNING id
+  `;
+  if (!rows[0]) throw new Error("not_resumable");
+
+  await insertCampaignEvent(companyId, campaignId, "campaign.manual_resumed", userId, {
+    previous_status: previousStatus,
+    pending_count: pendingCount,
+  });
+
+  console.log("[CAMPAIGN_MANUAL_RESUME]", {
+    campaignId,
+    companyId,
+    userId,
+    previousStatus,
+    newStatus: "running",
+    pending_count: pendingCount,
+  });
+
+  const campaign = await getCampaignDetail(companyId, campaignId);
+  if (!campaign) throw new Error("not_found");
+  return campaign;
 }
 
 export async function getCampaignById(
