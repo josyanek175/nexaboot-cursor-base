@@ -1,12 +1,18 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2, Copy } from "lucide-react";
+import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2, Copy, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { canManageCampaigns, actingUserFromAuth, canAccessCampaignsModule } from "@/lib/permissions";
 import { apiGet } from "@/lib/api";
 import { CampaignAudienceImport } from "@/components/campaign-audience-import";
 import { parseSpreadsheetRow, previewMessage } from "@/lib/campaign-spreadsheet";
+import {
+  isCampaignManualPauseAllowed,
+  isCampaignManualResumeAllowed,
+  MANUAL_PAUSED_STATUS,
+  shouldShowManualStartButton,
+} from "@/lib/campaign-manual-control";
 
 type Campaign = {
   id: string;
@@ -82,6 +88,7 @@ function isCampaignTrackable(status: string | undefined): boolean {
     status === "scheduled" ||
     status === "running" ||
     status === "paused" ||
+    status === MANUAL_PAUSED_STATUS ||
     status === "completed"
   );
 }
@@ -124,6 +131,7 @@ function EditarCampanhaPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [dispatchAction, setDispatchAction] = useState<"start" | "pause" | "resume" | null>(null);
 
   const [name, setName] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -160,6 +168,29 @@ function EditarCampanhaPage() {
     () => metaTemplates.find((t) => t.id === selectedMetaTemplateId) ?? null,
     [metaTemplates, selectedMetaTemplateId],
   );
+  const showStartButton = useMemo(() => {
+    if (!campaign || !canManage) return false;
+    return shouldShowManualStartButton({
+      status: campaign.status,
+      pendingCount: campaign.pending_count ?? 0,
+      channelUnavailable: channelUnavailable || !channelId,
+      hasMetaTemplate: !!(selectedMetaTemplate || campaign.meta_template_name),
+      isMetaChannel,
+      hasMessage: !!messageText.trim() || !!campaign.message_text?.trim(),
+    });
+  }, [
+    campaign,
+    canManage,
+    channelUnavailable,
+    channelId,
+    selectedMetaTemplate,
+    isMetaChannel,
+    messageText,
+  ]);
+  const showPauseButton =
+    !!campaign && canManage && isCampaignManualPauseAllowed(campaign.status);
+  const showResumeButton =
+    !!campaign && canManage && isCampaignManualResumeAllowed(campaign.status);
 
   const messagePreview = useMemo(() => {
     if (isMetaChannel) return selectedMetaTemplate?.bodyText ?? messageText;
@@ -578,6 +609,86 @@ function EditarCampanhaPage() {
     }
   }
 
+  async function handleManualStart() {
+    if (!canManage || dispatchAction || !showStartButton) return;
+    const confirmed = window.confirm(
+      "Iniciar o disparo agora? Os contatos pendentes serão enviados conforme o ritmo seguro configurado.",
+    );
+    if (!confirmed) return;
+
+    setDispatchAction("start");
+    try {
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/start`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        const map: Record<string, string> = {
+          no_pending_contacts: "Não há contatos pendentes para enviar.",
+          missing_channel: "Selecione um canal ativo.",
+          missing_window: "Configure horário inicial e final antes de iniciar.",
+          missing_message: "Informe a mensagem modelo.",
+          missing_meta_template: "Selecione um template Meta aprovado.",
+          meta_template_not_approved: "Template Meta não está aprovado.",
+          invalid_channel: "Canal indisponível ou inativo.",
+          already_running: "A campanha já está em execução.",
+          already_completed: "Campanha já finalizada.",
+          not_startable: "Esta campanha não pode ser iniciada.",
+        };
+        throw new Error(map[j.error ?? ""] ?? j.error ?? `HTTP ${res.status}`);
+      }
+      toast.success(
+        "Disparo iniciado. O worker processará os contatos conforme o ritmo seguro.",
+      );
+      await refreshCampaignStats();
+      await loadAudience({ silent: true });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDispatchAction(null);
+    }
+  }
+
+  async function handleManualPause() {
+    if (!canManage || dispatchAction || !showPauseButton) return;
+    setDispatchAction("pause");
+    try {
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/pause`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      toast.success("Disparo pausado");
+      await refreshCampaignStats();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDispatchAction(null);
+    }
+  }
+
+  async function handleManualResume() {
+    if (!canManage || dispatchAction || !showResumeButton) return;
+    setDispatchAction("resume");
+    try {
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/resume`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      toast.success("Disparo retomado");
+      await refreshCampaignStats();
+      await loadAudience({ silent: true });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDispatchAction(null);
+    }
+  }
+
   if (!canAccess) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -624,7 +735,9 @@ function EditarCampanhaPage() {
                   : campaign.status === "running"
                     ? "Enviando"
                     : campaign.status === "paused"
-                      ? "Pausada (fora da janela)"
+                    ? "Pausada (fora da janela)"
+                    : campaign.status === MANUAL_PAUSED_STATUS
+                      ? "Pausada manualmente"
                       : campaign.status === "completed"
                         ? "Finalizada"
                         : campaign.status}
@@ -635,6 +748,7 @@ function EditarCampanhaPage() {
             </p>
           </div>
         </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
         {canManage && (
           <button
             type="button"
@@ -643,6 +757,51 @@ function EditarCampanhaPage() {
           >
             <Copy className="h-4 w-4" />
             Novo disparo com este modelo
+          </button>
+        )}
+        {showStartButton && (
+          <button
+            type="button"
+            onClick={handleManualStart}
+            disabled={!!dispatchAction}
+            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+          >
+            {dispatchAction === "start" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            Iniciar disparo agora
+          </button>
+        )}
+        {showPauseButton && (
+          <button
+            type="button"
+            onClick={handleManualPause}
+            disabled={!!dispatchAction}
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+          >
+            {dispatchAction === "pause" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Pause className="h-4 w-4" />
+            )}
+            Pausar disparo
+          </button>
+        )}
+        {showResumeButton && (
+          <button
+            type="button"
+            onClick={handleManualResume}
+            disabled={!!dispatchAction}
+            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+          >
+            {dispatchAction === "resume" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            Retomar disparo
           </button>
         )}
         {canManage && isDraft && tab === "dados" && (
@@ -667,6 +826,7 @@ function EditarCampanhaPage() {
             </button>
           </div>
         )}
+        </div>
       </header>
 
       <div className="flex gap-1 border-b border-border px-6">
