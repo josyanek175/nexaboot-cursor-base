@@ -90,8 +90,11 @@ import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conve
 import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
 import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
 import { Route as ApiCampaignsTemplatesIdRouteImport } from './routes/api/campaigns/templates/$id'
+import { Route as ApiCampaignsIdStartRouteImport } from './routes/api/campaigns/$id/start'
 import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaigns/$id/schedule'
 import { Route as ApiCampaignsIdReuseRouteImport } from './routes/api/campaigns/$id/reuse'
+import { Route as ApiCampaignsIdResumeRouteImport } from './routes/api/campaigns/$id/resume'
+import { Route as ApiCampaignsIdPauseRouteImport } from './routes/api/campaigns/$id/pause'
 import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
 import { Route as ApiMetaChannelsIdTokenRouteImport } from './routes/api/meta/channels/$id/token'
 import { Route as ApiMetaChannelsIdTemplatesRouteImport } from './routes/api/meta/channels/$id/templates'
@@ -523,6 +526,11 @@ const ApiCampaignsTemplatesIdRoute = ApiCampaignsTemplatesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiCampaignsTemplatesRoute,
 } as any)
+const ApiCampaignsIdStartRoute = ApiCampaignsIdStartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
 const ApiCampaignsIdScheduleRoute = ApiCampaignsIdScheduleRouteImport.update({
   id: '/schedule',
   path: '/schedule',
@@ -531,6 +539,16 @@ const ApiCampaignsIdScheduleRoute = ApiCampaignsIdScheduleRouteImport.update({
 const ApiCampaignsIdReuseRoute = ApiCampaignsIdReuseRouteImport.update({
   id: '/reuse',
   path: '/reuse',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdResumeRoute = ApiCampaignsIdResumeRouteImport.update({
+  id: '/resume',
+  path: '/resume',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdPauseRoute = ApiCampaignsIdPauseRouteImport.update({
+  id: '/pause',
+  path: '/pause',
   getParentRoute: () => ApiCampaignsIdRoute,
 } as any)
 const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
@@ -681,8 +699,11 @@ export interface FileRoutesByFullPath {
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
+  '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/$id/start': typeof ApiCampaignsIdStartRoute
   '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
@@ -778,8 +799,11 @@ export interface FileRoutesByTo {
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
+  '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/$id/start': typeof ApiCampaignsIdStartRoute
   '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
@@ -878,8 +902,11 @@ export interface FileRoutesById {
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/_app/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
+  '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
+  '/api/campaigns/$id/start': typeof ApiCampaignsIdStartRoute
   '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
@@ -978,8 +1005,11 @@ export interface FileRouteTypes {
     | '/api/webhooks/meta'
     | '/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/pause'
+    | '/api/campaigns/$id/resume'
     | '/api/campaigns/$id/reuse'
     | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/$id/start'
     | '/api/campaigns/templates/$id'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
@@ -1075,8 +1105,11 @@ export interface FileRouteTypes {
     | '/api/webhooks/meta'
     | '/campanhas'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/pause'
+    | '/api/campaigns/$id/resume'
     | '/api/campaigns/$id/reuse'
     | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/$id/start'
     | '/api/campaigns/templates/$id'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
@@ -1174,8 +1207,11 @@ export interface FileRouteTypes {
     | '/api/webhooks/meta'
     | '/_app/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/pause'
+    | '/api/campaigns/$id/resume'
     | '/api/campaigns/$id/reuse'
     | '/api/campaigns/$id/schedule'
+    | '/api/campaigns/$id/start'
     | '/api/campaigns/templates/$id'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
@@ -1824,6 +1860,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCampaignsTemplatesIdRouteImport
       parentRoute: typeof ApiCampaignsTemplatesRoute
     }
+    '/api/campaigns/$id/start': {
+      id: '/api/campaigns/$id/start'
+      path: '/start'
+      fullPath: '/api/campaigns/$id/start'
+      preLoaderRoute: typeof ApiCampaignsIdStartRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
     '/api/campaigns/$id/schedule': {
       id: '/api/campaigns/$id/schedule'
       path: '/schedule'
@@ -1836,6 +1879,20 @@ declare module '@tanstack/react-router' {
       path: '/reuse'
       fullPath: '/api/campaigns/$id/reuse'
       preLoaderRoute: typeof ApiCampaignsIdReuseRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
+    '/api/campaigns/$id/resume': {
+      id: '/api/campaigns/$id/resume'
+      path: '/resume'
+      fullPath: '/api/campaigns/$id/resume'
+      preLoaderRoute: typeof ApiCampaignsIdResumeRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
+    '/api/campaigns/$id/pause': {
+      id: '/api/campaigns/$id/pause'
+      path: '/pause'
+      fullPath: '/api/campaigns/$id/pause'
+      preLoaderRoute: typeof ApiCampaignsIdPauseRouteImport
       parentRoute: typeof ApiCampaignsIdRoute
     }
     '/api/campaigns/$id/contacts': {
@@ -2004,16 +2061,22 @@ const ApiCampaignsIdContactsRouteWithChildren =
 
 interface ApiCampaignsIdRouteChildren {
   ApiCampaignsIdContactsRoute: typeof ApiCampaignsIdContactsRouteWithChildren
+  ApiCampaignsIdPauseRoute: typeof ApiCampaignsIdPauseRoute
+  ApiCampaignsIdResumeRoute: typeof ApiCampaignsIdResumeRoute
   ApiCampaignsIdReuseRoute: typeof ApiCampaignsIdReuseRoute
   ApiCampaignsIdScheduleRoute: typeof ApiCampaignsIdScheduleRoute
+  ApiCampaignsIdStartRoute: typeof ApiCampaignsIdStartRoute
   ApiCampaignsIdImportConfirmRoute: typeof ApiCampaignsIdImportConfirmRoute
   ApiCampaignsIdImportPreviewRoute: typeof ApiCampaignsIdImportPreviewRoute
 }
 
 const ApiCampaignsIdRouteChildren: ApiCampaignsIdRouteChildren = {
   ApiCampaignsIdContactsRoute: ApiCampaignsIdContactsRouteWithChildren,
+  ApiCampaignsIdPauseRoute: ApiCampaignsIdPauseRoute,
+  ApiCampaignsIdResumeRoute: ApiCampaignsIdResumeRoute,
   ApiCampaignsIdReuseRoute: ApiCampaignsIdReuseRoute,
   ApiCampaignsIdScheduleRoute: ApiCampaignsIdScheduleRoute,
+  ApiCampaignsIdStartRoute: ApiCampaignsIdStartRoute,
   ApiCampaignsIdImportConfirmRoute: ApiCampaignsIdImportConfirmRoute,
   ApiCampaignsIdImportPreviewRoute: ApiCampaignsIdImportPreviewRoute,
 }
