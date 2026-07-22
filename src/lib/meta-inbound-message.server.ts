@@ -1,6 +1,7 @@
-// Persistência de mensagens texto inbound Meta WhatsApp Cloud API.
+// Persistência de mensagens inbound Meta WhatsApp Cloud API.
 
-import { ensureCrmSchema } from "@/lib/pg.server";
+import { ensureCampaignsSchema, ensureCrmSchema } from "@/lib/pg.server";
+import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
 import {
   bumpConversationAfterInboundMessage,
   insertInboundTextMessage,
@@ -9,13 +10,18 @@ import {
 } from "@/lib/crm-inbound.server";
 import {
   extractMetaInboundTextMessages,
+  resolveMetaInboundMessageText,
   unwrapMetaWebhookBody,
   type MetaInboundTextMessage,
 } from "@/lib/meta-inbound-parse";
 import { loadMetaChannelByPhoneNumberId } from "@/lib/whatsapp/whatsapp-provider-router.server";
 
 export type { MetaInboundTextMessage } from "@/lib/meta-inbound-parse";
-export { extractMetaInboundTextMessages, unwrapMetaWebhookBody } from "@/lib/meta-inbound-parse";
+export {
+  extractMetaInboundTextMessages,
+  resolveMetaInboundMessageText,
+  unwrapMetaWebhookBody,
+} from "@/lib/meta-inbound-parse";
 
 export type MetaInboundPersistResult = {
   processed: number;
@@ -24,7 +30,7 @@ export type MetaInboundPersistResult = {
   errors: number;
 };
 
-/** Persiste mensagens texto inbound Meta em contacts/conversations/messages. */
+/** Persiste mensagens inbound Meta em contacts/conversations/messages. */
 export async function persistMetaInboundTextMessages(
   payload: unknown,
 ): Promise<MetaInboundPersistResult> {
@@ -56,6 +62,11 @@ export async function persistMetaInboundTextMessages(
   return result;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
 async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Promise<boolean> {
   const channel = await loadMetaChannelByPhoneNumberId(msg.phoneNumberId);
   if (!channel?.companyId?.trim() || channel.companyId === "null") {
@@ -69,6 +80,9 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
     });
     return false;
   }
+
+  const messageRec = asRecord(msg.rawPayload.message);
+  const resolution = messageRec ? resolveMetaInboundMessageText(messageRec) : null;
 
   const contactId = await upsertInboundContact({
     companyId: channel.companyId,
@@ -104,12 +118,74 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
     lastMessageText: msg.textBody,
   });
 
+  let campaignId: string | undefined;
+  try {
+    await ensureCampaignsSchema();
+    const campaignMatch = await handleCampaignInboundReply({
+      companyId: channel.companyId,
+      channelId: channel.id,
+      conversationId,
+      phone: msg.phone,
+      responseText: msg.textBody,
+      inboundMessageId: msg.externalMessageId,
+    });
+    campaignId = campaignMatch?.campaignId;
+  } catch (e) {
+    console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", {
+      externalMessageId: msg.externalMessageId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  if (resolution?.usedFallback) {
+    console.log("[META_WEBHOOK_REPLY_WITHOUT_TEXT]", {
+      messageId: msg.externalMessageId,
+      phoneNumberId: msg.phoneNumberId,
+      from: msg.phone,
+      messageType: msg.messageType,
+      resolvedText: resolution.text,
+      channelId: channel.id,
+      companyId: channel.companyId,
+      conversationId,
+      campaignId: campaignId ?? null,
+    });
+  } else if (msg.messageType === "button" && resolution) {
+    console.log("[META_WEBHOOK_BUTTON_REPLY]", {
+      messageId: msg.externalMessageId,
+      phoneNumberId: msg.phoneNumberId,
+      from: msg.phone,
+      buttonText: resolution.buttonText,
+      buttonPayload: resolution.buttonPayload,
+      resolvedText: resolution.text,
+      channelId: channel.id,
+      companyId: channel.companyId,
+      conversationId,
+      campaignId: campaignId ?? null,
+    });
+  } else if (msg.messageType === "interactive" && resolution) {
+    console.log("[META_WEBHOOK_INTERACTIVE_REPLY]", {
+      messageId: msg.externalMessageId,
+      phoneNumberId: msg.phoneNumberId,
+      from: msg.phone,
+      interactiveType: resolution.interactiveType,
+      replyId: resolution.replyId,
+      replyTitle: resolution.replyTitle,
+      resolvedText: resolution.text,
+      channelId: channel.id,
+      companyId: channel.companyId,
+      conversationId,
+      campaignId: campaignId ?? null,
+    });
+  }
+
   console.log("[META_INBOUND_MESSAGE_SAVED]", {
     messageId,
     conversationId,
     contactId,
     phone: msg.phone,
     externalMessageId: msg.externalMessageId,
+    messageType: msg.messageType,
+    textBody: msg.textBody,
   });
   console.log("[META_WEBHOOK_PERSISTED]", {
     messageId,
@@ -118,6 +194,7 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
     phone: msg.phone,
     phoneNumberId: msg.phoneNumberId,
     externalMessageId: msg.externalMessageId,
+    messageType: msg.messageType,
   });
   return true;
 }

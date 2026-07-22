@@ -8,6 +8,13 @@ import { insertCampaignEvent, syncCampaignContactCounters } from "@/lib/campaign
 
 export type ResponseIntent = "interested" | "not_interested" | "opt_out" | "unknown";
 
+/** Respostas exatas de botões de template Meta (normalizadas). */
+const TEMPLATE_BUTTON_INTENT: Record<string, ResponseIntent> = {
+  "quero agendar": "interested",
+  "tenho uma duvida": "interested",
+  "me lembrar depois": "unknown",
+};
+
 const INTERESTED = [
   "sim",
   "ok",
@@ -36,6 +43,9 @@ function normalizeReply(text: string): string {
 export function classifyCampaignResponse(text: string | null | undefined): ResponseIntent {
   const t = normalizeReply(text ?? "");
   if (!t) return "unknown";
+
+  const templateIntent = TEMPLATE_BUTTON_INTENT[t];
+  if (templateIntent) return templateIntent;
 
   // Opt-out tem prioridade.
   for (const p of OPT_OUT) {
@@ -107,6 +117,7 @@ export async function handleCampaignInboundReply(opts: {
   conversationId: string;
   phone: string;
   responseText: string | null;
+  inboundMessageId?: string | null;
 }): Promise<{
   matched: boolean;
   campaignId?: string;
@@ -154,7 +165,7 @@ export async function handleCampaignInboundReply(opts: {
   const intent = classifyCampaignResponse(opts.responseText);
   const text = opts.responseText.slice(0, 4000);
 
-  await s`
+  const updated = await s<{ id: string }[]>`
     UPDATE public.campaign_contacts
     SET status = 'responded',
         responded_at = now(),
@@ -162,7 +173,25 @@ export async function handleCampaignInboundReply(opts: {
         response_intent = ${intent}
     WHERE id = ${hit.id}::uuid
       AND company_id = ${opts.companyId}::uuid
+      AND status = 'sent'
+      AND responded_at IS NULL
+    RETURNING id
   `;
+
+  if (!updated[0]) {
+    console.log("[CAMPAIGN_RESPONSE_ALREADY_HANDLED]", {
+      campaignId: hit.campaign_id,
+      contactRowId: hit.id,
+      inboundMessageId: opts.inboundMessageId ?? null,
+      conversationId: opts.conversationId,
+    });
+    return {
+      matched: true,
+      campaignId: hit.campaign_id,
+      campaignName: hit.campaign_name,
+      intent,
+    };
+  }
 
   await syncCampaignContactCounters(hit.campaign_id, opts.companyId);
 
@@ -226,6 +255,7 @@ export async function handleCampaignInboundReply(opts: {
     contactRowId: hit.id,
     intent,
     conversationId: opts.conversationId,
+    inboundMessageId: opts.inboundMessageId ?? null,
   });
 
   return {
