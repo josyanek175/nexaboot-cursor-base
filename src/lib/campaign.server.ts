@@ -45,6 +45,8 @@ export type CampaignRow = {
   total_replied: number;
   total_interested: number;
   total_opt_out: number;
+  pending_count?: number;
+  processing_count?: number;
   created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
@@ -615,6 +617,14 @@ export async function getCampaignById(
       COALESCE(c.total_replied, 0) AS total_replied,
       COALESCE(c.total_interested, 0) AS total_interested,
       COALESCE(c.total_opt_out, 0) AS total_opt_out,
+      (
+        SELECT COUNT(*)::int FROM public.campaign_contacts cc
+        WHERE cc.campaign_id = c.id AND cc.status = 'pending'
+      ) AS pending_count,
+      (
+        SELECT COUNT(*)::int FROM public.campaign_contacts cc
+        WHERE cc.campaign_id = c.id AND cc.status = 'processing'
+      ) AS processing_count,
       c.created_by_user_id, c.created_at, c.updated_at,
       c.meta_template_id, c.meta_template_name, c.meta_language_code,
       COALESCE(c.meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,

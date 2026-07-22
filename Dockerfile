@@ -42,6 +42,10 @@ RUN mkdir -p /app/storage/internal-chat
 # Saída auto-contida do Nitro (node-server).
 COPY --from=builder /app/.output ./.output
 
+# Worker de campanhas (serviço separado no Easypanel).
+COPY --from=builder /app/scripts/campaign-worker.mjs ./scripts/campaign-worker.mjs
+COPY --from=builder /app/scripts/campaign-worker-lib.mjs ./scripts/campaign-worker-lib.mjs
+
 EXPOSE 3000
 
 CMD ["node", ".output/server/index.mjs"]
