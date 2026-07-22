@@ -5,6 +5,7 @@
 import { sql } from "@/lib/pg.server";
 import { getPhoneVariants, normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import { insertCampaignEvent, syncCampaignContactCounters } from "@/lib/campaign.server";
+import { MANUAL_PAUSED_STATUS } from "@/lib/campaign-manual-control";
 
 export type ResponseIntent = "interested" | "not_interested" | "opt_out" | "unknown";
 
@@ -150,7 +151,7 @@ export async function handleCampaignInboundReply(opts: {
       AND cc.status = 'sent'
       AND cc.sent_at IS NOT NULL
       AND c.deleted_at IS NULL
-      AND c.status IN ('running', 'paused', 'completed')
+      AND c.status IN ('running', 'paused', ${MANUAL_PAUSED_STATUS}, 'completed')
       AND (
         c.whatsapp_channel_id IS NULL
         OR c.whatsapp_channel_id = ${opts.channelId}::uuid
