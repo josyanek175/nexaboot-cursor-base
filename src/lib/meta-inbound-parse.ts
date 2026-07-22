@@ -1,7 +1,9 @@
-// Extract de mensagens texto inbound Meta (sem dependências de servidor).
+// Extract de mensagens inbound Meta (texto, botão, interactive) — sem dependências de servidor.
 
 import { sanitizeMetaWebhookPayload } from "./meta-webhook-parse.ts";
 import { isValidE164Digits, normalizePhoneE164 } from "./phone.ts";
+
+export type MetaInboundMessageType = "text" | "button" | "interactive";
 
 export type MetaInboundTextMessage = {
   phoneNumberId: string;
@@ -9,8 +11,21 @@ export type MetaInboundTextMessage = {
   phone: string;
   contactName: string | null;
   textBody: string;
+  messageType: MetaInboundMessageType;
   rawPayload: Record<string, unknown>;
 };
+
+export type MetaInboundReplyResolution = {
+  text: string;
+  usedFallback: boolean;
+  buttonText: string | null;
+  buttonPayload: string | null;
+  interactiveType: string | null;
+  replyId: string | null;
+  replyTitle: string | null;
+};
+
+const BUTTON_REPLY_FALLBACK = "[Resposta de botão]";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -62,7 +77,119 @@ function contactNameByWaId(contacts: unknown[], phone: string): string | null {
   return null;
 }
 
-/** Extrai mensagens texto inbound do payload Meta (field=messages). */
+/** Extrai texto de mensagens inbound Meta (text, button, interactive). */
+export function resolveMetaInboundMessageText(
+  messageRec: Record<string, unknown>,
+): MetaInboundReplyResolution | null {
+  const type = readString(messageRec.type);
+  if (!type) return null;
+
+  if (type === "text") {
+    const textNode = asRecord(messageRec.text);
+    const body = readString(textNode?.body);
+    if (!body) return null;
+    return {
+      text: body,
+      usedFallback: false,
+      buttonText: null,
+      buttonPayload: null,
+      interactiveType: null,
+      replyId: null,
+      replyTitle: null,
+    };
+  }
+
+  if (type === "button") {
+    const button = asRecord(messageRec.button);
+    const buttonText = readString(button?.text);
+    const buttonPayload = readString(button?.payload);
+    const resolved = buttonText ?? buttonPayload;
+    if (!resolved) {
+      return {
+        text: BUTTON_REPLY_FALLBACK,
+        usedFallback: true,
+        buttonText,
+        buttonPayload,
+        interactiveType: null,
+        replyId: null,
+        replyTitle: null,
+      };
+    }
+    return {
+      text: resolved,
+      usedFallback: false,
+      buttonText,
+      buttonPayload,
+      interactiveType: null,
+      replyId: null,
+      replyTitle: null,
+    };
+  }
+
+  if (type === "interactive") {
+    const interactive = asRecord(messageRec.interactive);
+    const interactiveType = readString(interactive?.type);
+    if (interactiveType === "button_reply") {
+      const buttonReply = asRecord(interactive?.button_reply);
+      const replyTitle = readString(buttonReply?.title);
+      const replyId = readString(buttonReply?.id);
+      const resolved = replyTitle ?? replyId;
+      if (!resolved) {
+        return {
+          text: BUTTON_REPLY_FALLBACK,
+          usedFallback: true,
+          buttonText: null,
+          buttonPayload: null,
+          interactiveType,
+          replyId,
+          replyTitle,
+        };
+      }
+      return {
+        text: resolved,
+        usedFallback: false,
+        buttonText: null,
+        buttonPayload: null,
+        interactiveType,
+        replyId,
+        replyTitle,
+      };
+    }
+
+    if (interactiveType === "list_reply") {
+      const listReply = asRecord(interactive?.list_reply);
+      const replyTitle = readString(listReply?.title);
+      const replyId = readString(listReply?.id);
+      const resolved = replyTitle ?? replyId;
+      if (!resolved) {
+        return {
+          text: BUTTON_REPLY_FALLBACK,
+          usedFallback: true,
+          buttonText: null,
+          buttonPayload: null,
+          interactiveType,
+          replyId,
+          replyTitle,
+        };
+      }
+      return {
+        text: resolved,
+        usedFallback: false,
+        buttonText: null,
+        buttonPayload: null,
+        interactiveType,
+        replyId,
+        replyTitle,
+      };
+    }
+
+    return null;
+  }
+
+  return null;
+}
+
+/** Extrai mensagens inbound Meta persistíveis (text, button, interactive). */
 export function extractMetaInboundTextMessages(payload: unknown): MetaInboundTextMessage[] {
   const out: MetaInboundTextMessage[] = [];
   const root = unwrapMetaWebhookBody(payload);
@@ -88,11 +215,14 @@ export function extractMetaInboundTextMessages(payload: unknown): MetaInboundTex
       for (const message of asArray(value.messages)) {
         const messageRec = asRecord(message);
         if (!messageRec) continue;
-        if (readString(messageRec.type) !== "text") continue;
 
-        const textNode = asRecord(messageRec.text);
-        const textBody = readString(textNode?.body);
-        if (!textBody) continue;
+        const messageType = readString(messageRec.type);
+        if (messageType !== "text" && messageType !== "button" && messageType !== "interactive") {
+          continue;
+        }
+
+        const resolution = resolveMetaInboundMessageText(messageRec);
+        if (!resolution) continue;
 
         const externalMessageId = readString(messageRec.id);
         if (!externalMessageId) continue;
@@ -108,7 +238,8 @@ export function extractMetaInboundTextMessages(payload: unknown): MetaInboundTex
           externalMessageId,
           phone,
           contactName,
-          textBody,
+          textBody: resolution.text,
+          messageType: messageType as MetaInboundMessageType,
           rawPayload: sanitizeMetaWebhookPayload({
             metadata,
             contacts,
