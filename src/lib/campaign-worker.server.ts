@@ -499,6 +499,149 @@ async function markContactSkipped(
   `;
 }
 
+async function releaseContactClaim(
+  companyId: string,
+  contactRowId: string,
+  reason: string,
+): Promise<void> {
+  const s = sql();
+  await s`
+    UPDATE public.campaign_contacts
+    SET status = 'pending',
+        error_code = 'claim_rollback',
+        error_message = ${reason.slice(0, 1000)}
+    WHERE id = ${contactRowId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status = 'processing'
+      AND (provider_message_id IS NULL OR btrim(provider_message_id) = '')
+  `;
+  await s`
+    UPDATE public.campaign_send_queue
+    SET locked_at = NULL,
+        locked_by = NULL,
+        status = 'pending'
+    WHERE campaign_contact_id = ${contactRowId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status IN ('pending', 'processing')
+  `;
+}
+
+/** pending/processing com wamid → sent (evita bloqueio permanente no claim). */
+async function reconcileInconsistentContactStates(
+  companyId: string,
+  campaignId: string,
+): Promise<number> {
+  const s = sql();
+  const rows = await s<{ id: string; provider_message_id: string }[]>`
+    UPDATE public.campaign_contacts cc
+    SET status = 'sent',
+        sent_at = COALESCE(sent_at, now()),
+        error_code = NULL,
+        error_message = NULL
+    WHERE cc.campaign_id = ${campaignId}::uuid
+      AND cc.company_id = ${companyId}::uuid
+      AND cc.status IN ('pending', 'processing')
+      AND cc.provider_message_id IS NOT NULL
+      AND btrim(cc.provider_message_id) <> ''
+    RETURNING cc.id, cc.provider_message_id
+  `;
+  if (rows.length > 0) {
+    const ids = rows.map((r) => r.id);
+    await s`
+      UPDATE public.campaign_send_queue q
+      SET locked_at = NULL,
+          locked_by = NULL,
+          status = 'sent'
+      WHERE q.campaign_contact_id = ANY(${ids}::uuid[])
+        AND q.company_id = ${companyId}::uuid
+    `;
+    console.log("[CAMPAIGN_WORKER_RECONCILE_WAMID]", {
+      campaignId,
+      reconciledCount: rows.length,
+      contactIds: ids,
+    });
+  }
+  return rows.length;
+}
+
+/** processing sem wamid e sem linha ativa na fila — reserva órfã. */
+async function releaseOrphanProcessingContacts(
+  companyId: string,
+  campaignId: string,
+): Promise<number> {
+  const s = sql();
+  const rows = await s<{ id: string }[]>`
+    UPDATE public.campaign_contacts cc
+    SET status = 'pending',
+        error_code = 'orphan_processing_released',
+        error_message = 'Reserva órfã liberada — retentativa'
+    WHERE cc.campaign_id = ${campaignId}::uuid
+      AND cc.company_id = ${companyId}::uuid
+      AND cc.status = 'processing'
+      AND (cc.provider_message_id IS NULL OR btrim(cc.provider_message_id) = '')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.campaign_send_queue q
+        WHERE q.campaign_contact_id = cc.id
+          AND q.company_id = ${companyId}::uuid
+          AND q.locked_at IS NOT NULL
+          AND q.status IN ('pending', 'processing')
+      )
+    RETURNING cc.id
+  `;
+  if (rows.length > 0) {
+    console.log("[CAMPAIGN_WORKER_ORPHAN_RELEASED]", {
+      campaignId,
+      releasedCount: rows.length,
+      contactIds: rows.map((r) => r.id),
+    });
+  }
+  return rows.length;
+}
+
+async function countUnclaimablePending(
+  companyId: string,
+  campaignId: string,
+): Promise<number> {
+  const s = sql();
+  const rows = await s<{ count: string }[]>`
+    SELECT COUNT(*)::text AS count
+    FROM public.campaign_contacts
+    WHERE campaign_id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status = 'pending'
+      AND provider_message_id IS NOT NULL
+      AND btrim(provider_message_id) <> ''
+  `;
+  return parseInt(rows[0]?.count ?? "0", 10);
+}
+
+async function claimAndLockNextContact(
+  companyId: string,
+  campaignId: string,
+  workerId = "campaign-worker",
+): Promise<PendingContact | null> {
+  const contact = await claimNextPendingContact(companyId, campaignId);
+  if (!contact) return null;
+  try {
+    await upsertContactProcessingLock(companyId, campaignId, contact.id, workerId);
+    return contact;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[CAMPAIGN_WORKER_LOCK_FAIL]", {
+      campaignId,
+      contactId: contact.id,
+      error: msg,
+    });
+    await releaseContactClaim(
+      companyId,
+      contact.id,
+      `Falha ao registrar lock: ${msg}`,
+    );
+    throw e;
+  }
+}
+
 /** Registra reserva em campaign_send_queue.locked_at (coluna existente). */
 async function upsertContactProcessingLock(
   companyId: string,
@@ -508,14 +651,20 @@ async function upsertContactProcessingLock(
 ): Promise<void> {
   const s = sql();
   const updated = await s<{ id: string }[]>`
-    UPDATE public.campaign_send_queue
+    UPDATE public.campaign_send_queue q
     SET locked_at = now(),
         locked_by = ${workerId},
         status = 'processing'
-    WHERE campaign_contact_id = ${contactId}::uuid
-      AND company_id = ${companyId}::uuid
-      AND status IN ('pending', 'processing')
-    RETURNING id
+    FROM (
+      SELECT id
+      FROM public.campaign_send_queue
+      WHERE campaign_contact_id = ${contactId}::uuid
+        AND company_id = ${companyId}::uuid
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) latest
+    WHERE q.id = latest.id
+    RETURNING q.id
   `;
   if (updated[0]) return;
 
@@ -951,20 +1100,48 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       campaign.status = "running";
     }
 
+    await reconcileInconsistentContactStates(campaign.company_id, campaign.id);
+
     await releaseStaleProcessingContacts(
       campaign.company_id,
       campaign.id,
       processingStaleMs,
     );
 
-    let contact = await claimNextPendingContact(campaign.company_id, campaign.id);
-    if (contact) {
-      await upsertContactProcessingLock(campaign.company_id, campaign.id, contact.id);
+    await releaseOrphanProcessingContacts(campaign.company_id, campaign.id);
+
+    let contact: PendingContact | null = null;
+    try {
+      contact = await claimAndLockNextContact(campaign.company_id, campaign.id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[CAMPAIGN_WORKER_CLAIM_LOCK_ERROR]", {
+        campaignId: campaign.id,
+        error: msg,
+      });
+      const diagnostics = await getCampaignWorkerDiagnostics(
+        campaign.company_id,
+        campaign.id,
+        campaign.status,
+      );
+      const result: WorkerTickResult = {
+        ok: true,
+        action: "idle",
+        campaignId: campaign.id,
+        delayMs: 2_000,
+        message: "Falha ao reservar contato — retentativa",
+      };
+      logCampaignWorkerTickResult(result, diagnostics);
+      return result;
     }
 
     if (!contact) {
       // Sem pending reservável — verifica se ainda há processing (outro tick) ou finaliza.
       const counts = await getCampaignWorkerCounts(campaign.company_id, campaign.id);
+      const unclaimablePending = await countUnclaimablePending(
+        campaign.company_id,
+        campaign.id,
+      );
       const diagnostics = await getCampaignWorkerDiagnostics(
         campaign.company_id,
         campaign.id,
@@ -974,11 +1151,14 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       console.log("[CAMPAIGN_WORKER_COMPLETION_CHECK]", {
         ...diagnostics,
         processingStaleMs,
+        unclaimablePending,
         reason: "no_claimable_contact",
         note:
           diagnostics.processingWithoutQueueLock > 0
             ? "processing_sem_lock_na_fila_nao_recuperado_automaticamente"
-            : null,
+            : unclaimablePending > 0
+              ? "pending_com_wamid_bloqueado_no_claim"
+              : null,
       });
 
       if (counts.pending + counts.processing > 0) {

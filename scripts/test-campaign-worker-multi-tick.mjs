@@ -5,8 +5,11 @@
 import {
   applyClassifiedContactError,
   claimNextPendingContactSim,
+  countUnclaimablePendingSim,
   DEFAULT_PROCESSING_STALE_MS,
   makeSimContacts,
+  reconcileInconsistentContactStatesSim,
+  releaseOrphanProcessingContactsSim,
   releaseStaleProcessingContactsSim,
   simulateConcurrentWorkersRecent,
   simulateStaleRecoveryAfterAbandonedClaim,
@@ -203,6 +206,84 @@ function assert(label, condition) {
     2_500,
   );
   assert("oldest age ms", age === 2_000);
+}
+
+// pending com wamid é reconciliado para sent e não bloqueia os demais
+{
+  const campaign = {
+    id: "camp-wamid",
+    status: "running",
+    contacts: [
+      {
+        id: "c1",
+        status: "sent",
+        provider_message_id: "w1",
+        processing_started_at_ms: null,
+        locked_by: null,
+        attempts: 0,
+        error_code: null,
+        error_message: null,
+      },
+      {
+        id: "c2",
+        status: "pending",
+        provider_message_id: "w2",
+        processing_started_at_ms: null,
+        locked_by: null,
+        attempts: 0,
+        error_code: null,
+        error_message: null,
+      },
+      {
+        id: "c3",
+        status: "pending",
+        provider_message_id: null,
+        processing_started_at_ms: null,
+        locked_by: null,
+        attempts: 0,
+        error_code: null,
+        error_message: null,
+      },
+    ],
+  };
+  const tick = simulateWorkerTick(campaign, { nowMs: 0, staleMs: 0, messagePauseMs: 10 });
+  assert("c2 reconciled to sent", campaign.contacts[1].status === "sent");
+  assert("c3 sends after wamid reconcile", tick.action === "sent" && tick.contactId === "c3");
+  assert("unclaimable pending cleared", countUnclaimablePendingSim(campaign.contacts) === 0);
+}
+
+// processing órfão (sem lock) volta a pending e permite envio
+{
+  const campaign = {
+    id: "camp-orphan",
+    status: "running",
+    contacts: [
+      {
+        id: "c1",
+        status: "processing",
+        provider_message_id: null,
+        processing_started_at_ms: null,
+        locked_by: null,
+        attempts: 0,
+        error_code: null,
+        error_message: null,
+      },
+      {
+        id: "c2",
+        status: "pending",
+        provider_message_id: null,
+        processing_started_at_ms: null,
+        locked_by: null,
+        attempts: 0,
+        error_code: null,
+        error_message: null,
+      },
+    ],
+  };
+  const tick = simulateWorkerTick(campaign, { nowMs: 0, staleMs: 0, messagePauseMs: 10 });
+  assert("orphan c1 sent after recovery", campaign.contacts[0].status === "sent");
+  assert("orphan claims c1 first", tick.action === "sent" && tick.contactId === "c1");
+  assert("c2 still pending", campaign.contacts[1].status === "pending");
 }
 
 // claim atômico — um contato por tick
