@@ -73,6 +73,7 @@ import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-de
 import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
 import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
+import { Route as AppCampanhasModelosRouteImport } from './routes/_app.campanhas.modelos'
 import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
 import { Route as ApiWebhooksMetaWhatsappRouteImport } from './routes/api/webhooks/meta/whatsapp'
 import { Route as ApiWebhooksMetaDiagnosticRouteImport } from './routes/api/webhooks/meta/diagnostic'
@@ -89,6 +90,7 @@ import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/con
 import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
 import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
 import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
+import { Route as ApiCampaignsTemplatesFromMetaRouteImport } from './routes/api/campaigns/templates/from-meta'
 import { Route as ApiCampaignsTemplatesIdRouteImport } from './routes/api/campaigns/templates/$id'
 import { Route as ApiCampaignsIdStartRouteImport } from './routes/api/campaigns/$id/start'
 import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaigns/$id/schedule'
@@ -433,6 +435,11 @@ const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
   path: '/nova',
   getParentRoute: () => AppCampanhasRoute,
 } as any)
+const AppCampanhasModelosRoute = AppCampanhasModelosRouteImport.update({
+  id: '/modelos',
+  path: '/modelos',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
 const AppCampanhasIdRoute = AppCampanhasIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -521,6 +528,12 @@ const ApiCampaignsWorkerTickRoute = ApiCampaignsWorkerTickRouteImport.update({
   path: '/worker/tick',
   getParentRoute: () => ApiCampaignsRoute,
 } as any)
+const ApiCampaignsTemplatesFromMetaRoute =
+  ApiCampaignsTemplatesFromMetaRouteImport.update({
+    id: '/from-meta',
+    path: '/from-meta',
+    getParentRoute: () => ApiCampaignsTemplatesRoute,
+  } as any)
 const ApiCampaignsTemplatesIdRoute = ApiCampaignsTemplatesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -662,6 +675,7 @@ export interface FileRoutesByFullPath {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
@@ -705,6 +719,7 @@ export interface FileRoutesByFullPath {
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
   '/api/campaigns/$id/start': typeof ApiCampaignsIdStartRoute
   '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
+  '/api/campaigns/templates/from-meta': typeof ApiCampaignsTemplatesFromMetaRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -762,6 +777,7 @@ export interface FileRoutesByTo {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
@@ -805,6 +821,7 @@ export interface FileRoutesByTo {
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
   '/api/campaigns/$id/start': typeof ApiCampaignsIdStartRoute
   '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
+  '/api/campaigns/templates/from-meta': typeof ApiCampaignsTemplatesFromMetaRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -865,6 +882,7 @@ export interface FileRoutesById {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/_app/campanhas/$id': typeof AppCampanhasIdRoute
+  '/_app/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/_app/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
@@ -908,6 +926,7 @@ export interface FileRoutesById {
   '/api/campaigns/$id/schedule': typeof ApiCampaignsIdScheduleRoute
   '/api/campaigns/$id/start': typeof ApiCampaignsIdStartRoute
   '/api/campaigns/templates/$id': typeof ApiCampaignsTemplatesIdRoute
+  '/api/campaigns/templates/from-meta': typeof ApiCampaignsTemplatesFromMetaRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
@@ -968,6 +987,7 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
+    | '/campanhas/modelos'
     | '/campanhas/nova'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
@@ -1011,6 +1031,7 @@ export interface FileRouteTypes {
     | '/api/campaigns/$id/schedule'
     | '/api/campaigns/$id/start'
     | '/api/campaigns/templates/$id'
+    | '/api/campaigns/templates/from-meta'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -1068,6 +1089,7 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
+    | '/campanhas/modelos'
     | '/campanhas/nova'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
@@ -1111,6 +1133,7 @@ export interface FileRouteTypes {
     | '/api/campaigns/$id/schedule'
     | '/api/campaigns/$id/start'
     | '/api/campaigns/templates/$id'
+    | '/api/campaigns/templates/from-meta'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -1170,6 +1193,7 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/_app/campanhas/$id'
+    | '/_app/campanhas/modelos'
     | '/_app/campanhas/nova'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
@@ -1213,6 +1237,7 @@ export interface FileRouteTypes {
     | '/api/campaigns/$id/schedule'
     | '/api/campaigns/$id/start'
     | '/api/campaigns/templates/$id'
+    | '/api/campaigns/templates/from-meta'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
@@ -1741,6 +1766,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampanhasNovaRouteImport
       parentRoute: typeof AppCampanhasRoute
     }
+    '/_app/campanhas/modelos': {
+      id: '/_app/campanhas/modelos'
+      path: '/modelos'
+      fullPath: '/campanhas/modelos'
+      preLoaderRoute: typeof AppCampanhasModelosRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
     '/_app/campanhas/$id': {
       id: '/_app/campanhas/$id'
       path: '/$id'
@@ -1852,6 +1884,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/campaigns/worker/tick'
       preLoaderRoute: typeof ApiCampaignsWorkerTickRouteImport
       parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/templates/from-meta': {
+      id: '/api/campaigns/templates/from-meta'
+      path: '/from-meta'
+      fullPath: '/api/campaigns/templates/from-meta'
+      preLoaderRoute: typeof ApiCampaignsTemplatesFromMetaRouteImport
+      parentRoute: typeof ApiCampaignsTemplatesRoute
     }
     '/api/campaigns/templates/$id': {
       id: '/api/campaigns/templates/$id'
@@ -1998,12 +2037,14 @@ declare module '@tanstack/react-router' {
 
 interface AppCampanhasRouteChildren {
   AppCampanhasIdRoute: typeof AppCampanhasIdRoute
+  AppCampanhasModelosRoute: typeof AppCampanhasModelosRoute
   AppCampanhasNovaRoute: typeof AppCampanhasNovaRoute
   AppCampanhasIndexRoute: typeof AppCampanhasIndexRoute
 }
 
 const AppCampanhasRouteChildren: AppCampanhasRouteChildren = {
   AppCampanhasIdRoute: AppCampanhasIdRoute,
+  AppCampanhasModelosRoute: AppCampanhasModelosRoute,
   AppCampanhasNovaRoute: AppCampanhasNovaRoute,
   AppCampanhasIndexRoute: AppCampanhasIndexRoute,
 }
@@ -2087,10 +2128,12 @@ const ApiCampaignsIdRouteWithChildren = ApiCampaignsIdRoute._addFileChildren(
 
 interface ApiCampaignsTemplatesRouteChildren {
   ApiCampaignsTemplatesIdRoute: typeof ApiCampaignsTemplatesIdRoute
+  ApiCampaignsTemplatesFromMetaRoute: typeof ApiCampaignsTemplatesFromMetaRoute
 }
 
 const ApiCampaignsTemplatesRouteChildren: ApiCampaignsTemplatesRouteChildren = {
   ApiCampaignsTemplatesIdRoute: ApiCampaignsTemplatesIdRoute,
+  ApiCampaignsTemplatesFromMetaRoute: ApiCampaignsTemplatesFromMetaRoute,
 }
 
 const ApiCampaignsTemplatesRouteWithChildren =

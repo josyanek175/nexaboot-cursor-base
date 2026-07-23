@@ -16,6 +16,7 @@ import {
   prepareCampaignContactMessage,
   syncCampaignContactCounters,
 } from "@/lib/campaign.server";
+import { getCampaignTemplate } from "@/lib/campaign-template.server";
 import { isPhoneInOptOutList } from "@/lib/campaign-response.server";
 import { sendMetaTemplateMessage } from "@/lib/meta-send-message.server";
 import {
@@ -65,6 +66,7 @@ type WorkerCampaign = {
   meta_template_name: string | null;
   meta_language_code: string | null;
   meta_variable_mappings: Record<string, string>;
+  template_id: string | null;
   started_at: string | null;
 };
 
@@ -247,6 +249,12 @@ async function saveOutboundCampaignMessage(opts: {
     provider_message_id: string | null;
     wamid: string | null;
   };
+  evolutionTemplate?: {
+    campaign_template_id: string | null;
+    channel_type: "evolution";
+    rendered_variables: Record<string, unknown>;
+    response_options: Array<{ n: number; label: string; intent: string }>;
+  };
 }): Promise<void> {
   const s = sql();
   const payload: Record<string, unknown> = {
@@ -257,6 +265,12 @@ async function saveOutboundCampaignMessage(opts: {
   };
   if (opts.metaTemplate) {
     payload.meta_template = opts.metaTemplate;
+  }
+  if (opts.evolutionTemplate) {
+    payload.channel_type = opts.evolutionTemplate.channel_type;
+    payload.campaign_template_id = opts.evolutionTemplate.campaign_template_id;
+    payload.rendered_variables = opts.evolutionTemplate.rendered_variables;
+    payload.response_options = opts.evolutionTemplate.response_options;
   }
 
   if (opts.providerId) {
@@ -324,6 +338,7 @@ async function loadDueCampaigns(): Promise<WorkerCampaign[]> {
       c.sent_count, c.started_at,
       c.meta_template_name, c.meta_language_code,
       COALESCE(c.meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
+      c.template_id,
       ch.evolution_instance_name,
       lower(ch.channel_type) AS channel_type
     FROM public.campaigns c
@@ -381,6 +396,7 @@ async function loadDueCampaigns(): Promise<WorkerCampaign[]> {
       meta_template_name: r.meta_template_name ? String(r.meta_template_name) : null,
       meta_language_code: r.meta_language_code ? String(r.meta_language_code) : null,
       meta_variable_mappings: mappings,
+      template_id: r.template_id ? String(r.template_id) : null,
       started_at: r.started_at ? String(r.started_at) : null,
     };
   });
@@ -1497,6 +1513,38 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
         campaign.whatsapp_channel_id,
         contactId,
       );
+
+      let evolutionTemplatePayload:
+        | {
+            campaign_template_id: string | null;
+            channel_type: "evolution";
+            rendered_variables: Record<string, unknown>;
+            response_options: Array<{ n: number; label: string; intent: string }>;
+          }
+        | undefined;
+
+      if (!isMeta && campaign.template_id) {
+        const tpl = await getCampaignTemplate(campaign.company_id, campaign.template_id);
+        if (tpl) {
+          evolutionTemplatePayload = {
+            campaign_template_id: tpl.id,
+            channel_type: "evolution",
+            rendered_variables: {
+              ...(contact.variables && typeof contact.variables === "object"
+                ? contact.variables
+                : {}),
+              nome: contact.name,
+              telefone: phone,
+            },
+            response_options: (tpl.response_options ?? []).map((o) => ({
+              n: o.n,
+              label: o.label,
+              intent: o.intent,
+            })),
+          };
+        }
+      }
+
       await saveOutboundCampaignMessage({
         conversationId,
         text: text!,
@@ -1510,6 +1558,7 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
               wamid: providerId,
             }
           : undefined,
+        evolutionTemplate: evolutionTemplatePayload,
       });
     } catch (e) {
       console.error("[CAMPAIGN_WORKER_SAVE_FAIL]", e);

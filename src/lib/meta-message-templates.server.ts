@@ -174,6 +174,22 @@ export async function listMetaTemplatesForChannel(
   return rows.map(toMetaTemplatePublic);
 }
 
+export async function getMetaTemplateRowById(
+  companyId: string,
+  templateRowId: string,
+): Promise<MetaMessageTemplateRow | null> {
+  await ensureCampaignsSchema();
+  const rows = await sql<MetaMessageTemplateRow[]>`
+    SELECT id, company_id, channel_id, meta_template_id, template_name, language_code,
+           category, status, components, active, last_synced_at, created_at, updated_at
+    FROM public.meta_message_templates
+    WHERE id = ${templateRowId}::uuid
+      AND company_id = ${companyId}::uuid
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
 export async function getMetaTemplateById(
   companyId: string,
   channelId: string,

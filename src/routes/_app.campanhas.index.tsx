@@ -144,12 +144,20 @@ function CampanhasPage() {
           </div>
         </div>
         {canManage && (
-          <Link
-            to="/campanhas/nova"
-            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" /> Nova campanha
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/campanhas/modelos"
+              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              <Megaphone className="h-4 w-4" /> Modelos
+            </Link>
+            <Link
+              to="/campanhas/nova"
+              className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" /> Nova campanha
+            </Link>
+          </div>
         )}
       </header>
 

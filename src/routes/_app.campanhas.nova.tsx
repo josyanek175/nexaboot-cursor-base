@@ -21,6 +21,7 @@ type TemplateOption = {
   id: string;
   name: string;
   message_body: string;
+  visible_body?: string;
 };
 
 type MetaTemplateOption = {
@@ -107,8 +108,20 @@ function NovaCampanhaPage() {
   const [metaTemplates, setMetaTemplates] = useState<MetaTemplateOption[]>([]);
   const [selectedMetaTemplateId, setSelectedMetaTemplateId] = useState("");
   const [metaVariableMappings, setMetaVariableMappings] = useState<Record<string, string>>({});
-  const [syncingMeta, setSyncingMeta] = useState(false);
+  const [channelTypeFilter, setChannelTypeFilter] = useState<"" | "meta" | "evolution">("");
+  const [useCustomMessage, setUseCustomMessage] = useState(false);
 
+  const filteredChannels = useMemo(() => {
+    if (!channelTypeFilter) return channels;
+    return channels.filter(
+      (c) => String(c.channel_type).toLowerCase() === channelTypeFilter,
+    );
+  }, [channels, channelTypeFilter]);
+
+  const activeEvolutionTemplates = useMemo(
+    () => templates.filter((t) => t.visible_body ?? t.message_body),
+    [templates],
+  );
   const selectedChannel = useMemo(
     () => channels.find((c) => c.id === channelId) ?? null,
     [channels, channelId],
@@ -142,7 +155,6 @@ function NovaCampanhaPage() {
             return t === "evolution" || t === "meta";
           });
           setChannels(list);
-          if (list[0]) setChannelId(list[0].id);
         })
         .catch(() => setChannelsError("Não foi possível carregar os canais WhatsApp.")),
       fetch("/api/campaigns/templates", { credentials: "include", signal: controller.signal })
@@ -238,7 +250,7 @@ function NovaCampanhaPage() {
       const tpl = templates.find((t) => t.id === searchTemplateId);
       if (tpl) {
         setSelectedTemplateId(tpl.id);
-        setMessageText(tpl.message_body);
+        setMessageText(tpl.visible_body ?? tpl.message_body);
       }
     }
   }, [searchTemplateId, templates]);
@@ -259,9 +271,25 @@ function NovaCampanhaPage() {
   }, [searchFrom, campaignId]);
 
   function applyTemplate(id: string) {
+    if (id === "__custom__") {
+      setUseCustomMessage(true);
+      setSelectedTemplateId("");
+      return;
+    }
+    setUseCustomMessage(false);
     setSelectedTemplateId(id);
     const tpl = templates.find((t) => t.id === id);
-    if (tpl) setMessageText(tpl.message_body);
+    if (tpl) setMessageText(tpl.visible_body ?? tpl.message_body);
+  }
+
+  function handleChannelTypeChange(type: "" | "meta" | "evolution") {
+    setChannelTypeFilter(type);
+    setChannelId("");
+    setSelectedTemplateId("");
+    setSelectedMetaTemplateId("");
+    setMetaVariableMappings({});
+    setMessageText("");
+    setUseCustomMessage(false);
   }
 
   const localPreview = useMemo(() => {
@@ -486,6 +514,20 @@ function NovaCampanhaPage() {
               />
             </label>
             <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Tipo de canal</span>
+              <select
+                value={channelTypeFilter}
+                onChange={(e) =>
+                  handleChannelTypeChange(e.target.value as "" | "meta" | "evolution")
+                }
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Selecione Meta ou Evolution</option>
+                <option value="meta">Meta (template oficial HSM)</option>
+                <option value="evolution">Evolution (texto / modelos próprios)</option>
+              </select>
+            </label>
+            <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Canal WhatsApp</span>
               {channelsError && <p className="mb-1 text-xs text-destructive">{channelsError}</p>}
               <select
@@ -495,34 +537,43 @@ function NovaCampanhaPage() {
                   setSelectedMetaTemplateId("");
                   setMetaVariableMappings({});
                   setSelectedTemplateId("");
+                  setUseCustomMessage(false);
+                  setMessageText("");
                 }}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={!channelTypeFilter}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
               >
-                <option value="">Selecione o canal</option>
-                {channels.map((ch) => (
+                <option value="">
+                  {channelTypeFilter ? "Selecione o canal" : "Escolha o tipo acima primeiro"}
+                </option>
+                {filteredChannels.map((ch) => (
                   <option key={ch.id} value={ch.id}>
                     {ch.name} · {String(ch.channel_type).toUpperCase()} ({ch.status})
                   </option>
                 ))}
               </select>
             </label>
-            {!isMetaChannel && templates.length > 0 && (
+            {channelTypeFilter === "evolution" && activeEvolutionTemplates.length > 0 && (
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Usar modelo salvo (opcional)
+                  Modelo Evolution (opcional)
                 </span>
                 <select
-                  value={selectedTemplateId}
+                  value={useCustomMessage ? "__custom__" : selectedTemplateId}
                   onChange={(e) => applyTemplate(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">— Nenhum —</option>
-                  {templates.map((t) => (
+                  <option value="">— Selecione —</option>
+                  <option value="__custom__">Mensagem personalizada</option>
+                  {activeEvolutionTemplates.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
                     </option>
                   ))}
                 </select>
+                <Link to="/campanhas/modelos" className="mt-1 inline-block text-xs text-whatsapp underline">
+                  Gerenciar modelos
+                </Link>
               </label>
             )}
           </>

@@ -13,7 +13,15 @@ export type ResponseIntent = "interested" | "not_interested" | "opt_out" | "unkn
 const TEMPLATE_BUTTON_INTENT: Record<string, ResponseIntent> = {
   "quero agendar": "interested",
   "tenho uma duvida": "interested",
+  "tenho uma dúvida": "interested",
   "me lembrar depois": "unknown",
+};
+
+/** Respostas numéricas padrão (Evolution — opções numeradas). */
+const NUMERIC_RESPONSE_INTENT: Record<string, ResponseIntent> = {
+  "1": "interested",
+  "2": "unknown",
+  "3": "interested",
 };
 
 const INTERESTED = [
@@ -29,7 +37,16 @@ const INTERESTED = [
 
 const NOT_INTERESTED = ["não", "nao", "agora não", "agora nao", "sem interesse", "não quero", "nao quero"];
 
-const OPT_OUT = ["sair", "remover", "pare", "parar", "descadastrar", "não me mande", "nao me mande"];
+const OPT_OUT = [
+  "sair",
+  "remover",
+  "pare",
+  "parar",
+  "cancelar",
+  "descadastrar",
+  "não me mande",
+  "nao me mande",
+];
 
 function normalizeReply(text: string): string {
   return text
@@ -44,6 +61,9 @@ function normalizeReply(text: string): string {
 export function classifyCampaignResponse(text: string | null | undefined): ResponseIntent {
   const t = normalizeReply(text ?? "");
   if (!t) return "unknown";
+
+  const numericIntent = NUMERIC_RESPONSE_INTENT[t];
+  if (numericIntent) return numericIntent;
 
   const templateIntent = TEMPLATE_BUTTON_INTENT[t];
   if (templateIntent) return templateIntent;

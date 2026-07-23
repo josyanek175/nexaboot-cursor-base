@@ -21,6 +21,8 @@ import {
   isOptOutContact,
 } from "@/lib/campaign-send-policy";
 import { getCampaignTemplate } from "@/lib/campaign-template.server";
+import { stripTemplateMetadata } from "@/lib/campaign-template-metadata";
+import { renderEvolutionTemplateBody } from "@/lib/campaign-template-variables";
 import {
   isCampaignManualPauseAllowed,
   isCampaignManualResumeAllowed,
@@ -57,6 +59,7 @@ export type CampaignRow = {
   created_at: string;
   updated_at: string;
   channel_name?: string | null;
+  template_id?: string | null;
   meta_template_id?: string | null;
   meta_template_name?: string | null;
   meta_language_code?: string | null;
@@ -906,6 +909,7 @@ export async function getCampaignById(
         WHERE cc.campaign_id = c.id AND cc.status = 'processing'
       ) AS processing_count,
       c.created_by_user_id, c.created_at, c.updated_at,
+      c.template_id,
       c.meta_template_id, c.meta_template_name, c.meta_language_code,
       COALESCE(c.meta_variable_mappings, '{}'::jsonb) AS meta_variable_mappings,
       ch.name AS channel_name
@@ -1162,7 +1166,19 @@ export async function prepareCampaignContactMessage(
   contactRowId: string,
 ): Promise<{ rendered_message: string; greeting_variant: string; closing_variant: string } | null> {
   const campaign = await getCampaignById(companyId, campaignId);
-  if (!campaign?.message_text) return null;
+  if (!campaign) return null;
+
+  let messageTemplate = campaign.message_text?.trim() ?? "";
+  let templateMeta: Awaited<ReturnType<typeof getCampaignTemplate>> | null = null;
+
+  if (campaign.template_id) {
+    templateMeta = await getCampaignTemplate(companyId, campaign.template_id);
+    if (templateMeta) {
+      messageTemplate = templateMeta.visible_body;
+    }
+  }
+
+  if (!messageTemplate) return null;
 
   const rows = await sql<
     {
@@ -1182,25 +1198,43 @@ export async function prepareCampaignContactMessage(
   const row = rows[0];
   if (!row) return null;
 
-  const variation = buildVariedMessage(campaign.message_text, {
+  const contactVars = {
     ...(row.variables ?? {}),
     nome: row.name,
     name: row.name,
+    telefone: row.phone,
     phone: row.phone,
-  });
+  };
+
+  const usesBraceVars = /\{[a-zA-Z0-9_]+\}/.test(messageTemplate);
+  let rendered_message: string;
+  let greeting_variant = "";
+  let closing_variant = "";
+
+  if (usesBraceVars || templateMeta) {
+    rendered_message = renderEvolutionTemplateBody(
+      stripTemplateMetadata(messageTemplate),
+      contactVars,
+    );
+  } else {
+    const variation = buildVariedMessage(messageTemplate, contactVars);
+    rendered_message = variation.rendered_message;
+    greeting_variant = variation.greeting_variant;
+    closing_variant = variation.closing_variant;
+  }
 
   await sql`
     UPDATE public.campaign_contacts
-    SET greeting_variant = ${variation.greeting_variant},
-        closing_variant = ${variation.closing_variant},
-        rendered_message = ${variation.rendered_message}
+    SET greeting_variant = ${greeting_variant || null},
+        closing_variant = ${closing_variant || null},
+        rendered_message = ${rendered_message}
     WHERE id = ${row.id}::uuid
   `;
 
   return {
-    rendered_message: variation.rendered_message,
-    greeting_variant: variation.greeting_variant,
-    closing_variant: variation.closing_variant,
+    rendered_message,
+    greeting_variant,
+    closing_variant,
   };
 }
 
