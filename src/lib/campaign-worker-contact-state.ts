@@ -61,6 +61,40 @@ export function claimNextPendingContactSim(
 }
 
 /** Libera reservas abandonadas (processing sem wamid) após staleMs. */
+export function reconcileInconsistentContactStatesSim(contacts: SimContact[]): number {
+  let reconciled = 0;
+  for (const c of contacts) {
+    if (!c.provider_message_id?.trim()) continue;
+    if (c.status !== "pending" && c.status !== "processing") continue;
+    c.status = "sent";
+    c.processing_started_at_ms = null;
+    c.locked_by = null;
+    c.send_in_progress = false;
+    c.error_code = null;
+    c.error_message = null;
+    reconciled += 1;
+  }
+  return reconciled;
+}
+
+/** processing sem wamid e sem lock registrado — reserva órfã após falha no upsert. */
+export function releaseOrphanProcessingContactsSim(contacts: SimContact[]): number {
+  let released = 0;
+  for (const c of contacts) {
+    if (c.status !== "processing") continue;
+    if (c.provider_message_id?.trim()) continue;
+    if (c.send_in_progress) continue;
+    if (c.processing_started_at_ms != null) continue;
+    c.status = "pending";
+    c.processing_started_at_ms = null;
+    c.locked_by = null;
+    c.error_code = "orphan_processing_released";
+    c.error_message = "Reserva órfã liberada — retentativa";
+    released += 1;
+  }
+  return released;
+}
+
 export function releaseStaleProcessingContactsSim(
   contacts: SimContact[],
   nowMs: number,
@@ -81,6 +115,14 @@ export function releaseStaleProcessingContactsSim(
     released += 1;
   }
   return released;
+}
+
+export function countUnclaimablePendingSim(contacts: SimContact[]): number {
+  return contacts.filter(
+    (c) =>
+      c.status === "pending" &&
+      !!c.provider_message_id?.trim(),
+  ).length;
 }
 
 export function countContactsByStatus(
@@ -143,9 +185,12 @@ export function simulateWorkerTick(
     return { action: "idle", delayMs: 5_000, reason: "campaign_completed" };
   }
 
+  reconcileInconsistentContactStatesSim(campaign.contacts);
+
   if (staleMs >= DEFAULT_PROCESSING_STALE_MS) {
     releaseStaleProcessingContactsSim(campaign.contacts, nowMs, staleMs);
   }
+  releaseOrphanProcessingContactsSim(campaign.contacts);
 
   let contact = claimNextPendingContactSim(campaign.contacts, workerId, nowMs);
   if (!contact) {
