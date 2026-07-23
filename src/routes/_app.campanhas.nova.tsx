@@ -9,6 +9,15 @@ import {
   parseSpreadsheetRow,
   previewMessage,
 } from "@/lib/campaign-spreadsheet";
+import { CampaignEvolutionVariablesPanel } from "@/components/campaign-evolution-variables-panel";
+import {
+  buildDefaultEvolutionMappings,
+  extractEvolutionTemplateVariables,
+  mergeEvolutionMappings,
+  previewEvolutionTemplateWithMappings,
+  EVOLUTION_VARIABLE_SUGGESTIONS,
+  type EvolutionVariableMappings,
+} from "@/lib/campaign-evolution-variables";
 
 type ChannelOption = {
   id: string;
@@ -110,6 +119,9 @@ function NovaCampanhaPage() {
   const [metaVariableMappings, setMetaVariableMappings] = useState<Record<string, string>>({});
   const [channelTypeFilter, setChannelTypeFilter] = useState<"" | "meta" | "evolution">("");
   const [useCustomMessage, setUseCustomMessage] = useState(false);
+  const [syncingMeta, setSyncingMeta] = useState(false);
+  const [evolutionVariableMappings, setEvolutionVariableMappings] =
+    useState<EvolutionVariableMappings>({});
 
   const filteredChannels = useMemo(() => {
     if (!channelTypeFilter) return channels;
@@ -279,7 +291,11 @@ function NovaCampanhaPage() {
     setUseCustomMessage(false);
     setSelectedTemplateId(id);
     const tpl = templates.find((t) => t.id === id);
-    if (tpl) setMessageText(tpl.visible_body ?? tpl.message_body);
+    if (tpl) {
+      const body = tpl.visible_body ?? tpl.message_body;
+      setMessageText(body);
+      setEvolutionVariableMappings(buildDefaultEvolutionMappings(body));
+    }
   }
 
   function handleChannelTypeChange(type: "" | "meta" | "evolution") {
@@ -288,17 +304,32 @@ function NovaCampanhaPage() {
     setSelectedTemplateId("");
     setSelectedMetaTemplateId("");
     setMetaVariableMappings({});
+    setEvolutionVariableMappings({});
     setMessageText("");
     setUseCustomMessage(false);
   }
 
+  const evolutionTemplateVars = useMemo(
+    () => (isMetaChannel ? [] : extractEvolutionTemplateVariables(messageText)),
+    [messageText, isMetaChannel],
+  );
+
+  useEffect(() => {
+    if (isMetaChannel || !messageText.trim()) return;
+    setEvolutionVariableMappings((prev) => mergeEvolutionMappings(messageText, prev));
+  }, [messageText, isMetaChannel]);
+
   const localPreview = useMemo(() => {
+    if (isMetaChannel) return "";
+    if (evolutionTemplateVars.length > 0) {
+      return previewEvolutionTemplateWithMappings(messageText, evolutionVariableMappings);
+    }
     const sample = parseSpreadsheetRow(
       { nome: "Maria Silva", telefone: "5534999999999", produto: "Plano Pro" },
       0,
     );
     return previewMessage(messageText, sample);
-  }, [messageText]);
+  }, [messageText, isMetaChannel, evolutionTemplateVars.length, evolutionVariableMappings]);
 
   async function refreshAudienceCount(id: string) {
     const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/contacts?limit=1`, {
@@ -327,6 +358,7 @@ function NovaCampanhaPage() {
       meta_template_name: isMetaChannel ? selectedMetaTemplate?.name ?? null : null,
       meta_language_code: isMetaChannel ? selectedMetaTemplate?.language ?? null : null,
       meta_variable_mappings: isMetaChannel ? metaVariableMappings : null,
+      evolution_variable_mappings: isMetaChannel ? null : evolutionVariableMappings,
     };
 
     if (campaignId) {
@@ -393,6 +425,14 @@ function NovaCampanhaPage() {
         } else if (!messageText.trim()) {
           toast.error("Informe a mensagem modelo");
           return;
+        } else if (evolutionTemplateVars.length > 0) {
+          const missing = evolutionTemplateVars.filter((v) => !evolutionVariableMappings[v]);
+          if (missing.length > 0) {
+            toast.error(
+              `Configure a origem das variáveis: ${missing.map((v) => `{${v}}`).join(", ")}`,
+            );
+            return;
+          }
         }
         await persistCampaign(true);
         if (!isMetaChannel) await saveTemplateIfRequested();
@@ -439,6 +479,8 @@ function NovaCampanhaPage() {
           missing_meta_template: "Selecione um template Meta aprovado.",
           missing_schedule_date: "Informe a data de envio.",
           missing_window: "Informe horário inicial e final.",
+          missing_evolution_variable_mapping:
+            "Configure a origem de todas as variáveis do modelo antes de agendar.",
         };
         throw new Error(map[j.error ?? ""] ?? j.error ?? `HTTP ${res.status}`);
       }
@@ -683,10 +725,18 @@ function NovaCampanhaPage() {
                 placeholder={"Olá {nome}, temos novidade sobre {produto}."}
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Tags: {"{nome}"}, {"{telefone}"} e colunas extras da planilha.
-                Saudação e fechamento variados são adicionados automaticamente.
+                Use {"{nome_da_variavel}"} — ex.:{" "}
+                {EVOLUTION_VARIABLE_SUGGESTIONS.map((v) => `{${v.key}}`).join(", ")}. Qualquer nome
+                válido é aceito; as sugestões acima não limitam as variáveis permitidas.
               </p>
             </label>
+            {evolutionTemplateVars.length > 0 && (
+              <CampaignEvolutionVariablesPanel
+                variables={evolutionTemplateVars}
+                mappings={evolutionVariableMappings}
+                onChange={setEvolutionVariableMappings}
+              />
+            )}
             {localPreview && (
               <div className="rounded-md border border-border bg-muted/30 p-3">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">Prévia (exemplo)</p>

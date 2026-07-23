@@ -97,6 +97,62 @@ function assert(label, condition) {
   assert("opt_out cancelar", classifyCampaignResponse("CANCELAR") === "opt_out");
 }
 
+// variáveis dinâmicas ilimitadas
+{
+  const {
+    extractEvolutionTemplateVariables,
+    buildDefaultEvolutionMappings,
+    resolveAndRenderEvolutionTemplate,
+    packEvolutionMappings,
+    unpackEvolutionMappings,
+    listUnconfiguredEvolutionVariables,
+  } = await import("../src/lib/campaign-evolution-variables.ts");
+
+  const tpl =
+    "Olá {nome}, seu {produto} em {cidade} — valor {valor_servico}. Atendente: {nome_atendente}";
+  const vars = extractEvolutionTemplateVariables(tpl);
+  assert("extract dynamic vars count", vars.length === 5);
+  assert("extract valor_servico", vars.includes("valor_servico"));
+  assert("extract cidade", vars.includes("cidade"));
+
+  const defaults = buildDefaultEvolutionMappings(tpl);
+  assert("default mapping nome", defaults.nome?.source === "contact_field");
+
+  const ok = resolveAndRenderEvolutionTemplate(tpl, defaults, {
+    contact: {
+      name: "Ana",
+      phone: "5534999999999",
+      variables: { produto: "Refil", cidade: "Uberaba", valor_servico: "R$ 99" },
+    },
+    attendant: { name: "Josyane" },
+    company: { name: "Empresa X" },
+  });
+  assert("resolve ok", ok.ok === true);
+  if (ok.ok) {
+    assert("rendered no braces", !/\{[a-zA-Z_][a-zA-Z0-9_]*\}/.test(ok.rendered));
+    assert("rendered has Ana", ok.rendered.includes("Ana"));
+  }
+
+  const fail = resolveAndRenderEvolutionTemplate(tpl, defaults, {
+    contact: { name: "Ana", phone: "5534999999999", variables: { produto: "Refil" } },
+    attendant: { name: "Josyane" },
+    company: { name: "Empresa X" },
+  });
+  assert("resolve missing vars", fail.ok === false);
+  if (!fail.ok) {
+    assert("missing includes cidade", fail.missing.includes("cidade"));
+    assert("missing includes valor_servico", fail.missing.includes("valor_servico"));
+  }
+
+  const packed = packEvolutionMappings({ "1": "name" }, defaults);
+  const unpacked = unpackEvolutionMappings(packed);
+  assert("pack unpack roundtrip", unpacked.nome?.source === "contact_field");
+  assert("meta flat preserved in pack", typeof packed["1"] === "string");
+
+  const check = listUnconfiguredEvolutionVariables(tpl, {});
+  assert("validate unconfigured fails", check.length === vars.length);
+}
+
 // opções numeradas format
 {
   const block = formatNumberedResponseBlock([

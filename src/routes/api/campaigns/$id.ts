@@ -14,6 +14,27 @@ const TimeStr = z
   .optional()
   .nullable();
 
+const EvolutionVariableMappingsSchema = z
+  .record(
+    z.string(),
+    z.object({
+      source: z.enum([
+        "contact_field",
+        "contact_variable",
+        "spreadsheet_column",
+        "campaign_fixed",
+        "attendant",
+        "company",
+      ]),
+      field: z.string().optional(),
+      key: z.string().optional(),
+      column: z.string().optional(),
+      value: z.string().optional(),
+    }),
+  )
+  .optional()
+  .nullable();
+
 const PatchBody = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   message_text: z.string().trim().max(4000).optional().nullable(),
@@ -30,6 +51,7 @@ const PatchBody = z.object({
   meta_template_name: z.string().trim().max(200).optional().nullable(),
   meta_language_code: z.string().trim().max(20).optional().nullable(),
   meta_variable_mappings: z.record(z.string(), z.string()).optional().nullable(),
+  evolution_variable_mappings: EvolutionVariableMappingsSchema,
 });
 
 export const Route = createFileRoute("/api/campaigns/$id")({

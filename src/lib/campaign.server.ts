@@ -21,8 +21,15 @@ import {
   isOptOutContact,
 } from "@/lib/campaign-send-policy";
 import { getCampaignTemplate } from "@/lib/campaign-template.server";
-import { stripTemplateMetadata } from "@/lib/campaign-template-metadata";
-import { renderEvolutionTemplateBody } from "@/lib/campaign-template-variables";
+import {
+  buildDefaultEvolutionMappings,
+  extractEvolutionTemplateVariables,
+  mergeEvolutionMappings,
+  packEvolutionMappings,
+  resolveAndRenderEvolutionTemplate,
+  unpackEvolutionMappings,
+  type EvolutionVariableMappings,
+} from "@/lib/campaign-evolution-variables";
 import {
   isCampaignManualPauseAllowed,
   isCampaignManualResumeAllowed,
@@ -110,9 +117,106 @@ function parseMappings(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k.startsWith("__")) continue;
     if (typeof v === "string" && v.trim()) out[k] = v.trim();
   }
   return out;
+}
+
+function buildStoredVariableMappings(
+  isMeta: boolean,
+  metaFlatMappings: Record<string, string>,
+  evolutionMappings: EvolutionVariableMappings | null | undefined,
+  existingRaw?: unknown,
+): Record<string, unknown> {
+  if (isMeta) return { ...metaFlatMappings };
+  const base =
+    existingRaw && typeof existingRaw === "object" && !Array.isArray(existingRaw)
+      ? (existingRaw as Record<string, unknown>)
+      : {};
+  const mergedFlat: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(base)) {
+    if (k.startsWith("__")) continue;
+    if (typeof v === "string" && v.trim()) mergedFlat[k] = v.trim();
+  }
+  return packEvolutionMappings(mergedFlat, evolutionMappings ?? {});
+}
+
+async function loadCompanyEvolutionContext(companyId: string): Promise<{
+  name: string | null;
+  trade_name: string | null;
+  phone: string | null;
+}> {
+  const rows = await sql<
+    { name: string | null; trade_name: string | null; phone: string | null }[]
+  >`
+    SELECT name, trade_name, phone
+    FROM public.companies
+    WHERE id = ${companyId}::uuid
+    LIMIT 1
+  `;
+  return rows[0] ?? { name: null, trade_name: null, phone: null };
+}
+
+async function loadAttendantName(
+  userId: string | null | undefined,
+): Promise<string | null> {
+  if (!userId) return null;
+  const rows = await sql<{ name: string | null }[]>`
+    SELECT name FROM public.users WHERE id = ${userId}::uuid LIMIT 1
+  `;
+  return rows[0]?.name?.trim() ?? null;
+}
+
+export function getEvolutionMappingsFromCampaign(
+  campaign: Pick<CampaignRow, "message_text" | "meta_variable_mappings">,
+  messageTemplate?: string,
+): EvolutionVariableMappings {
+  const template = messageTemplate ?? campaign.message_text ?? "";
+  const stored = unpackEvolutionMappings(campaign.meta_variable_mappings);
+  if (Object.keys(stored).length > 0) {
+    return mergeEvolutionMappings(template, stored);
+  }
+  return buildDefaultEvolutionMappings(template);
+}
+
+export function validateEvolutionMappingsConfigured(
+  messageTemplate: string,
+  mappings: EvolutionVariableMappings,
+): { ok: true } | { ok: false; missing: string[] } {
+  const vars = extractEvolutionTemplateVariables(messageTemplate);
+  const missing = vars.filter((v) => !mappings[v]);
+  if (missing.length > 0) return { ok: false, missing };
+  return { ok: true };
+}
+
+async function resolveEvolutionCampaignMessageTemplate(
+  companyId: string,
+  campaign: CampaignRow,
+): Promise<string> {
+  if (campaign.template_id) {
+    const tpl = await getCampaignTemplate(companyId, campaign.template_id);
+    if (tpl?.visible_body) return tpl.visible_body;
+  }
+  return campaign.message_text?.trim() ?? "";
+}
+
+async function validateEvolutionCampaignBeforeSend(
+  companyId: string,
+  campaign: CampaignRow,
+): Promise<void> {
+  const isMetaTemplate =
+    campaign.message_type === "meta_template" || !!campaign.meta_template_name?.trim();
+  if (isMetaTemplate) return;
+
+  const template = await resolveEvolutionCampaignMessageTemplate(companyId, campaign);
+  if (!template) throw new Error("missing_message");
+
+  const mappings = getEvolutionMappingsFromCampaign(campaign, template);
+  const check = validateEvolutionMappingsConfigured(template, mappings);
+  if (!check.ok) {
+    throw new Error(`missing_evolution_variable_mapping:${check.missing.join(",")}`);
+  }
 }
 
 /** Garante template Meta APPROVED+active do mesmo canal/empresa. */
@@ -166,6 +270,7 @@ export type CampaignWriteInput = {
   meta_template_name?: string | null;
   meta_language_code?: string | null;
   meta_variable_mappings?: Record<string, string> | null;
+  evolution_variable_mappings?: EvolutionVariableMappings | null;
   message_type?: "text" | "meta_template";
 };
 
@@ -576,6 +681,8 @@ export async function scheduleCampaign(
     throw new Error("invalid_channel");
   }
 
+  await validateEvolutionCampaignBeforeSend(companyId, existing);
+
   const s = sql();
   const pending = await s<{ count: string }[]>`
     SELECT COUNT(*)::text AS count FROM public.campaign_contacts
@@ -658,6 +765,8 @@ async function validateCampaignReadyToSend(
   if (!ch.ok) throw new Error("invalid_channel");
   if (isMetaTemplate && ch.channel_type !== "meta") throw new Error("invalid_channel");
   if (!isMetaTemplate && ch.channel_type !== "evolution") throw new Error("invalid_channel");
+
+  await validateEvolutionCampaignBeforeSend(companyId, existing);
 }
 
 /** Inicia disparo manual imediato (draft/scheduled/paused → running). */
@@ -982,6 +1091,19 @@ export async function createCampaign(
     throw new Error("missing_meta_template");
   }
 
+  const messageTemplate = data.message_text?.trim() ?? "";
+  const evolutionMappings =
+    !isMeta && data.evolution_variable_mappings !== undefined
+      ? data.evolution_variable_mappings ?? {}
+      : !isMeta && messageTemplate
+        ? buildDefaultEvolutionMappings(messageTemplate)
+        : {};
+  const storedMappings = buildStoredVariableMappings(
+    isMeta,
+    metaFields.meta_variable_mappings,
+    evolutionMappings,
+  );
+
   const rows = await sql<CampaignRow[]>`
     INSERT INTO public.campaigns (
       company_id, whatsapp_channel_id, name, message_text,
@@ -1008,7 +1130,7 @@ export async function createCampaign(
       ${metaFields.meta_template_id},
       ${metaFields.meta_template_name},
       ${metaFields.meta_language_code},
-      ${JSON.stringify(metaFields.meta_variable_mappings)}::jsonb,
+      ${JSON.stringify(storedMappings)}::jsonb,
       ${userId ?? null}::uuid
     )
     RETURNING id, company_id, whatsapp_channel_id, name, message_text,
@@ -1119,6 +1241,25 @@ export async function updateCampaign(
     throw new Error("missing_meta_template");
   }
 
+  const evolutionMappings =
+    !isMeta && data.evolution_variable_mappings !== undefined
+      ? data.evolution_variable_mappings ?? {}
+      : !isMeta
+        ? getEvolutionMappingsFromCampaign(
+            {
+              message_text: nextMessage,
+              meta_variable_mappings: existing.meta_variable_mappings,
+            },
+            nextMessage?.trim() ?? "",
+          )
+        : {};
+  const storedMappings = buildStoredVariableMappings(
+    isMeta,
+    metaFields.meta_variable_mappings,
+    evolutionMappings,
+    existing.meta_variable_mappings,
+  );
+
   const rows = await sql<CampaignRow[]>`
     UPDATE public.campaigns
     SET name = ${nextName},
@@ -1131,7 +1272,8 @@ export async function updateCampaign(
         meta_template_id = ${metaFields.meta_template_id},
         meta_template_name = ${metaFields.meta_template_name},
         meta_language_code = ${metaFields.meta_language_code},
-        meta_variable_mappings = ${JSON.stringify(metaFields.meta_variable_mappings)}::jsonb,
+        meta_variable_mappings = ${JSON.stringify(storedMappings)}::jsonb,
+        template_id = ${isMeta ? null : (data.template_id !== undefined ? data.template_id : existing.template_id ?? null)}::uuid,
         send_mode = ${CAMPAIGN_SEND_MODE},
         updated_at = now()
     WHERE id = ${campaignId}::uuid
@@ -1206,16 +1348,34 @@ export async function prepareCampaignContactMessage(
     phone: row.phone,
   };
 
-  const usesBraceVars = /\{[a-zA-Z0-9_]+\}/.test(messageTemplate);
+  const templateVars = extractEvolutionTemplateVariables(messageTemplate);
   let rendered_message: string;
   let greeting_variant = "";
   let closing_variant = "";
 
-  if (usesBraceVars || templateMeta) {
-    rendered_message = renderEvolutionTemplateBody(
-      stripTemplateMetadata(messageTemplate),
-      contactVars,
+  if (templateVars.length > 0 || templateMeta) {
+    const mappings = getEvolutionMappingsFromCampaign(campaign, messageTemplate);
+    const [companyCtx, attendantName] = await Promise.all([
+      loadCompanyEvolutionContext(companyId),
+      loadAttendantName(campaign.created_by_user_id),
+    ]);
+    const resolved = resolveAndRenderEvolutionTemplate(
+      messageTemplate,
+      mappings,
+      {
+        contact: {
+          name: row.name,
+          phone: row.phone,
+          variables: contactVars,
+        },
+        attendant: { name: attendantName },
+        company: companyCtx,
+      },
     );
+    if (!resolved.ok) {
+      throw new Error(`empty_variable:${resolved.missing.join(",")}`);
+    }
+    rendered_message = resolved.rendered;
   } else {
     const variation = buildVariedMessage(messageTemplate, contactVars);
     rendered_message = variation.rendered_message;
@@ -1427,6 +1587,7 @@ export async function createCampaignFromSource(
     message_text: source.message_text,
     whatsapp_channel_id: source.whatsapp_channel_id,
     source_campaign_id: sourceCampaignId,
+    evolution_variable_mappings: getEvolutionMappingsFromCampaign(source),
     schedule_date: null,
     window_start_time: source.window_start_time
       ? String(source.window_start_time).slice(0, 5)

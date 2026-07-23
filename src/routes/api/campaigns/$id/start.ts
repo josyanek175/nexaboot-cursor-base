@@ -56,6 +56,13 @@ export const Route = createFileRoute("/api/campaigns/$id/start")({
             no_pending_contacts: 400,
             invalid_channel: 400,
           };
+          if (msg.startsWith("missing_evolution_variable_mapping:")) {
+            const variables = msg.slice("missing_evolution_variable_mapping:".length).split(",");
+            return Response.json(
+              { success: false, error: "missing_evolution_variable_mapping", variables },
+              { status: 400 },
+            );
+          }
           if (map[msg]) {
             return Response.json({ success: false, error: msg }, { status: map[msg] });
           }

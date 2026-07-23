@@ -1378,12 +1378,39 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
     } else {
       text = contact.rendered_message;
       if (!text) {
-        const prepared = await prepareCampaignContactMessage(
-          campaign.company_id,
-          campaign.id,
-          contact.id,
-        );
-        text = prepared?.rendered_message ?? null;
+        try {
+          const prepared = await prepareCampaignContactMessage(
+            campaign.company_id,
+            campaign.id,
+            contact.id,
+          );
+          text = prepared?.rendered_message ?? null;
+        } catch (prepErr) {
+          const prepMsg = (prepErr as Error).message ?? "";
+          if (prepMsg.startsWith("empty_variable:")) {
+            const vars = prepMsg.slice("empty_variable:".length).split(",").filter(Boolean);
+            const failMsg = `Variável sem preenchimento: ${vars.map((v) => `{${v}}`).join(", ")}`;
+            await markContactFailed(campaign.company_id, contact.id, failMsg);
+            await syncCampaignContactCounters(campaign.id, campaign.company_id);
+            await insertCampaignEvent(
+              campaign.company_id,
+              campaign.id,
+              "contact.failed",
+              null,
+              { reason: "empty_variable", variables: vars },
+              contact.id,
+            );
+            return {
+              ok: true,
+              action: "failed",
+              campaignId: campaign.id,
+              contactId: contact.id,
+              delayMs: 200,
+              message: failMsg,
+            };
+          }
+          throw prepErr;
+        }
       }
       if (!text?.trim()) {
         await markContactFailed(campaign.company_id, contact.id, "empty_message");

@@ -7,6 +7,15 @@ import { canManageCampaigns, actingUserFromAuth, canAccessCampaignsModule } from
 import { apiGet } from "@/lib/api";
 import { CampaignAudienceImport } from "@/components/campaign-audience-import";
 import { parseSpreadsheetRow, previewMessage } from "@/lib/campaign-spreadsheet";
+import { CampaignEvolutionVariablesPanel } from "@/components/campaign-evolution-variables-panel";
+import {
+  extractEvolutionTemplateVariables,
+  mergeEvolutionMappings,
+  previewEvolutionTemplateWithMappings,
+  unpackEvolutionMappings,
+  EVOLUTION_VARIABLE_SUGGESTIONS,
+  type EvolutionVariableMappings,
+} from "@/lib/campaign-evolution-variables";
 import {
   isCampaignManualPauseAllowed,
   isCampaignManualResumeAllowed,
@@ -143,6 +152,8 @@ function EditarCampanhaPage() {
   const [metaTemplates, setMetaTemplates] = useState<MetaTemplateOption[]>([]);
   const [selectedMetaTemplateId, setSelectedMetaTemplateId] = useState("");
   const [metaVariableMappings, setMetaVariableMappings] = useState<Record<string, string>>({});
+  const [evolutionVariableMappings, setEvolutionVariableMappings] =
+    useState<EvolutionVariableMappings>({});
   const [syncingMeta, setSyncingMeta] = useState(false);
 
   const [audience, setAudience] = useState<CampaignContact[]>([]);
@@ -194,12 +205,26 @@ function EditarCampanhaPage() {
 
   const messagePreview = useMemo(() => {
     if (isMetaChannel) return selectedMetaTemplate?.bodyText ?? messageText;
+    const vars = extractEvolutionTemplateVariables(messageText);
+    if (vars.length > 0) {
+      return previewEvolutionTemplateWithMappings(messageText, evolutionVariableMappings);
+    }
     const sample = parseSpreadsheetRow(
       { nome: "Maria Silva", telefone: "5534999999999", produto: "Plano Pro" },
       0,
     );
     return previewMessage(messageText, sample);
-  }, [messageText, isMetaChannel, selectedMetaTemplate]);
+  }, [messageText, isMetaChannel, selectedMetaTemplate, evolutionVariableMappings]);
+
+  const evolutionTemplateVars = useMemo(
+    () => (isMetaChannel ? [] : extractEvolutionTemplateVariables(messageText)),
+    [messageText, isMetaChannel],
+  );
+
+  useEffect(() => {
+    if (isMetaChannel || !messageText.trim()) return;
+    setEvolutionVariableMappings((prev) => mergeEvolutionMappings(messageText, prev));
+  }, [messageText, isMetaChannel]);
 
   async function loadMetaTemplates(chId: string) {
     const res = await fetch(
@@ -293,6 +318,10 @@ function EditarCampanhaPage() {
     setMessageText(data.campaign.message_text ?? "");
     setChannelId(data.campaign.whatsapp_channel_id ?? "");
     setMetaVariableMappings(data.campaign.meta_variable_mappings ?? {});
+    const storedEvolution = unpackEvolutionMappings(data.campaign.meta_variable_mappings);
+    setEvolutionVariableMappings(
+      mergeEvolutionMappings(data.campaign.message_text ?? "", storedEvolution),
+    );
     setScheduleDate(
       data.campaign.schedule_date ? String(data.campaign.schedule_date).slice(0, 10) : "",
     );
@@ -443,6 +472,7 @@ function EditarCampanhaPage() {
         ? selectedMetaTemplate?.language ?? campaign?.meta_language_code ?? null
         : null,
       meta_variable_mappings: isMetaChannel ? metaVariableMappings : null,
+      evolution_variable_mappings: isMetaChannel ? null : evolutionVariableMappings,
     };
   }
 
@@ -490,6 +520,14 @@ function EditarCampanhaPage() {
     } else if (!messageText.trim()) {
       toast.error("Informe a mensagem modelo.");
       return;
+    } else if (evolutionTemplateVars.length > 0) {
+      const missing = evolutionTemplateVars.filter((v) => !evolutionVariableMappings[v]);
+      if (missing.length > 0) {
+        toast.error(
+          `Configure a origem das variáveis: ${missing.map((v) => `{${v}}`).join(", ")}`,
+        );
+        return;
+      }
     }
     setScheduling(true);
     try {
@@ -520,6 +558,8 @@ function EditarCampanhaPage() {
           missing_meta_template: "Selecione um template Meta aprovado.",
           missing_schedule_date: "Informe a data de envio.",
           missing_window: "Informe horário inicial e final.",
+          missing_evolution_variable_mapping:
+            "Configure a origem de todas as variáveis do modelo antes de agendar.",
           not_schedulable: "Esta campanha não pode ser agendada.",
         };
         throw new Error(map[j.error ?? ""] ?? j.error ?? `HTTP ${res.status}`);
@@ -629,6 +669,8 @@ function EditarCampanhaPage() {
           missing_channel: "Selecione um canal ativo.",
           missing_window: "Configure horário inicial e final antes de iniciar.",
           missing_message: "Informe a mensagem modelo.",
+          missing_evolution_variable_mapping:
+            "Configure a origem de todas as variáveis do modelo antes de iniciar.",
           missing_meta_template: "Selecione um template Meta aprovado.",
           meta_template_not_approved: "Template Meta não está aprovado.",
           invalid_channel: "Canal indisponível ou inativo.",
@@ -989,8 +1031,19 @@ function EditarCampanhaPage() {
                   placeholder="Corpo principal. Use {nome} e outras tags da planilha."
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Saudação e fechamento variam automaticamente; o corpo principal é preservado.
+                  Use {"{nome_da_variavel}"} — ex.:{" "}
+                  {EVOLUTION_VARIABLE_SUGGESTIONS.map((v) => `{${v.key}}`).join(", ")}. Qualquer
+                  nome válido é aceito.
                 </p>
+                {evolutionTemplateVars.length > 0 && isDraft && (
+                  <div className="mt-3">
+                    <CampaignEvolutionVariablesPanel
+                      variables={evolutionTemplateVars}
+                      mappings={evolutionVariableMappings}
+                      onChange={setEvolutionVariableMappings}
+                    />
+                  </div>
+                )}
                 {messagePreview && isDraft && (
                   <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
                     <p className="mb-1 text-xs font-medium text-muted-foreground">Prévia (exemplo)</p>
