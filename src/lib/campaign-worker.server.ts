@@ -26,6 +26,12 @@ import {
   renderMetaTemplateFromComponents,
 } from "@/lib/meta-message-templates.server";
 import {
+  describeTemplateComponents,
+  ensureMetaTemplateOutboundBody,
+  normalizeTemplateComponents,
+  previewText,
+} from "@/lib/meta-template-render";
+import {
   classifyCampaignSendError,
   classifyThrownError,
   readProcessingStaleMs,
@@ -1154,16 +1160,42 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
         };
       }
       bodyParams = built.parameters;
+      const normalizedComponents = normalizeTemplateComponents(approved.row.components);
+      const componentDiag = describeTemplateComponents(approved.row.components);
       const rendered = renderMetaTemplateFromComponents({
-        components: approved.row.components,
+        components: normalizedComponents ?? approved.row.components,
         parameters: bodyParams,
       });
-      text = rendered.body;
+      const outboundBody = ensureMetaTemplateOutboundBody({
+        renderedBody: rendered.body,
+        templateName: approved.row.template_name,
+      });
+      text = outboundBody.body;
+
+      console.log("[META_TEMPLATE_OUTBOUND_PERSISTENCE]", {
+        campaignId: campaign.id,
+        campaignContactId: contact.id,
+        templateName: approved.row.template_name,
+        language: approved.row.language_code,
+        renderedBodyLength: rendered.body.length,
+        renderedBodyPreview: previewText(rendered.body),
+        persistedBodyLength: text.length,
+        persistedBodyPreview: previewText(text),
+        usedFallback: outboundBody.usedFallback,
+        renderReason: rendered.reason ?? outboundBody.reason ?? null,
+        buttonsCount: rendered.buttons.length,
+        componentsType: componentDiag.componentsType,
+        componentsCount: componentDiag.componentsCount,
+        hasBodyComponent: componentDiag.hasBodyComponent,
+        hasMetaTemplateMetadata: true,
+        bodyParametersCount: bodyParams.length,
+      });
+
       metaTemplatePersist = {
         template_name: approved.row.template_name,
         template_language: approved.row.language_code,
         template_category: approved.row.category,
-        template_components: approved.row.components,
+        template_components: normalizedComponents ?? approved.row.components,
         body_parameters: bodyParams,
         template_buttons: rendered.buttons,
       };
