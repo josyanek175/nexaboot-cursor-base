@@ -25,6 +25,14 @@ import {
   buildMetaTemplateBodyParameters,
   renderMetaTemplateFromComponents,
 } from "@/lib/meta-message-templates.server";
+import {
+  classifyCampaignSendError,
+  classifyThrownError,
+  readProcessingStaleMs,
+  DEFAULT_MAX_SEND_ATTEMPTS,
+  TRANSIENT_RETRY_DELAY_MS,
+  type ClassifiedSendError,
+} from "@/lib/campaign-worker-processing";
 
 const SYSTEM_SENDER_NAME = "Disparo Automático";
 
@@ -385,8 +393,7 @@ async function claimNextPendingContact(
       LIMIT 1
     )
     UPDATE public.campaign_contacts cc
-    SET status = 'processing',
-        updated_at = now()
+    SET status = 'processing'
     FROM next
     WHERE cc.id = next.id
       AND cc.company_id = ${companyId}::uuid
@@ -486,25 +493,321 @@ async function markContactSkipped(
   `;
 }
 
-/** Libera contatos presos em processing sem wamid (tick abortado/exceção). */
+/** Registra reserva em campaign_send_queue.locked_at (coluna existente). */
+async function upsertContactProcessingLock(
+  companyId: string,
+  campaignId: string,
+  contactId: string,
+  workerId = "campaign-worker",
+): Promise<void> {
+  const s = sql();
+  const updated = await s<{ id: string }[]>`
+    UPDATE public.campaign_send_queue
+    SET locked_at = now(),
+        locked_by = ${workerId},
+        status = 'processing'
+    WHERE campaign_contact_id = ${contactId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status IN ('pending', 'processing')
+    RETURNING id
+  `;
+  if (updated[0]) return;
+
+  await s`
+    INSERT INTO public.campaign_send_queue (
+      campaign_id, campaign_contact_id, company_id,
+      scheduled_for, attempts, max_attempts, status, locked_at, locked_by
+    ) VALUES (
+      ${campaignId}::uuid,
+      ${contactId}::uuid,
+      ${companyId}::uuid,
+      now(),
+      0,
+      ${DEFAULT_MAX_SEND_ATTEMPTS},
+      'processing',
+      now(),
+      ${workerId}
+    )
+  `;
+}
+
+async function clearContactProcessingLock(
+  companyId: string,
+  contactId: string,
+  queueStatus: "sent" | "failed" | "pending",
+): Promise<void> {
+  const s = sql();
+  await s`
+    UPDATE public.campaign_send_queue
+    SET locked_at = NULL,
+        locked_by = NULL,
+        status = ${queueStatus}
+    WHERE campaign_contact_id = ${contactId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status IN ('pending', 'processing', 'sent', 'failed')
+  `;
+}
+
+/**
+ * Libera processing sem wamid quando campaign_send_queue.locked_at expirou.
+ * Requer linha na fila com locked_at — contatos sem lock não são recuperados (seguro).
+ */
 async function releaseStaleProcessingContacts(
   companyId: string,
   campaignId: string,
-  staleSeconds = 30,
+  staleMs: number,
 ): Promise<number> {
+  const staleSeconds = Math.max(Math.ceil(staleMs / 1000), 120);
   const s = sql();
   const rows = await s<{ id: string }[]>`
+    UPDATE public.campaign_contacts cc
+    SET status = 'pending',
+        error_code = 'stale_processing_released',
+        error_message = 'Reserva expirada — retentativa'
+    FROM public.campaign_send_queue q
+    WHERE cc.id = q.campaign_contact_id
+      AND cc.campaign_id = ${campaignId}::uuid
+      AND cc.company_id = ${companyId}::uuid
+      AND cc.status = 'processing'
+      AND (cc.provider_message_id IS NULL OR btrim(cc.provider_message_id) = '')
+      AND q.locked_at IS NOT NULL
+      AND q.locked_at < now() - (${staleSeconds}::text || ' seconds')::interval
+    RETURNING cc.id
+  `;
+  if (rows.length > 0) {
+    const ids = rows.map((r) => r.id);
+    await s`
+      UPDATE public.campaign_send_queue q
+      SET locked_at = NULL,
+          locked_by = NULL,
+          status = 'pending'
+      WHERE q.campaign_contact_id = ANY(${ids}::uuid[])
+        AND q.company_id = ${companyId}::uuid
+    `;
+  }
+  return rows.length;
+}
+
+type CampaignWorkerDiagnostics = {
+  campaignId: string;
+  campaignStatus: string;
+  pendingCount: number;
+  processingCount: number;
+  sentCount: number;
+  oldestProcessingAgeMs: number | null;
+  oldestProcessingContactId: string | null;
+  oldestProcessingHasWamid: boolean | null;
+  processingWithoutQueueLock: number;
+};
+
+async function getCampaignWorkerDiagnostics(
+  companyId: string,
+  campaignId: string,
+  campaignStatus: string,
+): Promise<CampaignWorkerDiagnostics> {
+  const s = sql();
+  const counts = await getCampaignWorkerCounts(companyId, campaignId);
+  const processingRows = await s<
+    {
+      id: string;
+      provider_message_id: string | null;
+      locked_at: string | null;
+    }[]
+  >`
+    SELECT
+      cc.id,
+      cc.provider_message_id,
+      q.locked_at
+    FROM public.campaign_contacts cc
+    LEFT JOIN public.campaign_send_queue q
+      ON q.campaign_contact_id = cc.id
+      AND q.company_id = cc.company_id
+      AND q.status IN ('pending', 'processing')
+    WHERE cc.campaign_id = ${campaignId}::uuid
+      AND cc.company_id = ${companyId}::uuid
+      AND cc.status = 'processing'
+    ORDER BY q.locked_at ASC NULLS LAST, cc.created_at ASC
+  `;
+
+  let oldestProcessingAgeMs: number | null = null;
+  let oldestProcessingContactId: string | null = null;
+  let oldestProcessingHasWamid: boolean | null = null;
+  let processingWithoutQueueLock = 0;
+  const now = Date.now();
+
+  for (const row of processingRows) {
+    if (!row.locked_at) {
+      processingWithoutQueueLock += 1;
+      continue;
+    }
+    const ageMs = now - new Date(row.locked_at).getTime();
+    if (oldestProcessingAgeMs == null || ageMs > oldestProcessingAgeMs) {
+      oldestProcessingAgeMs = ageMs;
+      oldestProcessingContactId = String(row.id);
+      oldestProcessingHasWamid = !!(
+        row.provider_message_id && String(row.provider_message_id).trim()
+      );
+    }
+  }
+
+  return {
+    campaignId,
+    campaignStatus,
+    pendingCount: counts.pending,
+    processingCount: counts.processing,
+    sentCount: counts.sent,
+    oldestProcessingAgeMs,
+    oldestProcessingContactId,
+    oldestProcessingHasWamid,
+    processingWithoutQueueLock,
+  };
+}
+
+function logCampaignWorkerTickResult(
+  result: WorkerTickResult,
+  diagnostics?: CampaignWorkerDiagnostics | null,
+): void {
+  console.log("[CAMPAIGN_WORKER_TICK_RESULT]", {
+    action: result.action,
+    ok: result.ok,
+    campaignId: result.campaignId ?? diagnostics?.campaignId ?? null,
+    contactId: result.contactId ?? null,
+    delayMs: result.delayMs,
+    message: result.message ?? null,
+    pendingCount: diagnostics?.pendingCount ?? null,
+    processingCount: diagnostics?.processingCount ?? null,
+    sentCount: diagnostics?.sentCount ?? null,
+    oldestProcessingAgeMs: diagnostics?.oldestProcessingAgeMs ?? null,
+    oldestProcessingContactId: diagnostics?.oldestProcessingContactId ?? null,
+    oldestProcessingHasWamid: diagnostics?.oldestProcessingHasWamid ?? null,
+    processingWithoutQueueLock: diagnostics?.processingWithoutQueueLock ?? null,
+    campaignStatus: diagnostics?.campaignStatus ?? null,
+  });
+}
+
+async function markContactRetryPending(
+  companyId: string,
+  campaignId: string,
+  contactRowId: string,
+  classified: ClassifiedSendError,
+): Promise<{ attempts: number; maxAttempts: number }> {
+  const s = sql();
+  const queueRows = await s<{ attempts: number; max_attempts: number }[]>`
+    SELECT attempts, max_attempts
+    FROM public.campaign_send_queue
+    WHERE campaign_contact_id = ${contactRowId}::uuid
+      AND company_id = ${companyId}::uuid
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  const prevAttempts = queueRows[0]?.attempts ?? 0;
+  const maxAttempts = queueRows[0]?.max_attempts ?? DEFAULT_MAX_SEND_ATTEMPTS;
+  const nextAttempts = prevAttempts + 1;
+
+  await s`
     UPDATE public.campaign_contacts
     SET status = 'pending',
-        updated_at = now()
-    WHERE campaign_id = ${campaignId}::uuid
+        error_code = ${classified.code},
+        error_message = ${classified.message}
+    WHERE id = ${contactRowId}::uuid
       AND company_id = ${companyId}::uuid
       AND status = 'processing'
       AND (provider_message_id IS NULL OR btrim(provider_message_id) = '')
-      AND updated_at < now() - (${staleSeconds}::text || ' seconds')::interval
-    RETURNING id
   `;
-  return rows.length;
+
+  await s`
+    UPDATE public.campaign_send_queue
+    SET status = 'pending',
+        attempts = ${nextAttempts},
+        locked_at = NULL,
+        locked_by = NULL,
+        scheduled_for = now() + (${TRANSIENT_RETRY_DELAY_MS}::text || ' milliseconds')::interval
+    WHERE campaign_contact_id = ${contactRowId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status IN ('pending', 'processing')
+  `;
+
+  await insertCampaignEvent(companyId, campaignId, "contact.retry_scheduled", null, {
+    code: classified.code,
+    attempts: nextAttempts,
+    max_attempts: maxAttempts,
+  }, contactRowId);
+
+  return { attempts: nextAttempts, maxAttempts };
+}
+
+async function handleContactPipelineError(
+  companyId: string,
+  campaignId: string,
+  contactRowId: string,
+  error: string,
+  opts?: { httpStatus?: number },
+): Promise<WorkerTickResult> {
+  const classified =
+    opts?.httpStatus != null
+      ? classifyCampaignSendError(error, { httpStatus: opts.httpStatus })
+      : classifyCampaignSendError(error);
+
+  if (classified.kind === "transient") {
+    const { attempts, maxAttempts } = await markContactRetryPending(
+      companyId,
+      campaignId,
+      contactRowId,
+      classified,
+    );
+    await syncCampaignContactCounters(campaignId, companyId);
+    if (attempts >= maxAttempts) {
+      await markContactFailed(companyId, contactRowId, classified.message);
+      await clearContactProcessingLock(companyId, contactRowId, "failed");
+      await syncCampaignContactCounters(campaignId, companyId);
+      await insertCampaignEvent(companyId, campaignId, "contact.failed", null, {
+        code: classified.code,
+        attempts,
+        max_attempts: maxAttempts,
+      }, contactRowId);
+      const diagnostics = await getCampaignWorkerDiagnostics(companyId, campaignId, "running");
+      const result: WorkerTickResult = {
+        ok: true,
+        action: "failed",
+        campaignId,
+        contactId: contactRowId,
+        delayMs: 500,
+        message: classified.message,
+      };
+      logCampaignWorkerTickResult(result, diagnostics);
+      return result;
+    }
+    const diagnostics = await getCampaignWorkerDiagnostics(companyId, campaignId, "running");
+    const result: WorkerTickResult = {
+      ok: true,
+      action: "idle",
+      campaignId,
+      contactId: contactRowId,
+      delayMs: TRANSIENT_RETRY_DELAY_MS,
+      message: `Retry agendado (${attempts}/${maxAttempts})`,
+    };
+    logCampaignWorkerTickResult(result, diagnostics);
+    return result;
+  }
+
+  await markContactFailed(companyId, contactRowId, classified.message);
+  await clearContactProcessingLock(companyId, contactRowId, "failed");
+  await syncCampaignContactCounters(campaignId, companyId);
+  await insertCampaignEvent(companyId, campaignId, "contact.failed", null, {
+    code: classified.code,
+    kind: classified.kind,
+  }, contactRowId);
+  const diagnostics = await getCampaignWorkerDiagnostics(companyId, campaignId, "running");
+  const result: WorkerTickResult = {
+    ok: true,
+    action: "failed",
+    campaignId,
+    contactId: contactRowId,
+    delayMs: 500,
+    message: classified.message,
+  };
+  logCampaignWorkerTickResult(result, diagnostics);
+  return result;
 }
 
 async function getCampaignWorkerCounts(
@@ -550,13 +853,22 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
   await ensureCrmSchema();
   await ensureCampaignsSchema();
 
+  const processingStaleMs = readProcessingStaleMs();
+
   const campaigns = await loadDueCampaigns();
   if (campaigns.length === 0) {
     console.log("[CAMPAIGN_WORKER_NO_DUE_CAMPAIGN]", {
       reason: "no_eligible_campaign",
       delayMs: 5_000,
     });
-    return { ok: true, action: "idle", delayMs: 5_000, message: "Nenhuma campanha devida" };
+    const result: WorkerTickResult = {
+      ok: true,
+      action: "idle",
+      delayMs: 5_000,
+      message: "Nenhuma campanha devida",
+    };
+    logCampaignWorkerTickResult(result);
+    return result;
   }
 
   const now = new Date();
@@ -633,77 +945,75 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       campaign.status = "running";
     }
 
-    await releaseStaleProcessingContacts(campaign.company_id, campaign.id, 30);
+    await releaseStaleProcessingContacts(
+      campaign.company_id,
+      campaign.id,
+      processingStaleMs,
+    );
 
     let contact = await claimNextPendingContact(campaign.company_id, campaign.id);
-    if (!contact) {
-      const released = await releaseStaleProcessingContacts(campaign.company_id, campaign.id, 15);
-      if (released > 0) {
-        contact = await claimNextPendingContact(campaign.company_id, campaign.id);
-      }
+    if (contact) {
+      await upsertContactProcessingLock(campaign.company_id, campaign.id, contact.id);
     }
 
     if (!contact) {
       // Sem pending reservável — verifica se ainda há processing (outro tick) ou finaliza.
-      let counts = await getCampaignWorkerCounts(campaign.company_id, campaign.id);
+      const counts = await getCampaignWorkerCounts(campaign.company_id, campaign.id);
+      const diagnostics = await getCampaignWorkerDiagnostics(
+        campaign.company_id,
+        campaign.id,
+        campaign.status,
+      );
 
-      if (counts.processing > 0 && counts.pending === 0) {
-        const released = await releaseStaleProcessingContacts(campaign.company_id, campaign.id, 0);
-        if (released > 0) {
-          contact = await claimNextPendingContact(campaign.company_id, campaign.id);
-          if (contact) {
-            counts = await getCampaignWorkerCounts(campaign.company_id, campaign.id);
-          }
-        }
-      }
+      console.log("[CAMPAIGN_WORKER_COMPLETION_CHECK]", {
+        ...diagnostics,
+        processingStaleMs,
+        reason: "no_claimable_contact",
+        note:
+          diagnostics.processingWithoutQueueLock > 0
+            ? "processing_sem_lock_na_fila_nao_recuperado_automaticamente"
+            : null,
+      });
 
-      if (!contact) {
-        console.log("[CAMPAIGN_WORKER_COMPLETION_CHECK]", {
+      if (counts.pending + counts.processing > 0) {
+        console.log("[CAMPAIGN_WORKER_NEXT_SCHEDULED]", {
           campaignId: campaign.id,
-          campaignStatus: campaign.status,
+          delayMs: 2_000,
+          reason: "waiting_processing_or_retry",
           pendingCount: counts.pending,
           processingCount: counts.processing,
-          sentCount: counts.sent,
-          reason: "no_claimable_contact",
+          oldestProcessingAgeMs: diagnostics.oldestProcessingAgeMs,
         });
-
-        if (counts.pending + counts.processing > 0) {
-          console.log("[CAMPAIGN_WORKER_NEXT_SCHEDULED]", {
-            campaignId: campaign.id,
-            delayMs: 2_000,
-            reason: "waiting_processing_or_retry",
-            pendingCount: counts.pending,
-            processingCount: counts.processing,
-          });
-          return {
-            ok: true,
-            action: "idle",
-            campaignId: campaign.id,
-            delayMs: 2_000,
-            message: "Contatos em processamento por outro tick",
-          };
-        }
-        await setCampaignStatus(campaign.company_id, campaign.id, "completed", { finished: true });
-        await syncCampaignContactCounters(campaign.id, campaign.company_id);
-        await insertCampaignEvent(campaign.company_id, campaign.id, "campaign.completed", null, {
-          sent_count: campaign.sent_count,
-        });
-        blockState.delete(campaign.id);
-        console.log("[CAMPAIGN_WORKER_COMPLETED]", {
-          campaignId: campaign.id,
-          sentCount: counts.sent,
-        });
-        return {
+        const result: WorkerTickResult = {
           ok: true,
-          action: "completed",
+          action: "idle",
           campaignId: campaign.id,
-          delayMs: 1_000,
-          message: "Campanha finalizada",
+          delayMs: 2_000,
+          message: "Contatos em processamento por outro tick",
         };
+        logCampaignWorkerTickResult(result, diagnostics);
+        return result;
       }
+      await setCampaignStatus(campaign.company_id, campaign.id, "completed", { finished: true });
+      await syncCampaignContactCounters(campaign.id, campaign.company_id);
+      await insertCampaignEvent(campaign.company_id, campaign.id, "campaign.completed", null, {
+        sent_count: campaign.sent_count,
+      });
+      blockState.delete(campaign.id);
+      console.log("[CAMPAIGN_WORKER_COMPLETED]", {
+        campaignId: campaign.id,
+        sentCount: counts.sent,
+      });
+      const result: WorkerTickResult = {
+        ok: true,
+        action: "completed",
+        campaignId: campaign.id,
+        delayMs: 1_000,
+        message: "Campanha finalizada",
+      };
+      logCampaignWorkerTickResult(result, diagnostics);
+      return result;
     }
-
-    if (!contact) continue;
 
     console.log("[CAMPAIGN_WORKER_CONTACT_SELECTED]", {
       campaignId: campaign.id,
@@ -925,7 +1235,8 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
             contactId: contact.id,
             wamid: providerId,
           });
-          return {
+          await clearContactProcessingLock(campaign.company_id, contact.id, "sent");
+          const dedupeResult: WorkerTickResult = {
             ok: true,
             action: "sent",
             campaignId: campaign.id,
@@ -933,25 +1244,13 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
             delayMs: 200,
             message: "Já enviado (dedupe)",
           };
+          logCampaignWorkerTickResult(
+            dedupeResult,
+            await getCampaignWorkerDiagnostics(campaign.company_id, campaign.id, campaign.status),
+          );
+          return dedupeResult;
         }
-        try {
-          const s = sql();
-          await s`
-            INSERT INTO public.campaign_send_queue (
-              campaign_id, campaign_contact_id, company_id,
-              scheduled_for, attempts, status
-            ) VALUES (
-              ${campaign.id}::uuid,
-              ${contact.id}::uuid,
-              ${campaign.company_id}::uuid,
-              now(),
-              1,
-              'sent'
-            )
-          `;
-        } catch (e) {
-          console.error("[CAMPAIGN_QUEUE_META_SAVE_FAIL]", e);
-        }
+        await clearContactProcessingLock(campaign.company_id, contact.id, "sent");
       }
     } else {
       const instance =
@@ -985,54 +1284,12 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
     const block = getBlockState(campaign.id);
 
     if (sendError) {
-      await markContactFailed(campaign.company_id, contact.id, sendError);
-      await syncCampaignContactCounters(campaign.id, campaign.company_id);
-      await insertCampaignEvent(
+      return handleContactPipelineError(
         campaign.company_id,
         campaign.id,
-        "contact.failed",
-        null,
-        { error: sendError, phone, provider: isMeta ? "meta" : "evolution" },
         contact.id,
+        sendError,
       );
-      if (isMeta) {
-        try {
-          const s = sql();
-          await s`
-            INSERT INTO public.campaign_send_queue (
-              campaign_id, campaign_contact_id, company_id,
-              scheduled_for, attempts, status
-            ) VALUES (
-              ${campaign.id}::uuid,
-              ${contact.id}::uuid,
-              ${campaign.company_id}::uuid,
-              now(),
-              1,
-              'failed'
-            )
-          `;
-        } catch {
-          // ignore
-        }
-      }
-      const pause = nextPauseAfterSend({
-        sentInCampaign: campaign.sent_count,
-        messagesInCurrentBlock: block.messagesInBlock,
-        blockSize: block.blockSize,
-      });
-      console.error("[CAMPAIGN_WORKER_SEND_FAIL]", {
-        campaignId: campaign.id,
-        contactId: contact.id,
-        error: sendError,
-      });
-      return {
-        ok: true,
-        action: "failed",
-        campaignId: campaign.id,
-        contactId: contact.id,
-        delayMs: Math.min(pause.delayMs, 15_000),
-        message: sendError,
-      };
     }
 
     // Sucesso: grava conversa/mensagem. Meta já está sent+wamid (sem reenvio se falhar aqui).
@@ -1077,6 +1334,7 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
     if (!isMeta) {
       await markContactSent(campaign.company_id, contact.id, providerId);
     }
+    await clearContactProcessingLock(campaign.company_id, contact.id, "sent");
     await syncCampaignContactCounters(campaign.id, campaign.company_id);
     await insertCampaignEvent(
       campaign.company_id,
@@ -1132,7 +1390,7 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       reason: pause.kind,
     });
 
-    return {
+    const sentResult: WorkerTickResult = {
       ok: true,
       action: "sent",
       campaignId: campaign.id,
@@ -1140,23 +1398,28 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       delayMs: pause.delayMs,
       message: isMeta ? "Template Meta enviado" : "Mensagem enviada",
     };
+    const sentDiagnostics = await getCampaignWorkerDiagnostics(
+      campaign.company_id,
+      campaign.id,
+      "running",
+    );
+    logCampaignWorkerTickResult(sentResult, sentDiagnostics);
+    return sentResult;
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
+      const classified = classifyThrownError(e);
       console.error("[CAMPAIGN_WORKER_CONTACT_ERROR]", {
         campaignId: campaign.id,
         contactId: contact.id,
-        error: errMsg,
+        code: classified.code,
+        kind: classified.kind,
+        error: classified.message,
       });
-      await markContactFailed(campaign.company_id, contact.id, errMsg);
-      await syncCampaignContactCounters(campaign.id, campaign.company_id);
-      return {
-        ok: true,
-        action: "failed",
-        campaignId: campaign.id,
-        contactId: contact.id,
-        delayMs: 500,
-        message: errMsg,
-      };
+      return handleContactPipelineError(
+        campaign.company_id,
+        campaign.id,
+        contact.id,
+        classified.message,
+      );
     }
   }
 

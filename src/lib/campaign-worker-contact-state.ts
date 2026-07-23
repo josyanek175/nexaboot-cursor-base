@@ -1,12 +1,27 @@
 /** Estado de contatos de campanha — lógica pura para testes do worker multi-tick. */
 
+import {
+  classifyCampaignSendError,
+  DEFAULT_MAX_SEND_ATTEMPTS,
+  DEFAULT_PROCESSING_STALE_MS,
+  TRANSIENT_RETRY_DELAY_MS,
+  type ClassifiedSendError,
+} from "./campaign-worker-processing.ts";
+
 export type SimContactStatus = "pending" | "processing" | "sent" | "failed" | "skipped";
 
 export type SimContact = {
   id: string;
   status: SimContactStatus;
   provider_message_id: string | null;
-  updated_at_ms: number;
+  /** Momento da reserva processing (equivale a campaign_send_queue.locked_at). */
+  processing_started_at_ms: number | null;
+  locked_by: string | null;
+  attempts: number;
+  error_code: string | null;
+  error_message: string | null;
+  /** Simula envio Meta ainda em voo (worker A). */
+  send_in_progress?: boolean;
 };
 
 export type SimCampaign = {
@@ -15,7 +30,24 @@ export type SimCampaign = {
   contacts: SimContact[];
 };
 
-export function claimNextPendingContactSim(contacts: SimContact[]): SimContact | null {
+export function makeSimContacts(count: number): SimContact[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `c${i + 1}`,
+    status: "pending" as const,
+    provider_message_id: null,
+    processing_started_at_ms: null,
+    locked_by: null,
+    attempts: 0,
+    error_code: null,
+    error_message: null,
+  }));
+}
+
+export function claimNextPendingContactSim(
+  contacts: SimContact[],
+  workerId = "worker-a",
+  nowMs = Date.now(),
+): SimContact | null {
   const row = contacts.find(
     (c) =>
       c.status === "pending" &&
@@ -23,23 +55,29 @@ export function claimNextPendingContactSim(contacts: SimContact[]): SimContact |
   );
   if (!row) return null;
   row.status = "processing";
-  row.updated_at_ms = Date.now();
+  row.processing_started_at_ms = nowMs;
+  row.locked_by = workerId;
   return row;
 }
 
-/** Libera reservas abandonadas (processing sem wamid). */
+/** Libera reservas abandonadas (processing sem wamid) após staleMs. */
 export function releaseStaleProcessingContactsSim(
   contacts: SimContact[],
   nowMs: number,
-  staleMs = 30_000,
+  staleMs = DEFAULT_PROCESSING_STALE_MS,
 ): number {
   let released = 0;
   for (const c of contacts) {
     if (c.status !== "processing") continue;
     if (c.provider_message_id && c.provider_message_id.trim()) continue;
-    if (nowMs - c.updated_at_ms < staleMs) continue;
+    if (c.send_in_progress) continue;
+    if (c.processing_started_at_ms == null) continue;
+    if (nowMs - c.processing_started_at_ms < staleMs) continue;
     c.status = "pending";
-    c.updated_at_ms = nowMs;
+    c.processing_started_at_ms = null;
+    c.locked_by = null;
+    c.error_code = "stale_processing_released";
+    c.error_message = "Reserva expirada — retentativa";
     released += 1;
   }
   return released;
@@ -56,14 +94,35 @@ export function shouldCompleteCampaignSim(contacts: SimContact[]): boolean {
   return countContactsByStatus(contacts, ["pending", "processing"]) === 0;
 }
 
+export function applyClassifiedContactError(
+  contact: SimContact,
+  classified: ClassifiedSendError,
+  maxAttempts = DEFAULT_MAX_SEND_ATTEMPTS,
+): "failed" | "retry_pending" {
+  contact.attempts += 1;
+  contact.error_code = classified.code;
+  contact.error_message = classified.message;
+  contact.processing_started_at_ms = null;
+  contact.locked_by = null;
+  contact.send_in_progress = false;
+
+  if (classified.kind === "transient" && contact.attempts < maxAttempts) {
+    contact.status = "pending";
+    return "retry_pending";
+  }
+  contact.status = "failed";
+  return "failed";
+}
+
 export type SimTickResult =
   | { action: "sent"; contactId: string; delayMs: number }
+  | { action: "failed"; contactId: string; delayMs: number; reason: string }
   | { action: "idle"; delayMs: number; reason: string }
   | { action: "completed"; delayMs: number };
 
 /**
- * Simula um tick: reserva 1 pending, envia, aplica pausa segura entre mensagens.
- * Contatos em processing abandonado (> staleMs) voltam a pending antes do claim.
+ * Simula um tick: stale opcional, reserva 1 pending, envia.
+ * staleMs undefined/0 = stale desabilitado (fluxo normal).
  */
 export function simulateWorkerTick(
   campaign: SimCampaign,
@@ -71,30 +130,24 @@ export function simulateWorkerTick(
     nowMs?: number;
     staleMs?: number;
     messagePauseMs?: number;
-    abandonCurrentProcessing?: boolean;
+    workerId?: string;
+    sendError?: string;
   },
 ): SimTickResult {
   const nowMs = opts?.nowMs ?? Date.now();
   const staleMs = opts?.staleMs ?? 0;
   const messagePauseMs = opts?.messagePauseMs ?? 100;
+  const workerId = opts?.workerId ?? "worker-a";
 
   if (campaign.status === "completed") {
     return { action: "idle", delayMs: 5_000, reason: "campaign_completed" };
   }
 
-  if (staleMs > 0) {
+  if (staleMs >= DEFAULT_PROCESSING_STALE_MS) {
     releaseStaleProcessingContactsSim(campaign.contacts, nowMs, staleMs);
   }
 
-  if (opts?.abandonCurrentProcessing) {
-    for (const c of campaign.contacts) {
-      if (c.status === "processing" && !c.provider_message_id?.trim()) {
-        c.status = "pending";
-      }
-    }
-  }
-
-  let contact = claimNextPendingContactSim(campaign.contacts);
+  let contact = claimNextPendingContactSim(campaign.contacts, workerId, nowMs);
   if (!contact) {
     const pendingLeft = countContactsByStatus(campaign.contacts, ["pending", "processing"]);
     if (pendingLeft > 0) {
@@ -104,9 +157,23 @@ export function simulateWorkerTick(
     return { action: "completed", delayMs: 1_000 };
   }
 
+  if (opts?.sendError) {
+    const outcome = applyClassifiedContactError(contact, classifyCampaignSendError(opts.sendError));
+    return {
+      action: "failed",
+      contactId: contact.id,
+      delayMs: outcome === "retry_pending" ? TRANSIENT_RETRY_DELAY_MS : 500,
+      reason: opts.sendError,
+    };
+  }
+
   contact.status = "sent";
   contact.provider_message_id = `wamid.${contact.id}`;
-  contact.updated_at_ms = nowMs;
+  contact.processing_started_at_ms = null;
+  contact.locked_by = null;
+  contact.send_in_progress = false;
+  contact.error_code = null;
+  contact.error_message = null;
 
   return { action: "sent", contactId: contact.id, delayMs: messagePauseMs };
 }
@@ -125,23 +192,19 @@ export function simulateMultiTickRun(opts: {
   const campaign: SimCampaign = {
     id: "camp-sim",
     status: "running",
-    contacts: Array.from({ length: opts.contactCount }, (_, i) => ({
-      id: `c${i + 1}`,
-      status: "pending" as const,
-      provider_message_id: null,
-      updated_at_ms: 0,
-    })),
+    contacts: makeSimContacts(opts.contactCount),
   };
 
   const ticks: SimTickResult[] = [];
   const sentIds: string[] = [];
   const maxTicks = opts.maxTicks ?? opts.contactCount + 5;
   let nowMs = 0;
+  const staleMs = opts.staleMs ?? 0;
 
   for (let i = 0; i < maxTicks; i += 1) {
     const result = simulateWorkerTick(campaign, {
       nowMs,
-      staleMs: opts.staleMs ?? 0,
+      staleMs,
       messagePauseMs: opts.messagePauseMs ?? 100,
     });
     ticks.push(result);
@@ -155,8 +218,105 @@ export function simulateMultiTickRun(opts: {
       nowMs += result.delayMs;
       continue;
     }
+    if (result.action === "failed") {
+      nowMs += result.delayMs;
+      continue;
+    }
     break;
   }
 
   return { campaign, ticks, sentIds };
 }
+
+/** Worker A reservou e envio Meta ainda em voo; worker B não deve recuperar nem reenviar. */
+export function simulateConcurrentWorkersRecent(): {
+  workerBClaimWhileSending: SimContact | null;
+  workerBStaleWhileSending: number;
+  finalStatus: SimContactStatus;
+  sendCount: number;
+} {
+  const contact: SimContact = {
+    id: "c1",
+    status: "pending",
+    provider_message_id: null,
+    processing_started_at_ms: null,
+    locked_by: null,
+    attempts: 0,
+    error_code: null,
+    error_message: null,
+  };
+
+  const workerA = claimNextPendingContactSim([contact], "worker-a", 0);
+  if (workerA) workerA.send_in_progress = true;
+
+  const workerBClaimWhileSending = claimNextPendingContactSim([contact], "worker-b", 30_000);
+  const workerBStaleWhileSending = releaseStaleProcessingContactsSim(
+    [contact],
+    30_000,
+    DEFAULT_PROCESSING_STALE_MS,
+  );
+
+  if (workerA) {
+    workerA.send_in_progress = false;
+    workerA.status = "sent";
+    workerA.provider_message_id = "wamid.c1";
+    workerA.processing_started_at_ms = null;
+    workerA.locked_by = null;
+  }
+
+  return {
+    workerBClaimWhileSending,
+    workerBStaleWhileSending,
+    finalStatus: contact.status,
+    sendCount: contact.provider_message_id ? 1 : 0,
+  };
+}
+
+/** Após stale timeout com reserva abandonada, worker B recupera e envia uma vez. */
+export function simulateStaleRecoveryAfterAbandonedClaim(): {
+  released: number;
+  workerBClaim: SimContact | null;
+  sendCount: number;
+  finalStatus: SimContactStatus;
+} {
+  const contact: SimContact = {
+    id: "c1",
+    status: "pending",
+    provider_message_id: null,
+    processing_started_at_ms: null,
+    locked_by: null,
+    attempts: 0,
+    error_code: null,
+    error_message: null,
+  };
+
+  claimNextPendingContactSim([contact], "worker-a", 0);
+  contact.send_in_progress = false;
+
+  const nowMs = DEFAULT_PROCESSING_STALE_MS + 5_000;
+  const released = releaseStaleProcessingContactsSim([contact], nowMs, DEFAULT_PROCESSING_STALE_MS);
+  const workerBClaim = claimNextPendingContactSim([contact], "worker-b", nowMs);
+  if (workerBClaim) {
+    workerBClaim.status = "sent";
+    workerBClaim.provider_message_id = "wamid.c1";
+    workerBClaim.processing_started_at_ms = null;
+    workerBClaim.locked_by = null;
+  }
+
+  return {
+    released,
+    workerBClaim,
+    sendCount: contact.provider_message_id ? 1 : 0,
+    finalStatus: contact.status,
+  };
+}
+
+/** @deprecated use simulateConcurrentWorkersRecent */
+export function simulateConcurrentWorkers(opts?: {
+  staleMs?: number;
+  advanceMs?: number;
+}): ReturnType<typeof simulateConcurrentWorkersRecent> {
+  return simulateConcurrentWorkersRecent();
+}
+
+export { DEFAULT_PROCESSING_STALE_MS, DEFAULT_MAX_SEND_ATTEMPTS, TRANSIENT_RETRY_DELAY_MS };
