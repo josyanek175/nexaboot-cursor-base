@@ -63,6 +63,13 @@ export const Route = createFileRoute("/api/campaigns/$id/start")({
               { status: 400 },
             );
           }
+          if (msg.startsWith("unconfirmed_evolution_variable_mapping:")) {
+            const variables = msg.slice("unconfirmed_evolution_variable_mapping:".length).split(",");
+            return Response.json(
+              { success: false, error: "unconfirmed_evolution_variable_mapping", variables },
+              { status: 400 },
+            );
+          }
           if (map[msg]) {
             return Response.json({ success: false, error: msg }, { status: map[msg] });
           }

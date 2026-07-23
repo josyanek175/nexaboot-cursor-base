@@ -11,24 +11,24 @@ const TimeStr = z
   .optional()
   .nullable();
 
+const EvolutionVariableSourceSchema = z.object({
+  source: z.enum([
+    "contact_field",
+    "contact_variable",
+    "spreadsheet_column",
+    "campaign_fixed",
+    "attendant",
+    "company",
+  ]),
+  field: z.string().optional(),
+  key: z.string().optional(),
+  column: z.string().optional(),
+  value: z.string().optional(),
+  confirmed: z.boolean().optional(),
+});
+
 const EvolutionVariableMappingsSchema = z
-  .record(
-    z.string(),
-    z.object({
-      source: z.enum([
-        "contact_field",
-        "contact_variable",
-        "spreadsheet_column",
-        "campaign_fixed",
-        "attendant",
-        "company",
-      ]),
-      field: z.string().optional(),
-      key: z.string().optional(),
-      column: z.string().optional(),
-      value: z.string().optional(),
-    }),
-  )
+  .record(z.string(), EvolutionVariableSourceSchema)
   .optional()
   .nullable();
 

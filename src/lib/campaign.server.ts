@@ -27,9 +27,11 @@ import {
   mergeEvolutionMappings,
   packEvolutionMappings,
   resolveAndRenderEvolutionTemplate,
-  unpackEvolutionMappings,
+  unpackEvolutionMappingsBlock,
+  validateEvolutionMappingsConfigured,
   type EvolutionVariableMappings,
 } from "@/lib/campaign-evolution-variables";
+import { buildCrmContactVariables } from "@/lib/campaign-spreadsheet";
 import {
   isCampaignManualPauseAllowed,
   isCampaignManualResumeAllowed,
@@ -128,6 +130,7 @@ function buildStoredVariableMappings(
   metaFlatMappings: Record<string, string>,
   evolutionMappings: EvolutionVariableMappings | null | undefined,
   existingRaw?: unknown,
+  opts?: { requiresConfirmation?: boolean },
 ): Record<string, unknown> {
   if (isMeta) return { ...metaFlatMappings };
   const base =
@@ -139,7 +142,12 @@ function buildStoredVariableMappings(
     if (k.startsWith("__")) continue;
     if (typeof v === "string" && v.trim()) mergedFlat[k] = v.trim();
   }
-  return packEvolutionMappings(mergedFlat, evolutionMappings ?? {});
+  const existingBlock = unpackEvolutionMappingsBlock(existingRaw);
+  const requiresConfirmation =
+    opts?.requiresConfirmation === true || existingBlock.requiresConfirmation;
+  return packEvolutionMappings(mergedFlat, evolutionMappings ?? {}, {
+    requiresConfirmation,
+  });
 }
 
 async function loadCompanyEvolutionContext(companyId: string): Promise<{
@@ -173,21 +181,17 @@ export function getEvolutionMappingsFromCampaign(
   messageTemplate?: string,
 ): EvolutionVariableMappings {
   const template = messageTemplate ?? campaign.message_text ?? "";
-  const stored = unpackEvolutionMappings(campaign.meta_variable_mappings);
-  if (Object.keys(stored).length > 0) {
-    return mergeEvolutionMappings(template, stored);
+  const block = unpackEvolutionMappingsBlock(campaign.meta_variable_mappings);
+  if (Object.keys(block.mappings).length > 0) {
+    return mergeEvolutionMappings(template, block.mappings);
   }
   return buildDefaultEvolutionMappings(template);
 }
 
-export function validateEvolutionMappingsConfigured(
-  messageTemplate: string,
-  mappings: EvolutionVariableMappings,
-): { ok: true } | { ok: false; missing: string[] } {
-  const vars = extractEvolutionTemplateVariables(messageTemplate);
-  const missing = vars.filter((v) => !mappings[v]);
-  if (missing.length > 0) return { ok: false, missing };
-  return { ok: true };
+export function getEvolutionMappingsRequireConfirmation(
+  campaign: Pick<CampaignRow, "meta_variable_mappings">,
+): boolean {
+  return unpackEvolutionMappingsBlock(campaign.meta_variable_mappings).requiresConfirmation;
 }
 
 async function resolveEvolutionCampaignMessageTemplate(
@@ -213,8 +217,14 @@ async function validateEvolutionCampaignBeforeSend(
   if (!template) throw new Error("missing_message");
 
   const mappings = getEvolutionMappingsFromCampaign(campaign, template);
-  const check = validateEvolutionMappingsConfigured(template, mappings);
+  const requiresConfirmation = getEvolutionMappingsRequireConfirmation(campaign);
+  const check = validateEvolutionMappingsConfigured(template, mappings, {
+    requiresConfirmation,
+  });
   if (!check.ok) {
+    if (check.unconfirmed.length > 0) {
+      throw new Error(`unconfirmed_evolution_variable_mapping:${check.unconfirmed.join(",")}`);
+    }
     throw new Error(`missing_evolution_variable_mapping:${check.missing.join(",")}`);
   }
 }
@@ -1092,6 +1102,12 @@ export async function createCampaign(
   }
 
   const messageTemplate = data.message_text?.trim() ?? "";
+  const templateVarCount = extractEvolutionTemplateVariables(messageTemplate).length;
+  let inheritMappingsRaw: unknown = undefined;
+  if (data.source_campaign_id) {
+    const src = await getCampaignById(companyId, data.source_campaign_id);
+    inheritMappingsRaw = src?.meta_variable_mappings;
+  }
   const evolutionMappings =
     !isMeta && data.evolution_variable_mappings !== undefined
       ? data.evolution_variable_mappings ?? {}
@@ -1102,6 +1118,8 @@ export async function createCampaign(
     isMeta,
     metaFields.meta_variable_mappings,
     evolutionMappings,
+    inheritMappingsRaw,
+    { requiresConfirmation: !isMeta && templateVarCount > 0 },
   );
 
   const rows = await sql<CampaignRow[]>`
@@ -1241,16 +1259,19 @@ export async function updateCampaign(
     throw new Error("missing_meta_template");
   }
 
+  const nextMessageText = nextMessage;
+  const templateVarCount = extractEvolutionTemplateVariables(nextMessageText?.trim() ?? "").length;
+
   const evolutionMappings =
     !isMeta && data.evolution_variable_mappings !== undefined
       ? data.evolution_variable_mappings ?? {}
       : !isMeta
         ? getEvolutionMappingsFromCampaign(
             {
-              message_text: nextMessage,
+              message_text: nextMessageText,
               meta_variable_mappings: existing.meta_variable_mappings,
             },
-            nextMessage?.trim() ?? "",
+            nextMessageText?.trim() ?? "",
           )
         : {};
   const storedMappings = buildStoredVariableMappings(
@@ -1258,6 +1279,7 @@ export async function updateCampaign(
     metaFields.meta_variable_mappings,
     evolutionMappings,
     existing.meta_variable_mappings,
+    { requiresConfirmation: !isMeta && templateVarCount > 0 },
   );
 
   const rows = await sql<CampaignRow[]>`
@@ -1479,9 +1501,11 @@ export async function addCampaignContacts(
       name: string | null;
       status: string | null;
       tags: string[] | null;
+      email: string | null;
+      reference: string | null;
     }[]
   >`
-    SELECT id, phone, name, status, tags
+    SELECT id, phone, name, status, tags, email, reference
     FROM public.contacts
     WHERE company_id = ${companyId}::uuid
       AND id = ANY(${contactIds}::uuid[])
@@ -1505,13 +1529,19 @@ export async function addCampaignContacts(
     }
 
     try {
+      const contactVariables = buildCrmContactVariables({
+        email: ct.email,
+        reference: ct.reference,
+        tags: ct.tags,
+      });
       // Duplicado na mesma campanha: ON CONFLICT (campaign_id, phone) ignora.
       const inserted = await sql<{ id: string }[]>`
         INSERT INTO public.campaign_contacts
-          (campaign_id, company_id, contact_id, phone, name, status, skip_reason)
+          (campaign_id, company_id, contact_id, phone, name, variables, status, skip_reason)
         VALUES (
           ${campaignId}::uuid, ${companyId}::uuid, ${ct.id}::uuid,
-          ${phone}, ${ct.name}, ${rowStatus}, ${skipReason}
+          ${phone}, ${ct.name}, ${JSON.stringify(contactVariables)}::jsonb,
+          ${rowStatus}, ${skipReason}
         )
         ON CONFLICT (campaign_id, phone) DO NOTHING
         RETURNING id

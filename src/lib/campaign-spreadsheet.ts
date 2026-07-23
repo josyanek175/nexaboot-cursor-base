@@ -74,6 +74,32 @@ export function parseSpreadsheetRow(
   return { index, name, phone: phoneRaw, variables, tagKeys };
 }
 
+/** Copia campos do CRM para campaign_contacts.variables (isolado por importação). */
+export function buildCrmContactVariables(contact: {
+  email?: string | null;
+  reference?: string | null;
+  tags?: string[] | null;
+}): Record<string, string> {
+  const variables: Record<string, string> = {};
+  const email = contact.email?.trim();
+  if (email) variables.email = email;
+
+  const reference = contact.reference?.trim();
+  if (reference) {
+    variables.reference = reference;
+    variables.referencia = reference;
+  }
+
+  for (const tag of contact.tags ?? []) {
+    const label = String(tag).trim();
+    if (!label) continue;
+    const key = normalizeTagKey(label);
+    if (key) variables[key] = label;
+  }
+
+  return variables;
+}
+
 /** Parse texto colado (CSV ou TSV). */
 export function parsePastedText(text: string): Record<string, unknown>[] {
   const lines = text

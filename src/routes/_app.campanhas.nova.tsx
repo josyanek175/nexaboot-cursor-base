@@ -15,6 +15,7 @@ import {
   extractEvolutionTemplateVariables,
   mergeEvolutionMappings,
   previewEvolutionTemplateWithMappings,
+  listUnconfirmedEvolutionVariables,
   EVOLUTION_VARIABLE_SUGGESTIONS,
   type EvolutionVariableMappings,
 } from "@/lib/campaign-evolution-variables";
@@ -426,10 +427,13 @@ function NovaCampanhaPage() {
           toast.error("Informe a mensagem modelo");
           return;
         } else if (evolutionTemplateVars.length > 0) {
-          const missing = evolutionTemplateVars.filter((v) => !evolutionVariableMappings[v]);
-          if (missing.length > 0) {
+          const unconfirmed = listUnconfirmedEvolutionVariables(
+            messageText,
+            evolutionVariableMappings,
+          );
+          if (unconfirmed.length > 0) {
             toast.error(
-              `Configure a origem das variáveis: ${missing.map((v) => `{${v}}`).join(", ")}`,
+              `Confirme a origem das variáveis: ${unconfirmed.map((v) => `{${v}}`).join(", ")}`,
             );
             return;
           }
@@ -481,6 +485,8 @@ function NovaCampanhaPage() {
           missing_window: "Informe horário inicial e final.",
           missing_evolution_variable_mapping:
             "Configure a origem de todas as variáveis do modelo antes de agendar.",
+          unconfirmed_evolution_variable_mapping:
+            "Confirme a origem de todas as variáveis do modelo antes de agendar.",
         };
         throw new Error(map[j.error ?? ""] ?? j.error ?? `HTTP ${res.status}`);
       }

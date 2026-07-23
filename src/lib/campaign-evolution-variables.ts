@@ -29,13 +29,18 @@ export type EvolutionVariableSourceType =
   | "attendant"
   | "company";
 
+type EvolutionMappingConfirmed = { confirmed?: boolean };
+
 export type EvolutionVariableSource =
-  | { source: "contact_field"; field: "name" | "phone" }
-  | { source: "contact_variable"; key: string }
-  | { source: "spreadsheet_column"; column: string }
-  | { source: "campaign_fixed"; value: string }
-  | { source: "attendant"; field: "name" }
-  | { source: "company"; field: "name" | "trade_name" | "phone" };
+  | ({ source: "contact_field"; field: "name" | "phone" } & EvolutionMappingConfirmed)
+  | ({ source: "contact_variable"; key: string } & EvolutionMappingConfirmed)
+  | ({ source: "spreadsheet_column"; column: string } & EvolutionMappingConfirmed)
+  | ({ source: "campaign_fixed"; value: string } & EvolutionMappingConfirmed)
+  | ({ source: "attendant"; field: "name" } & EvolutionMappingConfirmed)
+  | ({ source: "company"; field: "name" | "trade_name" | "phone" } & EvolutionMappingConfirmed);
+
+/** Chave reservada dentro do bloco __evolution_v2 — exige confirmação explícita. */
+export const EVOLUTION_REQUIRES_CONFIRMATION_KEY = "_requires_confirmation";
 
 export type EvolutionVariableMappings = Record<string, EvolutionVariableSource>;
 
@@ -67,11 +72,23 @@ export function extractEvolutionTemplateVariables(template: string): string[] {
 
 export function suggestEvolutionMapping(varName: string): EvolutionVariableSource {
   const v = varName.toLowerCase();
-  if (v === "nome" || v === "name") return { source: "contact_field", field: "name" };
-  if (v === "telefone" || v === "phone") return { source: "contact_field", field: "phone" };
-  if (v === "nome_atendente") return { source: "attendant", field: "name" };
-  if (v === "empresa" || v === "nome_empresa") return { source: "company", field: "name" };
-  return { source: "spreadsheet_column", column: v };
+  if (v === "nome" || v === "name") {
+    return { source: "contact_field", field: "name", confirmed: false };
+  }
+  if (v === "telefone" || v === "phone") {
+    return { source: "contact_field", field: "phone", confirmed: false };
+  }
+  if (v === "nome_atendente") return { source: "attendant", field: "name", confirmed: false };
+  if (v === "empresa" || v === "nome_empresa") {
+    return { source: "company", field: "name", confirmed: false };
+  }
+  return { source: "spreadsheet_column", column: v, confirmed: false };
+}
+
+export function markEvolutionMappingConfirmed(
+  mapping: EvolutionVariableSource,
+): EvolutionVariableSource {
+  return { ...mapping, confirmed: true };
 }
 
 export function buildDefaultEvolutionMappings(template: string): EvolutionVariableMappings {
@@ -85,52 +102,82 @@ function parseEvolutionSource(raw: unknown): EvolutionVariableSource | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   const source = String(o.source ?? "") as EvolutionVariableSourceType;
+  const confirmed = o.confirmed === true ? true : undefined;
+  let parsed: EvolutionVariableSource | null = null;
   switch (source) {
     case "contact_field":
-      if (o.field === "name" || o.field === "phone") return { source, field: o.field };
-      return null;
+      if (o.field === "name" || o.field === "phone") parsed = { source, field: o.field };
+      break;
     case "contact_variable":
       if (typeof o.key === "string" && o.key.trim()) {
-        return { source, key: normalizeTagKey(o.key) || o.key.trim().toLowerCase() };
+        parsed = { source, key: normalizeTagKey(o.key) || o.key.trim().toLowerCase() };
       }
-      return null;
+      break;
     case "spreadsheet_column":
       if (typeof o.column === "string" && o.column.trim()) {
-        return { source, column: normalizeTagKey(o.column) || o.column.trim().toLowerCase() };
+        parsed = { source, column: normalizeTagKey(o.column) || o.column.trim().toLowerCase() };
       }
-      return null;
+      break;
     case "campaign_fixed":
-      if (typeof o.value === "string") return { source, value: o.value };
-      return null;
+      if (typeof o.value === "string") parsed = { source, value: o.value };
+      break;
     case "attendant":
-      if (o.field === "name") return { source, field: "name" };
-      return null;
+      if (o.field === "name") parsed = { source, field: "name" };
+      break;
     case "company":
       if (o.field === "name" || o.field === "trade_name" || o.field === "phone") {
-        return { source, field: o.field };
+        parsed = { source, field: o.field };
       }
-      return null;
+      break;
     default:
-      return null;
+      break;
   }
+  if (!parsed) return null;
+  if (confirmed) return { ...parsed, confirmed: true };
+  return parsed;
 }
 
-export function unpackEvolutionMappings(raw: unknown): EvolutionVariableMappings {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+export type EvolutionMappingsBlock = {
+  mappings: EvolutionVariableMappings;
+  requiresConfirmation: boolean;
+};
+
+export function unpackEvolutionMappingsBlock(raw: unknown): EvolutionMappingsBlock {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { mappings: {}, requiresConfirmation: false };
+  }
   const root = raw as Record<string, unknown>;
   const block = root[EVOLUTION_MAPPINGS_JSON_KEY];
-  if (!block || typeof block !== "object" || Array.isArray(block)) return {};
+  if (!block || typeof block !== "object" || Array.isArray(block)) {
+    return { mappings: {}, requiresConfirmation: false };
+  }
+  const blockObj = block as Record<string, unknown>;
+  const requiresConfirmation = blockObj[EVOLUTION_REQUIRES_CONFIRMATION_KEY] === true;
   const out: EvolutionVariableMappings = {};
-  for (const [k, v] of Object.entries(block as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(blockObj)) {
+    if (k.startsWith("_")) continue;
     const parsed = parseEvolutionSource(v);
     if (parsed) out[k.toLowerCase()] = parsed;
   }
-  return out;
+  return { mappings: out, requiresConfirmation };
 }
+
+export function unpackEvolutionMappings(raw: unknown): EvolutionVariableMappings {
+  return unpackEvolutionMappingsBlock(raw).mappings;
+}
+
+export function evolutionMappingsRequireConfirmation(raw: unknown): boolean {
+  return unpackEvolutionMappingsBlock(raw).requiresConfirmation;
+}
+
+export type PackEvolutionMappingsOptions = {
+  requiresConfirmation?: boolean;
+};
 
 export function packEvolutionMappings(
   metaMappings: Record<string, unknown> | null | undefined,
   evolutionMappings: EvolutionVariableMappings,
+  opts?: PackEvolutionMappingsOptions,
 ): Record<string, unknown> {
   const base =
     metaMappings && typeof metaMappings === "object" && !Array.isArray(metaMappings)
@@ -139,7 +186,11 @@ export function packEvolutionMappings(
   for (const [k, v] of Object.entries(base)) {
     if (typeof v !== "string") delete base[k];
   }
-  base[EVOLUTION_MAPPINGS_JSON_KEY] = evolutionMappings;
+  const block: Record<string, unknown> = { ...evolutionMappings };
+  if (opts?.requiresConfirmation) {
+    block[EVOLUTION_REQUIRES_CONFIRMATION_KEY] = true;
+  }
+  base[EVOLUTION_MAPPINGS_JSON_KEY] = block;
   return base;
 }
 
@@ -161,6 +212,29 @@ export function listUnconfiguredEvolutionVariables(
 ): string[] {
   const vars = extractEvolutionTemplateVariables(template);
   return vars.filter((v) => !mappings[v]);
+}
+
+export function listUnconfirmedEvolutionVariables(
+  template: string,
+  mappings: EvolutionVariableMappings,
+): string[] {
+  const vars = extractEvolutionTemplateVariables(template);
+  return vars.filter((v) => mappings[v]?.confirmed !== true);
+}
+
+export function validateEvolutionMappingsConfigured(
+  messageTemplate: string,
+  mappings: EvolutionVariableMappings,
+  opts?: { requiresConfirmation?: boolean },
+): { ok: true } | { ok: false; missing: string[]; unconfirmed: string[] } {
+  const vars = extractEvolutionTemplateVariables(messageTemplate);
+  const missing = vars.filter((v) => !mappings[v]);
+  const unconfirmed =
+    opts?.requiresConfirmation === true ? listUnconfirmedEvolutionVariables(messageTemplate, mappings) : [];
+  if (missing.length > 0 || unconfirmed.length > 0) {
+    return { ok: false, missing, unconfirmed };
+  }
+  return { ok: true };
 }
 
 export function resolveEvolutionVariableValue(
@@ -291,7 +365,7 @@ export function buildSamplePreviewContext(
 
 export const EVOLUTION_SOURCE_LABELS: Record<EvolutionVariableSourceType, string> = {
   contact_field: "Campo do contato",
-  contact_variable: "Campo personalizado do contato",
+  contact_variable: "Campo personalizado do contato (CRM ou importado)",
   spreadsheet_column: "Coluna da planilha importada",
   campaign_fixed: "Valor fixo da campanha",
   attendant: "Dados do atendente",
