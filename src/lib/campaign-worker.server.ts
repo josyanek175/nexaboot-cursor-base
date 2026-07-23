@@ -23,6 +23,7 @@ import { sendMetaTemplateMessage } from "@/lib/meta-send-message.server";
 import {
   assertApprovedMetaTemplate,
   buildMetaTemplateBodyParameters,
+  renderMetaTemplateFromComponents,
 } from "@/lib/meta-message-templates.server";
 
 const SYSTEM_SENDER_NAME = "Disparo Automático";
@@ -216,33 +217,75 @@ async function saveOutboundCampaignMessage(opts: {
   providerId: string | null;
   campaignId: string;
   campaignContactId: string;
+  metaTemplate?: {
+    template_name: string;
+    template_language: string;
+    template_category: string | null;
+    template_components: unknown;
+    body_parameters: string[];
+    template_buttons: string[];
+    provider_message_id: string | null;
+    wamid: string | null;
+  };
 }): Promise<void> {
   const s = sql();
-  const payload = {
+  const payload: Record<string, unknown> = {
     origin: "CAMPANHA",
     campaign_id: opts.campaignId,
     campaign_contact_id: opts.campaignContactId,
     sender: SYSTEM_SENDER_NAME,
   };
-  await s`
-    INSERT INTO public.messages (
-      conversation_id, external_id, external_message_id, direction,
-      message_type, message_text, from_me, status,
-      sent_by_user_id, sent_by_name, raw_payload
-    ) VALUES (
-      ${opts.conversationId}::uuid,
-      ${opts.providerId},
-      ${opts.providerId},
-      'out',
-      'text',
-      ${opts.text},
-      true,
-      'sent',
-      NULL,
-      ${SYSTEM_SENDER_NAME},
-      ${JSON.stringify(payload)}::jsonb
-    )
-  `;
+  if (opts.metaTemplate) {
+    payload.meta_template = opts.metaTemplate;
+  }
+
+  if (opts.providerId) {
+    await s`
+      INSERT INTO public.messages (
+        conversation_id, external_id, external_message_id, direction,
+        message_type, message_text, from_me, status,
+        sent_by_user_id, sent_by_name, raw_payload
+      ) VALUES (
+        ${opts.conversationId}::uuid,
+        ${opts.providerId},
+        ${opts.providerId},
+        'out',
+        'text',
+        ${opts.text},
+        true,
+        'sent',
+        NULL,
+        ${SYSTEM_SENDER_NAME},
+        ${JSON.stringify(payload)}::jsonb
+      )
+      ON CONFLICT (conversation_id, external_message_id)
+        WHERE external_message_id IS NOT NULL
+      DO UPDATE SET
+        message_text = EXCLUDED.message_text,
+        raw_payload = EXCLUDED.raw_payload,
+        status = EXCLUDED.status
+    `;
+  } else {
+    await s`
+      INSERT INTO public.messages (
+        conversation_id, external_id, external_message_id, direction,
+        message_type, message_text, from_me, status,
+        sent_by_user_id, sent_by_name, raw_payload
+      ) VALUES (
+        ${opts.conversationId}::uuid,
+        ${opts.providerId},
+        ${opts.providerId},
+        'out',
+        'text',
+        ${opts.text},
+        true,
+        'sent',
+        NULL,
+        ${SYSTEM_SENDER_NAME},
+        ${JSON.stringify(payload)}::jsonb
+      )
+    `;
+  }
   await s`
     UPDATE public.conversations
     SET last_message = ${opts.text},
@@ -624,6 +667,16 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
     // Prepara conteúdo conforme o tipo de canal.
     let text: string | null = null;
     let bodyParams: string[] = [];
+    let metaTemplatePersist:
+      | {
+          template_name: string;
+          template_language: string;
+          template_category: string | null;
+          template_components: unknown;
+          body_parameters: string[];
+          template_buttons: string[];
+        }
+      | undefined;
 
     if (isMeta) {
       const templateName = campaign.meta_template_name?.trim();
@@ -693,9 +746,19 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
         };
       }
       bodyParams = built.parameters;
-      text =
-        `[Template Meta: ${approved.row.template_name}/${approved.row.language_code}] ` +
-        bodyParams.join(" | ");
+      const rendered = renderMetaTemplateFromComponents({
+        components: approved.row.components,
+        parameters: bodyParams,
+      });
+      text = rendered.body;
+      metaTemplatePersist = {
+        template_name: approved.row.template_name,
+        template_language: approved.row.language_code,
+        template_category: approved.row.category,
+        template_components: approved.row.components,
+        body_parameters: bodyParams,
+        template_buttons: rendered.buttons,
+      };
     } else {
       text = contact.rendered_message;
       if (!text) {
@@ -893,6 +956,13 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
         providerId,
         campaignId: campaign.id,
         campaignContactId: contact.id,
+        metaTemplate: metaTemplatePersist
+          ? {
+              ...metaTemplatePersist,
+              provider_message_id: providerId,
+              wamid: providerId,
+            }
+          : undefined,
       });
     } catch (e) {
       console.error("[CAMPAIGN_WORKER_SAVE_FAIL]", e);

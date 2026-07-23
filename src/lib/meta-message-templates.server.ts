@@ -3,6 +3,19 @@
 
 import { sql, ensureCampaignsSchema, ensureCrmSchema } from "@/lib/pg.server";
 import { loadMetaAccessToken } from "@/lib/meta-access-token.server";
+import {
+  extractBodyText,
+  extractButtons,
+  extractTemplateVariables,
+  renderMetaTemplateFromComponents,
+  renderMetaTemplateMessage,
+} from "@/lib/meta-template-render";
+
+export {
+  extractTemplateVariables,
+  renderMetaTemplateFromComponents,
+  renderMetaTemplateMessage,
+} from "@/lib/meta-template-render";
 
 export type MetaMessageTemplateRow = {
   id: string;
@@ -46,47 +59,6 @@ type GraphTemplate = {
 
 function graphVersion(): string {
   return process.env.META_GRAPH_API_VERSION?.trim() || "v25.0";
-}
-
-function extractBodyText(components: unknown): string | null {
-  if (!Array.isArray(components)) return null;
-  for (const c of components) {
-    if (!c || typeof c !== "object") continue;
-    const row = c as Record<string, unknown>;
-    if (String(row.type ?? "").toUpperCase() !== "BODY") continue;
-    const text = row.text;
-    return typeof text === "string" ? text : null;
-  }
-  return null;
-}
-
-function extractButtons(components: unknown): string[] {
-  if (!Array.isArray(components)) return [];
-  const out: string[] = [];
-  for (const c of components) {
-    if (!c || typeof c !== "object") continue;
-    const row = c as Record<string, unknown>;
-    if (String(row.type ?? "").toUpperCase() !== "BUTTONS") continue;
-    const buttons = row.buttons;
-    if (!Array.isArray(buttons)) continue;
-    for (const b of buttons) {
-      if (!b || typeof b !== "object") continue;
-      const btn = b as Record<string, unknown>;
-      const text = typeof btn.text === "string" ? btn.text : null;
-      if (text) out.push(text);
-    }
-  }
-  return out;
-}
-
-/** Extrai placeholders {{1}}, {{2}}, ... do corpo do template. */
-export function extractTemplateVariables(components: unknown): string[] {
-  const body = extractBodyText(components) ?? "";
-  const found = new Set<string>();
-  for (const m of body.matchAll(/\{\{(\d+)\}\}/g)) {
-    found.add(m[1]);
-  }
-  return [...found].sort((a, b) => Number(a) - Number(b));
 }
 
 export function toMetaTemplatePublic(row: MetaMessageTemplateRow): MetaTemplatePublic {

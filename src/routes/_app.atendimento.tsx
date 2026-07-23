@@ -22,6 +22,10 @@ import {
   type SharedContact,
 } from "@/lib/whatsapp-contact-message";
 import { formatChannelPhoneForDisplay, formatPhoneDisplayLoose } from "@/lib/phone";
+import {
+  isLegacyMetaTemplatePlaceholder,
+  renderMetaTemplateFromComponents,
+} from "@/lib/meta-template-render";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
@@ -102,6 +106,8 @@ interface Message {
   reactionEmoji?: string;
   /** Contatos extraídos de contactMessage / contactsArrayMessage / vCard. */
   sharedContacts?: SharedContact[];
+  /** Botões de template Meta (campanha), exibidos abaixo do corpo. */
+  templateButtons?: string[];
 }
 
 // ───────── Utilitários de formatação ─────────
@@ -358,8 +364,32 @@ function transformApiMessage(m: any, conversationId: string): Message {
   const rpObj = typeof rp === "object" && rp ? (rp as any) : {};
   const dataObj = rpObj.data ?? {};
 
+  let templateButtons: string[] | undefined;
+  let displayText = text != null ? String(text) : "";
+  const metaTpl = rpObj.meta_template;
+  if (metaTpl && typeof metaTpl === "object") {
+    const mt = metaTpl as Record<string, unknown>;
+    const params = Array.isArray(mt.body_parameters)
+      ? mt.body_parameters.map((p) => String(p))
+      : [];
+    const components = mt.template_components;
+    if (Array.isArray(mt.template_buttons) && mt.template_buttons.length > 0) {
+      templateButtons = mt.template_buttons.map((b) => String(b));
+    }
+    if (components && (isLegacyMetaTemplatePlaceholder(displayText) || !displayText.trim())) {
+      const rendered = renderMetaTemplateFromComponents({ components, parameters: params });
+      if (rendered.body.trim()) displayText = rendered.body;
+      if (!templateButtons?.length && rendered.buttons.length > 0) {
+        templateButtons = rendered.buttons;
+      }
+    } else if (!templateButtons?.length && components) {
+      const rendered = renderMetaTemplateFromComponents({ components, parameters: params });
+      if (rendered.buttons.length > 0) templateButtons = rendered.buttons;
+    }
+  }
+
   // Contatos: tipo novo (contact/contacts) ou legado unsupported com vCard no raw_payload.
-  const textStr = text != null ? String(text) : "";
+  const textStr = displayText;
   const looksUnsupported =
     /\[mensagem não suportada\]/i.test(textStr) ||
     rawType === "unsupported" ||
@@ -442,6 +472,7 @@ function transformApiMessage(m: any, conversationId: string): Message {
     mediaError,
     reactionEmoji: m.reaction_emoji ?? m.reactionEmoji ?? undefined,
     sharedContacts,
+    templateButtons,
   };
 }
 
@@ -1936,6 +1967,18 @@ function BubbleInner({ m }: { m: Message }) {
           captionText && <div className="whitespace-pre-wrap">{captionText}</div>
         ) : (
           m.text && <div className="whitespace-pre-wrap">{m.text}</div>
+        )}
+        {m.templateButtons && m.templateButtons.length > 0 && (
+          <div className="mt-2 space-y-1 border-t border-black/10 pt-2">
+            {m.templateButtons.map((label) => (
+              <div
+                key={`${m.id}-btn-${label}`}
+                className="rounded-md border border-black/10 bg-background/80 px-2.5 py-1.5 text-center text-xs font-medium text-primary"
+              >
+                {label}
+              </div>
+            ))}
+          </div>
         )}
         <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
           {out && m.authorName && <span className="font-medium">{m.authorName}</span>}
