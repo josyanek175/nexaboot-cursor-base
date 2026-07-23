@@ -24,7 +24,8 @@ import {
 import { formatChannelPhoneForDisplay, formatPhoneDisplayLoose } from "@/lib/phone";
 import {
   isLegacyMetaTemplatePlaceholder,
-  renderMetaTemplateFromComponents,
+  parseMessageRawPayload,
+  resolveMetaTemplateDisplayForMessage,
 } from "@/lib/meta-template-render";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
@@ -360,41 +361,33 @@ function transformApiMessage(m: any, conversationId: string): Message {
   const text = m.message_text ?? m.text ?? m.body ?? m.content ?? m.message ?? undefined;
   const caption = m.media_caption ?? undefined;
 
-  const rp = m.raw_payload ?? m.rawPayload;
-  const rpObj = typeof rp === "object" && rp ? (rp as any) : {};
-  const dataObj = rpObj.data ?? {};
+  const rpObj = parseMessageRawPayload(m.raw_payload ?? m.rawPayload);
 
   let templateButtons: string[] | undefined;
   let displayText = text != null ? String(text) : "";
   const metaTpl = rpObj.meta_template;
   if (metaTpl && typeof metaTpl === "object") {
-    const mt = metaTpl as Record<string, unknown>;
-    const params = Array.isArray(mt.body_parameters)
-      ? mt.body_parameters.map((p) => String(p))
-      : [];
-    const components = mt.template_components;
-    if (Array.isArray(mt.template_buttons) && mt.template_buttons.length > 0) {
-      templateButtons = mt.template_buttons.map((b) => String(b));
+    const resolved = resolveMetaTemplateDisplayForMessage({
+      messageText: displayText,
+      metaTemplate: metaTpl as Record<string, unknown>,
+    });
+    if (resolved.body.trim()) {
+      displayText = resolved.body;
     }
-    if (components && (isLegacyMetaTemplatePlaceholder(displayText) || !displayText.trim())) {
-      const rendered = renderMetaTemplateFromComponents({ components, parameters: params });
-      if (rendered.body.trim()) displayText = rendered.body;
-      if (!templateButtons?.length && rendered.buttons.length > 0) {
-        templateButtons = rendered.buttons;
-      }
-    } else if (!templateButtons?.length && components) {
-      const rendered = renderMetaTemplateFromComponents({ components, parameters: params });
-      if (rendered.buttons.length > 0) templateButtons = rendered.buttons;
+    if (resolved.buttons.length > 0) {
+      templateButtons = resolved.buttons;
     }
+  } else if (isLegacyMetaTemplatePlaceholder(displayText)) {
+    // Legado sem metadata — mantém placeholder visível.
   }
 
-  // Contatos: tipo novo (contact/contacts) ou legado unsupported com vCard no raw_payload.
+  const dataObj = (rpObj.data ?? {}) as Record<string, unknown>;
   const textStr = displayText;
   const looksUnsupported =
     /\[mensagem não suportada\]/i.test(textStr) ||
     rawType === "unsupported" ||
     rawType === "unknown";
-  const fromPayload = hasContactPayload(rp);
+  const fromPayload = hasContactPayload(rpObj);
   let type: MessageType =
     rawType === "image" ||
     rawType === "audio" ||
@@ -413,18 +406,18 @@ function transformApiMessage(m: any, conversationId: string): Message {
   let sharedContacts: SharedContact[] | undefined;
 
   if (type === "contact" || type === "contacts") {
-    sharedContacts = extractSharedContacts(rp);
+    sharedContacts = extractSharedContacts(rpObj);
   } else if (fromPayload) {
     // Legado: message_type text/unsupported com contactMessage no raw_payload.
-    type = isContactsArrayPayload(rp) ? "contacts" : "contact";
-    sharedContacts = extractSharedContacts(rp);
+    type = isContactsArrayPayload(rpObj) ? "contacts" : "contact";
+    sharedContacts = extractSharedContacts(rpObj);
   } else if (looksUnsupported && /BEGIN:VCARD/i.test(textStr)) {
     type = "contact";
     sharedContacts = extractSharedContacts(textStr);
   } else if (/contato compartilhado/i.test(textStr) && !mediaType) {
     // Texto já normalizado no banco, sem tipo contact.
     type = /contatos compartilhados/i.test(textStr) ? "contacts" : "contact";
-    sharedContacts = extractSharedContacts(rp);
+    sharedContacts = extractSharedContacts(rpObj);
   }
 
   const placeholder =
