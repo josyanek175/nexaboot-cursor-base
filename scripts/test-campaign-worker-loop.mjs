@@ -141,5 +141,77 @@ assert(
   assert("WORKER_INTERVAL_MS alias", cfg.intervalMs === 7777);
 }
 
+// loop continua após action=sent com delayMs longo (pausa segura)
+{
+  let ticks = 0;
+  const delays = [];
+  const fetchFn = async () => {
+    ticks += 1;
+    if (ticks === 1) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            action: "sent",
+            delayMs: 11_008,
+            processed: 1,
+            sent: 1,
+          }),
+      };
+    }
+    if (ticks === 2) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            action: "sent",
+            delayMs: 200,
+            processed: 1,
+            sent: 1,
+          }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          action: "idle",
+          delayMs: 5_000,
+          reason: "nothing_to_process",
+        }),
+    };
+  };
+
+  let stopAfter = 0;
+  await runWorkerLoop({
+    config: readWorkerConfig({
+      APP_URL: "https://nexaboot.com",
+      CAMPAIGN_WORKER_IDLE_MS: "5",
+      CAMPAIGN_WORKER_TIMEOUT_MS: "5000",
+    }),
+    fetchFn,
+    sleepFn: (ms) => {
+      delays.push(ms);
+      return Promise.resolve();
+    },
+    log: () => {},
+    logError: () => {},
+    shouldStop: () => {
+      stopAfter += 1;
+      return stopAfter > 2;
+    },
+  });
+
+  assert("continues after sent delay", ticks >= 2);
+  assert("uses sent delayMs", delays[0] === 11_008);
+  assert("second tick uses next delayMs", delays[1] === 200);
+}
+
 console.log(failed === 0 ? "\nAll campaign worker loop tests passed." : `\n${failed} test(s) failed.`);
 process.exit(failed === 0 ? 0 : 1);
