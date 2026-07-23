@@ -385,7 +385,8 @@ async function claimNextPendingContact(
       LIMIT 1
     )
     UPDATE public.campaign_contacts cc
-    SET status = 'processing'
+    SET status = 'processing',
+        updated_at = now()
     FROM next
     WHERE cc.id = next.id
       AND cc.company_id = ${companyId}::uuid
@@ -485,6 +486,50 @@ async function markContactSkipped(
   `;
 }
 
+/** Libera contatos presos em processing sem wamid (tick abortado/exceção). */
+async function releaseStaleProcessingContacts(
+  companyId: string,
+  campaignId: string,
+  staleSeconds = 30,
+): Promise<number> {
+  const s = sql();
+  const rows = await s<{ id: string }[]>`
+    UPDATE public.campaign_contacts
+    SET status = 'pending',
+        updated_at = now()
+    WHERE campaign_id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+      AND status = 'processing'
+      AND (provider_message_id IS NULL OR btrim(provider_message_id) = '')
+      AND updated_at < now() - (${staleSeconds}::text || ' seconds')::interval
+    RETURNING id
+  `;
+  return rows.length;
+}
+
+async function getCampaignWorkerCounts(
+  companyId: string,
+  campaignId: string,
+): Promise<{ pending: number; processing: number; sent: number }> {
+  const s = sql();
+  const rows = await s<
+    { pending: string; processing: string; sent: string }[]
+  >`
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'pending')::text AS pending,
+      COUNT(*) FILTER (WHERE status = 'processing')::text AS processing,
+      COUNT(*) FILTER (WHERE status IN ('sent', 'responded'))::text AS sent
+    FROM public.campaign_contacts
+    WHERE campaign_id = ${campaignId}::uuid
+      AND company_id = ${companyId}::uuid
+  `;
+  return {
+    pending: parseInt(rows[0]?.pending ?? "0", 10),
+    processing: parseInt(rows[0]?.processing ?? "0", 10),
+    sent: parseInt(rows[0]?.sent ?? "0", 10),
+  };
+}
+
 /** Estado em memória do bloco atual (por processo do worker). */
 const blockState = new Map<string, { blockSize: number; messagesInBlock: number }>();
 
@@ -507,12 +552,22 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
 
   const campaigns = await loadDueCampaigns();
   if (campaigns.length === 0) {
+    console.log("[CAMPAIGN_WORKER_NO_DUE_CAMPAIGN]", {
+      reason: "no_eligible_campaign",
+      delayMs: 5_000,
+    });
     return { ok: true, action: "idle", delayMs: 5_000, message: "Nenhuma campanha devida" };
   }
 
   const now = new Date();
 
   for (const campaign of campaigns) {
+    console.log("[CAMPAIGN_WORKER_CAMPAIGN_SELECTED]", {
+      campaignId: campaign.id,
+      campaignStatus: campaign.status,
+      sentCount: campaign.sent_count,
+      channelType: campaign.channel_type,
+    });
     const windowStart = campaign.window_start_time;
     const windowEnd = campaign.window_end_time;
     const scheduleDate = campaign.schedule_date;
@@ -578,42 +633,85 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       campaign.status = "running";
     }
 
-    const contact = await claimNextPendingContact(campaign.company_id, campaign.id);
+    await releaseStaleProcessingContacts(campaign.company_id, campaign.id, 30);
+
+    let contact = await claimNextPendingContact(campaign.company_id, campaign.id);
     if (!contact) {
-      // Sem pending reservável — verifica se ainda há processing (outro tick) ou finaliza.
-      const s = sql();
-      const pendingLeft = await s<{ count: string }[]>`
-        SELECT COUNT(*)::text AS count
-        FROM public.campaign_contacts
-        WHERE campaign_id = ${campaign.id}::uuid
-          AND company_id = ${campaign.company_id}::uuid
-          AND status IN ('pending', 'processing')
-      `;
-      if (parseInt(pendingLeft[0]?.count ?? "0", 10) > 0) {
-        return {
-          ok: true,
-          action: "idle",
-          campaignId: campaign.id,
-          delayMs: 2_000,
-          message: "Contatos em processamento por outro tick",
-        };
+      const released = await releaseStaleProcessingContacts(campaign.company_id, campaign.id, 15);
+      if (released > 0) {
+        contact = await claimNextPendingContact(campaign.company_id, campaign.id);
       }
-      await setCampaignStatus(campaign.company_id, campaign.id, "completed", { finished: true });
-      await syncCampaignContactCounters(campaign.id, campaign.company_id);
-      await insertCampaignEvent(campaign.company_id, campaign.id, "campaign.completed", null, {
-        sent_count: campaign.sent_count,
-      });
-      blockState.delete(campaign.id);
-      console.log("[CAMPAIGN_WORKER_COMPLETED]", { campaignId: campaign.id });
-      return {
-        ok: true,
-        action: "completed",
-        campaignId: campaign.id,
-        delayMs: 1_000,
-        message: "Campanha finalizada",
-      };
     }
 
+    if (!contact) {
+      // Sem pending reservável — verifica se ainda há processing (outro tick) ou finaliza.
+      let counts = await getCampaignWorkerCounts(campaign.company_id, campaign.id);
+
+      if (counts.processing > 0 && counts.pending === 0) {
+        const released = await releaseStaleProcessingContacts(campaign.company_id, campaign.id, 0);
+        if (released > 0) {
+          contact = await claimNextPendingContact(campaign.company_id, campaign.id);
+          if (contact) {
+            counts = await getCampaignWorkerCounts(campaign.company_id, campaign.id);
+          }
+        }
+      }
+
+      if (!contact) {
+        console.log("[CAMPAIGN_WORKER_COMPLETION_CHECK]", {
+          campaignId: campaign.id,
+          campaignStatus: campaign.status,
+          pendingCount: counts.pending,
+          processingCount: counts.processing,
+          sentCount: counts.sent,
+          reason: "no_claimable_contact",
+        });
+
+        if (counts.pending + counts.processing > 0) {
+          console.log("[CAMPAIGN_WORKER_NEXT_SCHEDULED]", {
+            campaignId: campaign.id,
+            delayMs: 2_000,
+            reason: "waiting_processing_or_retry",
+            pendingCount: counts.pending,
+            processingCount: counts.processing,
+          });
+          return {
+            ok: true,
+            action: "idle",
+            campaignId: campaign.id,
+            delayMs: 2_000,
+            message: "Contatos em processamento por outro tick",
+          };
+        }
+        await setCampaignStatus(campaign.company_id, campaign.id, "completed", { finished: true });
+        await syncCampaignContactCounters(campaign.id, campaign.company_id);
+        await insertCampaignEvent(campaign.company_id, campaign.id, "campaign.completed", null, {
+          sent_count: campaign.sent_count,
+        });
+        blockState.delete(campaign.id);
+        console.log("[CAMPAIGN_WORKER_COMPLETED]", {
+          campaignId: campaign.id,
+          sentCount: counts.sent,
+        });
+        return {
+          ok: true,
+          action: "completed",
+          campaignId: campaign.id,
+          delayMs: 1_000,
+          message: "Campanha finalizada",
+        };
+      }
+    }
+
+    if (!contact) continue;
+
+    console.log("[CAMPAIGN_WORKER_CONTACT_SELECTED]", {
+      campaignId: campaign.id,
+      contactId: contact.id,
+      campaignStatus: campaign.status,
+    });
+
+    try {
     const isMeta = campaign.channel_type === "meta";
     const phone = isMeta
       ? normalizePhoneE164(contact.phone, { defaultCountry: "BR" })
@@ -1022,9 +1120,16 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
     console.log("[CAMPAIGN_WORKER_SENT]", {
       campaignId: campaign.id,
       contactId: contact.id,
-      phone,
       nextDelayMs: pause.delayMs,
       provider: isMeta ? "meta" : "evolution",
+    });
+
+    console.log("[CAMPAIGN_WORKER_NEXT_SCHEDULED]", {
+      campaignId: campaign.id,
+      contactId: contact.id,
+      campaignStatus: "running",
+      delayMs: pause.delayMs,
+      reason: pause.kind,
     });
 
     return {
@@ -1035,6 +1140,24 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
       delayMs: pause.delayMs,
       message: isMeta ? "Template Meta enviado" : "Mensagem enviada",
     };
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error("[CAMPAIGN_WORKER_CONTACT_ERROR]", {
+        campaignId: campaign.id,
+        contactId: contact.id,
+        error: errMsg,
+      });
+      await markContactFailed(campaign.company_id, contact.id, errMsg);
+      await syncCampaignContactCounters(campaign.id, campaign.company_id);
+      return {
+        ok: true,
+        action: "failed",
+        campaignId: campaign.id,
+        contactId: contact.id,
+        delayMs: 500,
+        message: errMsg,
+      };
+    }
   }
 
   return {

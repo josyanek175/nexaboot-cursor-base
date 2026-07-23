@@ -904,6 +904,7 @@ async function applyCampaignsSchema(db: ReturnType<typeof sql>): Promise<void> {
     ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS responded_at TIMESTAMPTZ;
     ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS response_text TEXT;
     ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS response_intent TEXT;
+    ALTER TABLE public.campaign_contacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
     -- Contadores de resposta na campanha.
     ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS total_replied INT NOT NULL DEFAULT 0;
