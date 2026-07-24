@@ -9,6 +9,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { messageMediaContentDisposition } from "@/lib/message-media.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,9 +72,7 @@ export const Route = createFileRoute("/api/messages/$messageId/media")({
             "Content-Type": mime,
             "Cache-Control": "private, max-age=86400",
           };
-          if (msg.media_filename) {
-            headers["Content-Disposition"] = `inline; filename="${msg.media_filename.replace(/"/g, "")}"`;
-          }
+          headers["Content-Disposition"] = messageMediaContentDisposition(mime, msg.media_filename ?? null);
           return new Response(bytes, { status: 200, headers });
         } catch (e) {
           return jsonErr(

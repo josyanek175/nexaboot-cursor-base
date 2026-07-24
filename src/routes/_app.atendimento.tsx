@@ -27,6 +27,13 @@ import {
   parseMessageRawPayload,
   resolveMetaTemplateDisplayForMessage,
 } from "@/lib/meta-template-render";
+import {
+  WHATSAPP_DOCUMENT_ACCEPT,
+  validateClientDocument,
+  documentExtensionLabel,
+  isPdfMime,
+  fileExtension,
+} from "@/lib/whatsapp-document.constants";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
@@ -43,7 +50,7 @@ type MessageType =
   | "contacts"
   | "system";
 type MessageDirection = "in" | "out";
-type MessageStatus = "sent" | "delivered" | "read" | "error";
+type MessageStatus = "pending" | "sent" | "delivered" | "read" | "error";
 type ChannelStatus = "connected" | "connecting" | "qrcode" | "disconnected" | "error";
 
 interface Channel {
@@ -354,7 +361,11 @@ function transformApiMessage(m: any, conversationId: string): Message {
     fromMe || rawDir === "outbound" || rawDir === "out" || m.sender === "agent" ? "out" : "in";
 
   const status: MessageStatus =
-    m.status === "read" || m.status === "delivered" || m.status === "sent" || m.status === "error"
+    m.status === "pending" ||
+    m.status === "read" ||
+    m.status === "delivered" ||
+    m.status === "sent" ||
+    m.status === "error"
       ? m.status
       : "delivered";
 
@@ -528,8 +539,11 @@ function AtendimentoPage() {
   const [noteOpen, setNoteOpen] = useState(false);
   // Envio real de mídia (imagem/áudio) via input de arquivo escondido.
   const mediaInputRef = useRef<HTMLInputElement>(null);
-  const mediaKindRef = useRef<"image" | "audio">("image");
+  const mediaKindRef = useRef<"image" | "audio" | "document">("image");
   const [sendingMedia, setSendingMedia] = useState(false);
+  const [pendingDocument, setPendingDocument] = useState<File | null>(null);
+  const [documentCaption, setDocumentCaption] = useState("");
+  const [retryDocumentId, setRetryDocumentId] = useState<string | null>(null);
   // Busca de contatos reais (mesmo sem conversa) para iniciar atendimento.
   const [contactResults, setContactResults] = useState<Contact[]>([]);
   const [searchingContacts, setSearchingContacts] = useState(false);
@@ -1107,8 +1121,75 @@ function AtendimentoPage() {
       }
       return;
     }
-    // Vídeo/documento ainda fora do escopo desta fase (sem mock).
-    toast.info("Envio de vídeo e documento será habilitado em breve.");
+    if (type === "document") {
+      mediaKindRef.current = "document";
+      setRetryDocumentId(null);
+      const input = mediaInputRef.current;
+      if (input) {
+        input.accept = WHATSAPP_DOCUMENT_ACCEPT;
+        input.value = "";
+        input.click();
+      }
+      return;
+    }
+    toast.info("Envio de vídeo será habilitado em breve.");
+  }
+
+  function clearDocumentPreview() {
+    setPendingDocument(null);
+    setDocumentCaption("");
+    setRetryDocumentId(null);
+  }
+
+  function onDocumentSelected(file: File) {
+    const check = validateClientDocument(file);
+    if (!check.ok) {
+      toast.error(check.message);
+      return;
+    }
+    setPendingDocument(file);
+    setDocumentCaption("");
+    setRetryDocumentId(null);
+  }
+
+  async function sendDocumentFile(opts?: { retryMessageId?: string; file?: File; caption?: string }) {
+    if (!selected) return;
+    const guard = guardSend(selected);
+    if (!guard.ok || !guard.channel) return;
+
+    const file = opts?.file ?? pendingDocument;
+    const retryMessageId = opts?.retryMessageId ?? retryDocumentId;
+    if (!file && !retryMessageId) return;
+
+    setSendingMedia(true);
+    const tId = toast.loading(retryMessageId ? "Reenviando documento…" : "Enviando documento…");
+    try {
+      const fd = new FormData();
+      fd.append("conversation_id", selected.id);
+      fd.append("media_type", "document");
+      const cap = opts?.caption ?? documentCaption;
+      if (cap.trim()) fd.append("caption", cap.trim());
+      if (file) fd.append("file", file);
+      if (retryMessageId) fd.append("retry_message_id", retryMessageId);
+
+      await apiPostForm("/messages/send-media", fd);
+      toast.success("Documento enviado.", { id: tId });
+      clearDocumentPreview();
+      reloadMessages(selected.id, { silent: true });
+      reloadConversations({ silent: true });
+    } catch (e) {
+      const msg = getApiErrorMessage(e);
+      toast.error(msg.includes("documento") ? msg : "Não foi possível enviar o documento", { id: tId });
+      reloadMessages(selected.id, { silent: true });
+    } finally {
+      setSendingMedia(false);
+    }
+  }
+
+  async function retryDocumentMessage(messageId: string) {
+    if (!selected || sendingMedia) return;
+    setRetryDocumentId(messageId);
+    await sendDocumentFile({ retryMessageId: messageId });
   }
 
   async function sendMediaFile(file: File, kind: "image" | "audio") {
@@ -1411,7 +1492,9 @@ function AtendimentoPage() {
                     <div className="text-muted-foreground">{msgsError}</div>
                   </div>
                 )}
-                {!loadingMsgs && !msgsError && messages.map((m) => <Bubble key={m.id} m={m} />)}
+                {!loadingMsgs && !msgsError && messages.map((m) => (
+                  <Bubble key={m.id} m={m} onRetryDocument={retryDocumentMessage} />
+                ))}
                 {!loadingMsgs && !msgsError && messages.length === 0 && (
                   <div className="py-10 text-center text-xs text-muted-foreground">Sem mensagens.</div>
                 )}
@@ -1431,10 +1514,22 @@ function AtendimentoPage() {
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) sendMediaFile(f, mediaKindRef.current);
+                if (!f) return;
+                if (mediaKindRef.current === "document") onDocumentSelected(f);
+                else sendMediaFile(f, mediaKindRef.current);
                 e.target.value = "";
               }}
             />
+            {pendingDocument && (
+              <DocumentPreviewPanel
+                file={pendingDocument}
+                caption={documentCaption}
+                onCaptionChange={setDocumentCaption}
+                onRemove={clearDocumentPreview}
+                onSend={() => sendDocumentFile()}
+                sending={sendingMedia}
+              />
+            )}
             <ChatComposer
               value={draft}
               onChange={setDraft}
@@ -1707,9 +1802,9 @@ function ChannelModeBadge({ channel }: { channel: Channel }) {
 }
 
 // ───────── Balão ─────────
-function Bubble({ m }: { m: Message }) {
+function Bubble({ m, onRetryDocument }: { m: Message; onRetryDocument?: (id: string) => void }) {
   try {
-    return <BubbleInner m={m} />;
+    return <BubbleInner m={m} onRetryDocument={onRetryDocument} />;
   } catch (err) {
     console.error("[BUBBLE_RENDER_ERROR]", err);
     return (
@@ -1720,7 +1815,7 @@ function Bubble({ m }: { m: Message }) {
   }
 }
 
-function BubbleInner({ m }: { m: Message }) {
+function BubbleInner({ m, onRetryDocument }: { m: Message; onRetryDocument?: (id: string) => void }) {
   if (m.type === "internal" || m.isInternalNote) {
     return (
       <div className="mx-auto max-w-xl rounded-md border border-internal/30 bg-internal/10 px-3 py-2 text-center text-xs text-internal">
@@ -1939,30 +2034,66 @@ function BubbleInner({ m }: { m: Message }) {
           ))
         )}
         {m.type === "document" && (
-          <div className="mb-1 flex items-center gap-2 rounded-md bg-black/5 px-2 py-2">
-            <FileText className="h-6 w-6 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{m.fileName || "Documento"}</div>
-              <div className="text-[11px] text-muted-foreground">{formatBytes(m.fileSize)} · {m.mimeType}</div>
+          <div className="mb-1 flex flex-col gap-2 rounded-md border border-black/10 bg-black/5 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-whatsapp/15 text-whatsapp">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{m.fileName || "Documento"}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {documentExtensionLabel(m.fileName, m.mimeType)}
+                  {m.fileSize ? ` · ${formatBytes(m.fileSize)}` : ""}
+                </div>
+              </div>
             </div>
-            {resolvedUrl ? (
-              <button
-                type="button"
-                onClick={() => openInNewTab(resolvedUrl, "download")}
-                className="rounded-md p-1.5 hover:bg-black/10"
-              >
-                <Download className="h-4 w-4" />
-              </button>
-            ) : (
-              <TechnicalMediaError error={m.mediaError} compact />
+            {m.text && m.text !== `[documento: ${m.fileName}]` && m.text !== "[documento]" && (
+              <div className="whitespace-pre-wrap text-sm">{m.text}</div>
             )}
+            <div className="flex flex-wrap gap-2">
+              {resolvedUrl ? (
+                <>
+                  {isPdfMime(m.mimeType) ? (
+                    <button
+                      type="button"
+                      onClick={() => openInNewTab(resolvedUrl, "open")}
+                      className="flex-1 rounded-md bg-whatsapp px-2 py-1 text-center text-[11px] font-medium text-white hover:bg-whatsapp/90"
+                    >
+                      Abrir
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => openInNewTab(resolvedUrl, "download")}
+                    className={`rounded-md border border-black/10 px-2 py-1 text-[11px] hover:bg-black/5 ${isPdfMime(m.mimeType) ? "" : "flex-1 text-center"}`}
+                  >
+                    <Download className="inline h-3 w-3" /> {isPdfMime(m.mimeType) ? "Baixar" : "Baixar"}
+                  </button>
+                </>
+              ) : m.status === "pending" ? (
+                <div className="flex-1 rounded-md bg-black/5 px-2 py-1 text-center text-[11px] text-muted-foreground">
+                  Enviando…
+                </div>
+              ) : (
+                <TechnicalMediaError error={m.mediaError} />
+              )}
+              {m.status === "error" && onRetryDocument && (
+                <button
+                  type="button"
+                  onClick={() => onRetryDocument(m.id)}
+                  className="rounded-md border border-destructive/30 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/5"
+                >
+                  Tentar novamente
+                </button>
+              )}
+            </div>
           </div>
         )}
         {m.type === "image" ? (
           captionText && <div className="whitespace-pre-wrap">{captionText}</div>
-        ) : (
+        ) : m.type !== "document" ? (
           m.text && <div className="whitespace-pre-wrap">{m.text}</div>
-        )}
+        ) : null}
         {m.templateButtons && m.templateButtons.length > 0 && (
           <div className="mt-2 space-y-1 border-t border-black/10 pt-2">
             {m.templateButtons.map((label) => (
@@ -2096,10 +2227,74 @@ function MediaPlaceholder({
 }
 
 function StatusIcon({ status }: { status: Message["status"] }) {
+  if (status === "pending") return <RotateCcw className="h-3 w-3 animate-spin text-muted-foreground" />;
   if (status === "error") return <AlertCircle className="h-3 w-3 text-destructive" />;
   if (status === "read") return <CheckCheck className="h-3 w-3 text-primary" />;
   if (status === "delivered") return <CheckCheck className="h-3 w-3" />;
   return <Check className="h-3 w-3" />;
+}
+
+function DocumentPreviewPanel({
+  file,
+  caption,
+  onCaptionChange,
+  onRemove,
+  onSend,
+  sending,
+}: {
+  file: File;
+  caption: string;
+  onCaptionChange: (v: string) => void;
+  onRemove: () => void;
+  onSend: () => void;
+  sending?: boolean;
+}) {
+  const ext = fileExtension(file.name);
+  return (
+    <div className="border-t border-border bg-muted/30 px-4 py-3">
+      <div className="mx-auto flex max-w-3xl flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-whatsapp/15 text-whatsapp">
+            <FileText className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{file.name}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {ext.toUpperCase() || "DOC"} · {formatBytes(file.size)}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={sending}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+            title="Remover"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <input
+          value={caption}
+          onChange={(e) => onCaptionChange(e.target.value)}
+          placeholder="Legenda (opcional)"
+          maxLength={1024}
+          disabled={sending}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 ring-ring disabled:opacity-50"
+        />
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={sending}
+            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-4 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            <Send className="h-4 w-4" />
+            {sending ? "Enviando…" : "Enviar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ───────── Composer ─────────

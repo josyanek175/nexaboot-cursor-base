@@ -42,6 +42,7 @@ import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
 import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
+import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
 import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
 import { Route as ApiInternalChatUnreadCountRouteImport } from './routes/api/internal-chat/unread-count'
@@ -275,6 +276,11 @@ const ApiMetaChannelsRoute = ApiMetaChannelsRouteImport.update({
   id: '/api/meta/channels',
   path: '/api/meta/channels',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMessagesSendMediaRoute = ApiMessagesSendMediaRouteImport.update({
+  id: '/send-media',
+  path: '/send-media',
+  getParentRoute: () => ApiMessagesRoute,
 } as any)
 const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
   id: '/send',
@@ -707,6 +713,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
+  '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -809,6 +816,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
+  '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -914,6 +922,7 @@ export interface FileRoutesById {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
+  '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -1019,6 +1028,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/messages/send'
+    | '/api/messages/send-media'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1121,6 +1131,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/messages/send'
+    | '/api/messages/send-media'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1225,6 +1236,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/messages/send'
+    | '/api/messages/send-media'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1548,6 +1560,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/meta/channels'
       preLoaderRoute: typeof ApiMetaChannelsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/messages/send-media': {
+      id: '/api/messages/send-media'
+      path: '/send-media'
+      fullPath: '/api/messages/send-media'
+      preLoaderRoute: typeof ApiMessagesSendMediaRouteImport
+      parentRoute: typeof ApiMessagesRoute
     }
     '/api/messages/send': {
       id: '/api/messages/send'
@@ -2240,11 +2259,13 @@ const ApiMessagesSendRouteWithChildren = ApiMessagesSendRoute._addFileChildren(
 
 interface ApiMessagesRouteChildren {
   ApiMessagesSendRoute: typeof ApiMessagesSendRouteWithChildren
+  ApiMessagesSendMediaRoute: typeof ApiMessagesSendMediaRoute
   ApiMessagesMessageIdMediaRoute: typeof ApiMessagesMessageIdMediaRoute
 }
 
 const ApiMessagesRouteChildren: ApiMessagesRouteChildren = {
   ApiMessagesSendRoute: ApiMessagesSendRouteWithChildren,
+  ApiMessagesSendMediaRoute: ApiMessagesSendMediaRoute,
   ApiMessagesMessageIdMediaRoute: ApiMessagesMessageIdMediaRoute,
 }
 
