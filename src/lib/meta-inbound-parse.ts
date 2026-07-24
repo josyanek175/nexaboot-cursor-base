@@ -5,6 +5,29 @@ import { isValidE164Digits, normalizePhoneE164 } from "./phone.ts";
 
 export type MetaInboundMessageType = "text" | "button" | "interactive";
 
+export type MetaInboundMediaType = "image" | "audio" | "video" | "document" | "sticker";
+
+export const META_INBOUND_MEDIA_TYPES: MetaInboundMediaType[] = [
+  "image",
+  "audio",
+  "video",
+  "document",
+  "sticker",
+];
+
+export type MetaInboundMediaMessage = {
+  phoneNumberId: string;
+  externalMessageId: string;
+  phone: string;
+  contactName: string | null;
+  mediaType: MetaInboundMediaType;
+  mediaId: string;
+  caption: string | null;
+  filename: string | null;
+  mimeHint: string | null;
+  rawPayload: Record<string, unknown>;
+};
+
 export type MetaInboundTextMessage = {
   phoneNumberId: string;
   externalMessageId: string;
@@ -251,4 +274,100 @@ export function extractMetaInboundTextMessages(payload: unknown): MetaInboundTex
   }
 
   return out;
+}
+
+function isMetaInboundMediaType(value: string | null): value is MetaInboundMediaType {
+  return !!value && (META_INBOUND_MEDIA_TYPES as string[]).includes(value);
+}
+
+function readMediaNode(messageRec: Record<string, unknown>, mediaType: MetaInboundMediaType) {
+  return asRecord(messageRec[mediaType]);
+}
+
+/** Extrai mensagens inbound Meta com mídia (image, audio, video, document, sticker). */
+export function extractMetaInboundMediaMessages(payload: unknown): MetaInboundMediaMessage[] {
+  const out: MetaInboundMediaMessage[] = [];
+  const root = unwrapMetaWebhookBody(payload);
+  if (!root) return out;
+
+  for (const entry of asArray(root.entry)) {
+    const entryRec = asRecord(entry);
+    if (!entryRec) continue;
+
+    for (const change of asArray(entryRec.changes)) {
+      const changeRec = asRecord(change);
+      if (!changeRec) continue;
+
+      const value = asRecord(changeRec.value);
+      if (!value) continue;
+
+      const metadata = asRecord(value.metadata);
+      const phoneNumberId = readString(metadata?.phone_number_id);
+      if (!phoneNumberId) continue;
+
+      const contacts = asArray(value.contacts);
+
+      for (const message of asArray(value.messages)) {
+        const messageRec = asRecord(message);
+        if (!messageRec) continue;
+
+        const messageType = readString(messageRec.type);
+        if (!isMetaInboundMediaType(messageType)) continue;
+
+        const mediaNode = readMediaNode(messageRec, messageType);
+        const mediaId = readString(mediaNode?.id);
+        if (!mediaId) continue;
+
+        const externalMessageId = readString(messageRec.id);
+        if (!externalMessageId) continue;
+
+        const fromRaw = readString(messageRec.from);
+        const phone = fromRaw ? normalizePhoneE164(fromRaw) : "";
+        if (!phone || !isValidE164Digits(phone)) continue;
+
+        const contactName = contactNameByWaId(contacts, phone);
+        const caption = readString(mediaNode?.caption);
+        const filename =
+          messageType === "document" ? readString(mediaNode?.filename) : null;
+        const mimeHint = readString(mediaNode?.mime_type);
+
+        out.push({
+          phoneNumberId,
+          externalMessageId,
+          phone,
+          contactName,
+          mediaType: messageType,
+          mediaId,
+          caption,
+          filename,
+          mimeHint,
+          rawPayload: sanitizeMetaWebhookPayload({
+            metadata,
+            contacts,
+            message: messageRec,
+          }) as Record<string, unknown>,
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+/** Placeholder curto para preview da conversa (inbound mídia). */
+export function metaInboundMediaPreviewLabel(mediaType: MetaInboundMediaType): string {
+  switch (mediaType) {
+    case "image":
+      return "[imagem]";
+    case "audio":
+      return "[áudio]";
+    case "video":
+      return "[vídeo]";
+    case "document":
+      return "[documento]";
+    case "sticker":
+      return "[sticker]";
+    default:
+      return "[mídia]";
+  }
 }

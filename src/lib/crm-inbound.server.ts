@@ -131,6 +131,60 @@ export async function insertInboundTextMessage(params: {
   return inserted[0]?.id ?? null;
 }
 
+export async function insertInboundMediaMessage(params: {
+  conversationId: string;
+  externalMessageId: string;
+  mediaType: string;
+  messageText: string | null;
+  caption: string | null;
+  mimeType: string | null;
+  filename: string | null;
+  mediaBase64: string | null;
+  mediaError: string | null;
+  mediaSize: number | null;
+  rawPayload: unknown;
+}): Promise<string | null> {
+  const {
+    conversationId,
+    externalMessageId,
+    mediaType,
+    messageText,
+    caption,
+    mimeType,
+    filename,
+    mediaBase64,
+    mediaError,
+    mediaSize,
+    rawPayload,
+  } = params;
+  const s = sql();
+
+  const inserted = await s<{ id: string }[]>`
+    INSERT INTO public.messages (
+      conversation_id, external_id, external_message_id, direction,
+      message_type, message_text, from_me, raw_payload, status,
+      media_type, media_mimetype, mime_type, media_filename, media_caption,
+      media_base64, media_error, media_url, media_size
+    ) VALUES (
+      ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'in',
+      ${mediaType}, ${messageText}, false, ${JSON.stringify(rawPayload)}::jsonb, 'received',
+      ${mediaType}, ${mimeType}, ${mimeType}, ${filename}, ${caption},
+      ${mediaBase64}, ${mediaError}, ${null}, ${mediaSize}
+    )
+    ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
+    DO NOTHING
+    RETURNING id
+  `;
+
+  const messageId = inserted[0]?.id ?? null;
+  if (messageId && mediaBase64) {
+    const mediaUrl = `/api/messages/${messageId}/media`;
+    await s`UPDATE public.messages SET media_url = ${mediaUrl} WHERE id = ${messageId}::uuid`;
+  }
+
+  return messageId;
+}
+
 export async function bumpConversationAfterInboundMessage(params: {
   conversationId: string;
   lastMessageText: string;

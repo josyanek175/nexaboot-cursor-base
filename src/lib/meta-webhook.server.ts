@@ -15,7 +15,7 @@ import {
   diagnoseMetaChannelByPhoneNumberId,
   loadMetaChannelByPhoneNumberId,
 } from "@/lib/whatsapp/whatsapp-provider-router.server";
-import { persistMetaInboundTextMessages } from "@/lib/meta-inbound-message.server";
+import { persistMetaInboundMessages } from "@/lib/meta-inbound-message.server";
 import { unwrapMetaWebhookBody } from "@/lib/meta-inbound-parse";
 
 export type {
@@ -354,7 +354,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       try {
         await ensureCrmSchema();
         const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
-        const persistResult = await persistMetaInboundTextMessages(webhookBody);
+        const persistResult = await persistMetaInboundMessages(webhookBody);
         if (persistResult.saved > 0) {
           processingStatus = "persisted";
           console.log("[META_WEBHOOK_PERSISTED]", {

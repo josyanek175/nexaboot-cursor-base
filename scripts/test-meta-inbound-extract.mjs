@@ -3,7 +3,9 @@
  * Uso: npx tsx scripts/test-meta-inbound-extract.mjs
  */
 import {
+  extractMetaInboundMediaMessages,
   extractMetaInboundTextMessages,
+  metaInboundMediaPreviewLabel,
   resolveMetaInboundMessageText,
   unwrapMetaWebhookBody,
 } from "../src/lib/meta-inbound-parse.ts";
@@ -109,7 +111,70 @@ const skipImage = extractMetaInboundTextMessages({
     },
   ],
 });
-assert("skips non-text/button/interactive", skipImage.length === 0);
+assert("text extract skips image", skipImage.length === 0);
+
+const imageMedia = extractMetaInboundMediaMessages({
+  entry: [
+    {
+      changes: [
+        {
+          value: {
+            metadata: { phone_number_id: "1255731454280186" },
+            contacts: [{ profile: { name: "Test User" }, wa_id: "15556034558" }],
+            messages: [
+              {
+                from: "15556034558",
+                id: "wamid.IMG_CAP",
+                timestamp: "1710000000",
+                type: "image",
+                image: { id: "MEDIA_IMG_CAP", caption: "Foto do produto", mime_type: "image/jpeg" },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+});
+assert("image media extract one", imageMedia.length === 1);
+assert("image media id", imageMedia[0]?.mediaId === "MEDIA_IMG_CAP");
+assert("image caption", imageMedia[0]?.caption === "Foto do produto");
+assert("image preview label", metaInboundMediaPreviewLabel("image") === "[imagem]");
+
+const audioMedia = extractMetaInboundMediaMessages(
+  buildPayload({
+    id: "wamid.AUDIO_1",
+    type: "audio",
+    audio: { id: "MEDIA_AUDIO_1", mime_type: "audio/ogg; codecs=opus" },
+  }),
+);
+assert("audio media extract", audioMedia.length === 1);
+assert("audio mime hint", audioMedia[0]?.mimeHint?.includes("audio/ogg"));
+
+const docMedia = extractMetaInboundMediaMessages(
+  buildPayload({
+    id: "wamid.DOC_1",
+    type: "document",
+    document: {
+      id: "MEDIA_DOC_1",
+      filename: "contrato.pdf",
+      mime_type: "application/pdf",
+      caption: "Segue contrato",
+    },
+  }),
+);
+assert("document media extract", docMedia.length === 1);
+assert("document filename", docMedia[0]?.filename === "contrato.pdf");
+
+const noCaptionVideo = extractMetaInboundMediaMessages(
+  buildPayload({
+    id: "wamid.VID_1",
+    type: "video",
+    video: { id: "MEDIA_VID_1", mime_type: "video/mp4" },
+  }),
+);
+assert("video without caption", noCaptionVideo.length === 1);
+assert("video no caption null", noCaptionVideo[0]?.caption == null);
 
 // A. button
 const buttonPayload = buildPayload({

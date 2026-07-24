@@ -389,17 +389,19 @@ function transformApiMessage(m: any, conversationId: string): Message {
     rawType === "unknown";
   const fromPayload = hasContactPayload(rpObj);
   let type: MessageType =
-    rawType === "image" ||
-    rawType === "audio" ||
-    rawType === "video" ||
-    rawType === "document" ||
-    rawType === "internal" ||
-    rawType === "reaction" ||
-    rawType === "contact" ||
-    rawType === "contacts" ||
-    rawType === "system"
-      ? (rawType as MessageType)
-      : "text";
+    rawType === "sticker"
+      ? "image"
+      : rawType === "image" ||
+          rawType === "audio" ||
+          rawType === "video" ||
+          rawType === "document" ||
+          rawType === "internal" ||
+          rawType === "reaction" ||
+          rawType === "contact" ||
+          rawType === "contacts" ||
+          rawType === "system"
+        ? (rawType as MessageType)
+        : "text";
   if (String(m.direction || "").toLowerCase() === "system") {
     type = "system";
   }
