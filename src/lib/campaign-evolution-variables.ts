@@ -51,7 +51,8 @@ export type EvolutionResolveContext = {
     variables: Record<string, unknown>;
   };
   attendant?: { name?: string | null };
-  company?: { name?: string | null; trade_name?: string | null; phone?: string | null };
+  /** Apenas `name` vem do banco (`companies.name`). Campos legados ignorados. */
+  company?: { name?: string | null };
 };
 
 const VAR_NAME_RE = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
@@ -266,10 +267,8 @@ export function resolveEvolutionVariableValue(
     case "attendant":
       return ctx.attendant?.name?.trim() || null;
     case "company": {
-      if (mapping.field === "trade_name") {
-        return ctx.company?.trade_name?.trim() || ctx.company?.name?.trim() || null;
-      }
-      if (mapping.field === "phone") return ctx.company?.phone?.trim() || null;
+      // trade_name é alias legado de name; phone não existe em companies no schema atual.
+      if (mapping.field === "phone") return null;
       return ctx.company?.name?.trim() || null;
     }
     default:
@@ -330,7 +329,7 @@ export function previewEvolutionTemplateWithMappings(
       variables: { ...SAMPLE_BY_KEY },
     },
     attendant: { name: SAMPLE_BY_KEY.nome_atendente ?? "Josyane" },
-    company: { name: "Empresa Exemplo Ltda", trade_name: "Empresa Exemplo" },
+    company: { name: "Empresa Exemplo Ltda" },
   };
   const result = resolveAndRenderEvolutionTemplate(visible, mappings, sampleCtx);
   if (result.ok) return result.rendered;
@@ -356,8 +355,6 @@ export function buildSamplePreviewContext(
     attendant: { name: "Josyane", ...overrides?.attendant },
     company: {
       name: "Empresa Exemplo Ltda",
-      trade_name: "Empresa Exemplo",
-      phone: "5534000000000",
       ...overrides?.company,
     },
   };

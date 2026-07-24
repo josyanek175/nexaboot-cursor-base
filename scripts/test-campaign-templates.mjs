@@ -190,7 +190,7 @@ Atendimento por {nome_atendente}, da empresa {nome_empresa}.`;
     nome_empresa: { source: "company", field: "name", confirmed: true },
   };
 
-  const company = { name: "Acme Ltda", trade_name: "Acme", phone: "5534000000000" };
+  const company = { name: "Acme Ltda" };
   const attendant = { name: "Carlos Silva" };
 
   function row(data, includeValor = true) {
@@ -277,6 +277,39 @@ Atendimento por {nome_atendente}, da empresa {nome_empresa}.`;
   });
   assert("legacy without requires flag passes", legacyCheck.ok === true);
   assert("legacy block no confirmation required", legacyBlock.requiresConfirmation === false);
+}
+
+// schema atual sem companies.trade_name — mapeamentos legados e contexto mínimo
+{
+  const { resolveEvolutionVariableValue, resolveAndRenderEvolutionTemplate } = await import(
+    "../src/lib/campaign-evolution-variables.ts"
+  );
+
+  const companyCtx = { name: "Acme Ltda" };
+
+  const legacyTradeName = resolveEvolutionVariableValue(
+    "empresa",
+    { source: "company", field: "trade_name" },
+    { contact: { name: "Ana", phone: "5534111111111", variables: {} }, company: companyCtx },
+  );
+  assert("legacy trade_name uses companies.name", legacyTradeName === "Acme Ltda");
+
+  const legacyPhone = resolveEvolutionVariableValue(
+    "tel_empresa",
+    { source: "company", field: "phone" },
+    { contact: { name: "Ana", phone: "5534111111111", variables: {} }, company: companyCtx },
+  );
+  assert("legacy company phone absent returns null", legacyPhone === null);
+
+  const rendered = resolveAndRenderEvolutionTemplate(
+    "Empresa {nome_empresa}",
+    { nome_empresa: { source: "company", field: "trade_name", confirmed: true } },
+    { contact: { name: "Ana", phone: "5534111111111", variables: {} }, company: companyCtx },
+  );
+  assert("render with legacy trade_name mapping ok", rendered.ok === true);
+  if (rendered.ok) {
+    assert("render with legacy trade_name uses name", rendered.rendered.includes("Acme Ltda"));
+  }
 }
 
 console.log(

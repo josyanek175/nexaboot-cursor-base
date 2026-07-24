@@ -21,11 +21,7 @@ const CONTACT_FIELDS = [
   { value: "phone", label: "Telefone" },
 ] as const;
 
-const COMPANY_FIELDS = [
-  { value: "name", label: "Nome da empresa" },
-  { value: "trade_name", label: "Nome fantasia" },
-  { value: "phone", label: "Telefone da empresa" },
-] as const;
+const COMPANY_FIELDS = [{ value: "name", label: "Nome da empresa" }] as const;
 
 function sourceTypeOf(mapping: EvolutionVariableSource): EvolutionVariableSourceType {
   return mapping.source;
@@ -59,10 +55,7 @@ function updateMapping(
       mapping = { source: "attendant", field: "name" };
       break;
     case "company":
-      mapping =
-        detail === "trade_name" || detail === "phone"
-          ? { source: "company", field: detail }
-          : { source: "company", field: "name" };
+      mapping = { source: "company", field: "name" };
       break;
     default:
       break;
@@ -84,7 +77,7 @@ function detailValue(mapping: EvolutionVariableSource): string {
     case "attendant":
       return "name";
     case "company":
-      return mapping.field;
+      return "name";
     default:
       return "";
   }

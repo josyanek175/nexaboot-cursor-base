@@ -152,18 +152,14 @@ function buildStoredVariableMappings(
 
 async function loadCompanyEvolutionContext(companyId: string): Promise<{
   name: string | null;
-  trade_name: string | null;
-  phone: string | null;
 }> {
-  const rows = await sql<
-    { name: string | null; trade_name: string | null; phone: string | null }[]
-  >`
-    SELECT name, trade_name, phone
+  const rows = await sql<{ name: string | null }[]>`
+    SELECT name
     FROM public.companies
     WHERE id = ${companyId}::uuid
     LIMIT 1
   `;
-  return rows[0] ?? { name: null, trade_name: null, phone: null };
+  return rows[0] ?? { name: null };
 }
 
 async function loadAttendantName(
