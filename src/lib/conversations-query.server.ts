@@ -165,8 +165,13 @@ export async function listConversationsForCompany(opts: {
       c.campaign_service_status,
       c.campaign_last_inbound_at,
       c.campaign_last_human_reply_at,
-      camp.color AS campaign_color,
-      camp.name AS campaign_name,
+      cp.id AS campaign_id,
+      COALESCE(cp.name, c.campaign_reply_campaign_name) AS campaign_name,
+      CASE
+        WHEN c.campaign_reply_campaign_id IS NOT NULL
+        THEN COALESCE(cp.color, '#6B7280')
+        ELSE NULL
+      END AS campaign_color,
       CASE
         WHEN c.campaign_last_inbound_at IS NOT NULL
         THEN EXTRACT(EPOCH FROM (now() - c.campaign_last_inbound_at))::int
@@ -175,9 +180,10 @@ export async function listConversationsForCompany(opts: {
     FROM public.conversations c
     JOIN public.contacts ct ON ct.id = c.contact_id
     JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
-    LEFT JOIN public.campaigns camp
-      ON camp.id = c.campaign_reply_campaign_id
-      AND camp.company_id = c.company_id
+    LEFT JOIN public.campaigns cp
+      ON cp.id = c.campaign_reply_campaign_id
+      AND cp.company_id = c.company_id
+      AND cp.deleted_at IS NULL
     LEFT JOIN public.conversation_assignments a
       ON a.conversation_id = c.id
       AND a.active = true
@@ -191,7 +197,7 @@ export async function listConversationsForCompany(opts: {
       AND (${campaignServiceStatus}::text IS NULL OR c.campaign_service_status = ${campaignServiceStatus})
       AND (${interestedFilter}::boolean = false OR c.campaign_reply_intent = 'interested')
       AND (${campaignId}::uuid IS NULL OR c.campaign_reply_campaign_id = ${campaignId}::uuid)
-      AND (${campaignColor}::text IS NULL OR camp.color = ${campaignColor})
+      AND (${campaignColor}::text IS NULL OR cp.color = ${campaignColor})
       AND (${channelType}::text IS NULL OR lower(ch.channel_type) = lower(${channelType}))
       AND (${assignedUserId}::uuid IS NULL OR a.user_id = ${assignedUserId}::uuid)
       AND (${unassignedOnly}::boolean = false OR a.user_id IS NULL)
@@ -210,14 +216,45 @@ export async function listConversationsForCompany(opts: {
       c.status as string | null,
       hasCampaign,
     );
+    const rawColor = c.campaign_color as string | null | undefined;
+    const campaignColor = hasCampaign
+      ? normalizeCampaignColor(rawColor ?? undefined)
+      : null;
     return {
-      ...c,
-      campaign_id: c.campaign_reply_campaign_id,
-      campaign_name: c.campaign_name ?? c.campaign_reply_campaign_name,
-      campaign_color: normalizeCampaignColor(
-        (c.campaign_color as string | null) ?? undefined,
-      ),
+      id: c.id,
+      status: c.status,
+      unread_count: c.unread_count,
+      last_message: c.last_message,
+      last_message_at: c.last_message_at,
+      company_id: c.company_id,
+      contact_id: c.contact_id,
+      whatsapp_channel_id: c.whatsapp_channel_id,
+      contact_name: c.contact_name,
+      phone: c.phone,
+      external_jid: c.external_jid,
+      contact_type: c.contact_type,
+      channel_name: c.channel_name,
+      channel_type: c.channel_type,
+      evolution_instance_name: c.evolution_instance_name,
+      assigned_user_id: c.assigned_user_id,
+      assigned_user_name: c.assigned_user_name,
+      assigned_user_email: c.assigned_user_email,
+      assigned_at: c.assigned_at,
+      is_mine: c.is_mine,
+      campaign_reply_campaign_id: c.campaign_reply_campaign_id,
+      campaign_reply_campaign_name: c.campaign_reply_campaign_name,
+      campaign_reply_text: c.campaign_reply_text,
+      campaign_reply_intent: c.campaign_reply_intent,
+      campaign_reply_at: c.campaign_reply_at,
       campaign_service_status: resolvedStatus,
+      campaign_last_inbound_at: c.campaign_last_inbound_at,
+      campaign_last_human_reply_at: c.campaign_last_human_reply_at,
+      waiting_duration_seconds: c.waiting_duration_seconds,
+      campaign_id: hasCampaign ? c.campaign_id ?? c.campaign_reply_campaign_id : null,
+      campaign_name: hasCampaign
+        ? (c.campaign_name as string | null) ?? c.campaign_reply_campaign_name
+        : null,
+      campaign_color: campaignColor,
     };
   });
 }

@@ -34,6 +34,38 @@ assert("2 cor inválida bloqueada", !isValidCampaignColor("#2563EBB") && !isVali
 assert("3 campanha antiga cinza", normalizeCampaignColor(null) === DEFAULT_CAMPAIGN_COLOR);
 assert("4 regex hex", CAMPAIGN_COLOR_HEX_RE.test("#AABBCC"));
 
+// API contract: cor só quando há campanha; JOIN ausente usa fallback cinza
+function mapCampaignListFields(row) {
+  const hasCampaign = !!row.campaign_reply_campaign_id;
+  const rawColor = row.campaign_color;
+  return {
+    campaign_id: hasCampaign ? row.campaign_id ?? row.campaign_reply_campaign_id : null,
+    campaign_name: hasCampaign ? row.campaign_name ?? row.campaign_reply_campaign_name : null,
+    campaign_color: hasCampaign ? normalizeCampaignColor(rawColor ?? undefined) : null,
+  };
+}
+assert(
+  "4b JOIN retorna cor real",
+  mapCampaignListFields({
+    campaign_reply_campaign_id: "c1",
+    campaign_id: "c1",
+    campaign_name: "Promo",
+    campaign_color: "#7C3AED",
+  }).campaign_color === "#7C3AED",
+);
+assert(
+  "4c sem campanha cor null",
+  mapCampaignListFields({ campaign_reply_campaign_id: null, campaign_color: "#2563EB" }).campaign_color === null,
+);
+assert(
+  "4d nome denormalizado + JOIN sem cor → cinza",
+  mapCampaignListFields({
+    campaign_reply_campaign_id: "c1",
+    campaign_reply_campaign_name: "Legado",
+    campaign_color: null,
+  }).campaign_color === DEFAULT_CAMPAIGN_COLOR,
+);
+
 // 5–10: classificação / status
 assert("5 inbound texto interested", classifyCampaignResponse("sim") === "interested");
 assert("6 inbound mídia sem texto unknown", classifyCampaignResponse("") === "unknown");

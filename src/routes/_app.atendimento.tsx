@@ -35,7 +35,7 @@ import {
   isPdfMime,
   fileExtension,
 } from "@/lib/whatsapp-document.constants";
-import { normalizeCampaignColor } from "@/lib/campaign-color";
+import { normalizeCampaignColor, CAMPAIGN_COLOR_PALETTE, DEFAULT_CAMPAIGN_COLOR } from "@/lib/campaign-color";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
@@ -355,6 +355,15 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
   const assignedTo = c.assigned_user_id ?? undefined;
   const assignedUserName =
     c.assigned_user_name || c.assigned_user_email || undefined;
+  const campaignId =
+    c.campaign_id ?? c.campaign_reply_campaign_id ?? c.campaignId ?? undefined;
+  const campaignName =
+    c.campaign_name ??
+    c.campaign_reply_campaign_name ??
+    c.campaignName ??
+    undefined;
+  const rawCampaignColor =
+    c.campaign_color ?? c.campaignColor ?? undefined;
   return {
     id: c.id,
     tenantId,
@@ -367,11 +376,15 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
     isMine: c.is_mine === true,
     lastMessageAt: c.last_message_at ?? new Date().toISOString(),
     tags: [],
-    campaignReplyCampaignId: c.campaign_reply_campaign_id ?? undefined,
-    campaignReplyCampaignName: c.campaign_name ?? c.campaign_reply_campaign_name ?? undefined,
+    campaignReplyCampaignId: campaignId,
+    campaignReplyCampaignName: campaignName,
     campaignReplyText: c.campaign_reply_text ?? undefined,
     campaignReplyIntent: c.campaign_reply_intent ?? undefined,
-    campaignColor: c.campaign_color ?? undefined,
+    campaignColor: campaignId && rawCampaignColor
+      ? normalizeCampaignColor(rawCampaignColor)
+      : campaignId
+        ? DEFAULT_CAMPAIGN_COLOR
+        : undefined,
     campaignServiceStatus: c.campaign_service_status ?? undefined,
     campaignLastInboundAt: c.campaign_last_inbound_at ?? undefined,
     waitingDurationSeconds:
@@ -596,6 +609,7 @@ function AtendimentoPage() {
   const [selectedId, setSelectedId] = useState<string>(initialConversationId);
   const [listMode, setListMode] = useState<"all" | "campaign">("all");
   const [campaignSubFilter, setCampaignSubFilter] = useState<CampaignSubFilter>("awaiting_reply");
+  const [campaignColorFilter, setCampaignColorFilter] = useState<string>("all");
   const [campaignCounts, setCampaignCounts] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<Status>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
@@ -659,6 +673,9 @@ function AtendimentoPage() {
           if (ch?.provider) params.set("channel_type", ch.provider.toLowerCase());
         }
       }
+      if (campaignColorFilter !== "all") {
+        params.set("campaign_color", campaignColorFilter);
+      }
       const qs = params.toString();
       const data = await apiGet(`/conversations${qs ? `?${qs}` : ""}`);
       if (data?.counts) {
@@ -719,7 +736,7 @@ function AtendimentoPage() {
     const id = setInterval(() => reloadConversations({ silent: true }), 5000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.tenantId, listMode, campaignSubFilter, assigneeFilter, channelFilter]);
+  }, [session.tenantId, listMode, campaignSubFilter, campaignColorFilter, assigneeFilter, channelFilter]);
 
   // Carrega canais reais conectados/cadastrados (Evolution) para o filtro.
   const reloadChannels = async () => {
@@ -1503,6 +1520,41 @@ function AtendimentoPage() {
             </div>
           )}
 
+          <div className="mt-2">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Cor da campanha
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCampaignColorFilter("all")}
+                className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${
+                  campaignColorFilter === "all"
+                    ? "bg-whatsapp text-whatsapp-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                Todas
+              </button>
+              {CAMPAIGN_COLOR_PALETTE.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  title={color}
+                  onClick={() =>
+                    setCampaignColorFilter((prev) => (prev === color ? "all" : color))
+                  }
+                  className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-105 ${
+                    campaignColorFilter === color
+                      ? "border-foreground ring-2 ring-ring ring-offset-1"
+                      : "border-transparent"
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </div>
+
           {listMode === "all" && (
           <div className="mt-3 flex gap-1">
             {statusFilters.map((f) => (
@@ -1763,7 +1815,9 @@ function ConversationRow({
   const ct = getContact(conv.contactId);
   const ch = getChannel(conv.channelId);
   const hasCampaign = !!conv.campaignReplyCampaignId;
-  const campaignColor = hasCampaign ? normalizeCampaignColor(conv.campaignColor) : null;
+  const campaignColor = hasCampaign
+    ? normalizeCampaignColor(conv.campaignColor ?? DEFAULT_CAMPAIGN_COLOR)
+    : null;
   const campaignName = conv.campaignReplyCampaignName;
   const last = msgs[msgs.length - 1];
   const preview =
