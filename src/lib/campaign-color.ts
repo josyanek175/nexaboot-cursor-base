@@ -20,6 +20,6 @@ export function isValidCampaignColor(value: string | null | undefined): value is
 }
 
 export function normalizeCampaignColor(value: string | null | undefined): string {
-  if (isValidCampaignColor(value)) return value;
+  if (isValidCampaignColor(value)) return value.toUpperCase();
   return DEFAULT_CAMPAIGN_COLOR;
 }

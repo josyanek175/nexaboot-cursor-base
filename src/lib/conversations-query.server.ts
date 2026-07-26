@@ -36,6 +36,27 @@ function isUuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
+/** Expressão SQL compartilhada: cor efetiva da campanha (JOIN + fallback payload outbound). */
+const campaignColorExpr = sql`
+  CASE
+    WHEN c.campaign_reply_campaign_id IS NULL THEN NULL
+    WHEN cp.color ~ '^#[0-9A-Fa-f]{6}$' THEN UPPER(cp.color)
+    ELSE COALESCE(
+      (
+        SELECT UPPER(m.raw_payload->>'campaign_color')
+        FROM public.messages m
+        WHERE m.conversation_id = c.id
+          AND m.direction = 'out'
+          AND m.raw_payload->>'origin' = 'CAMPANHA'
+          AND m.raw_payload->>'campaign_color' ~ '^#[0-9A-Fa-f]{6}$'
+        ORDER BY m.created_at DESC
+        LIMIT 1
+      ),
+      '#6B7280'
+    )
+  END
+`;
+
 export async function getCampaignQueueCounts(companyId: string): Promise<CampaignQueueCounts> {
   const s = sql();
   const rows = await s<
@@ -167,11 +188,7 @@ export async function listConversationsForCompany(opts: {
       c.campaign_last_human_reply_at,
       cp.id AS campaign_id,
       COALESCE(cp.name, c.campaign_reply_campaign_name) AS campaign_name,
-      CASE
-        WHEN c.campaign_reply_campaign_id IS NOT NULL
-        THEN COALESCE(cp.color, '#6B7280')
-        ELSE NULL
-      END AS campaign_color,
+      ${campaignColorExpr} AS campaign_color,
       CASE
         WHEN c.campaign_last_inbound_at IS NOT NULL
         THEN EXTRACT(EPOCH FROM (now() - c.campaign_last_inbound_at))::int
@@ -197,7 +214,7 @@ export async function listConversationsForCompany(opts: {
       AND (${campaignServiceStatus}::text IS NULL OR c.campaign_service_status = ${campaignServiceStatus})
       AND (${interestedFilter}::boolean = false OR c.campaign_reply_intent = 'interested')
       AND (${campaignId}::uuid IS NULL OR c.campaign_reply_campaign_id = ${campaignId}::uuid)
-      AND (${campaignColor}::text IS NULL OR cp.color = ${campaignColor})
+      AND (${campaignColor}::text IS NULL OR ${campaignColorExpr} = ${campaignColor})
       AND (${channelType}::text IS NULL OR lower(ch.channel_type) = lower(${channelType}))
       AND (${assignedUserId}::uuid IS NULL OR a.user_id = ${assignedUserId}::uuid)
       AND (${unassignedOnly}::boolean = false OR a.user_id IS NULL)

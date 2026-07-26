@@ -659,18 +659,22 @@ function AtendimentoPage() {
     }
     try {
       const params = new URLSearchParams();
-      if (listMode === "campaign") {
-        params.set("campaign_queue", "true");
-        params.set("include_counts", "true");
-        if (campaignSubFilter !== "all") {
-          params.set("campaign_service_status", campaignSubFilter);
-        }
-        if (assigneeFilter !== "all") {
-          params.set("assigned_user_id", assigneeFilter);
-        }
-        if (channelFilter !== "all") {
-          const ch = channelList.find((c) => c.id === channelFilter);
-          if (ch?.provider) params.set("channel_type", ch.provider.toLowerCase());
+      if (listMode === "campaign" || campaignColorFilter !== "all") {
+        if (listMode === "campaign") {
+          params.set("campaign_queue", "true");
+          params.set("include_counts", "true");
+          if (campaignSubFilter !== "all") {
+            params.set("campaign_service_status", campaignSubFilter);
+          }
+          if (assigneeFilter !== "all") {
+            params.set("assigned_user_id", assigneeFilter);
+          }
+          if (channelFilter !== "all") {
+            const ch = channelList.find((c) => c.id === channelFilter);
+            if (ch?.provider) params.set("channel_type", ch.provider.toLowerCase());
+          }
+        } else {
+          params.set("campaign_queue", "true");
         }
       }
       if (campaignColorFilter !== "all") {
@@ -952,6 +956,11 @@ function AtendimentoPage() {
 
     return base
       .filter((c) => {
+        if (campaignColorFilter === "all") return true;
+        if (!c.campaignReplyCampaignId) return false;
+        return normalizeCampaignColor(c.campaignColor) === campaignColorFilter;
+      })
+      .filter((c) => {
         if (listMode !== "campaign") return true;
         if (channelFilter !== "all" && c.channelId !== channelFilter) return false;
         if (assigneeFilter === "unassigned" && c.assignedTo) return false;
@@ -976,7 +985,7 @@ function AtendimentoPage() {
         return b.lastMessageAt.localeCompare(a.lastMessageAt);
       });
 
-  }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search, listMode]);
+  }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search, listMode, campaignColorFilter]);
 
   // Busca contatos reais (mesmo sem conversa) em /api/contacts?q= ao digitar.
   useEffect(() => {

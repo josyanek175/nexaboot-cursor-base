@@ -30,6 +30,7 @@ function assert(label, condition) {
 
 // 1–4: cor
 assert("1 campanha cor válida", isValidCampaignColor("#2563EB"));
+assert("1b normalize uppercase", normalizeCampaignColor("#2563eb") === "#2563EB");
 assert("2 cor inválida bloqueada", !isValidCampaignColor("#2563EBB") && !isValidCampaignColor("blue"));
 assert("3 campanha antiga cinza", normalizeCampaignColor(null) === DEFAULT_CAMPAIGN_COLOR);
 assert("4 regex hex", CAMPAIGN_COLOR_HEX_RE.test("#AABBCC"));
