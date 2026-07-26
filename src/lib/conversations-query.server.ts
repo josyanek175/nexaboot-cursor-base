@@ -3,6 +3,7 @@
  */
 import { sql } from "@/lib/pg.server";
 import { normalizeCampaignColor } from "@/lib/campaign-color.server";
+import { resolveConversationCampaignVisual } from "@/lib/conversation-campaign-visual";
 import {
   resolveCampaignServiceStatus,
   type CampaignServiceStatus,
@@ -36,24 +37,25 @@ function isUuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
-/** Expressão SQL compartilhada: cor efetiva da campanha (JOIN + fallback payload outbound). */
-const campaignColorExpr = sql`
+const UUID_TEXT_RE = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+
+/** Cor/nome/id visuais resolvidos (reply → último outbound). */
+const resolvedCampaignColorExpr = sql`
   CASE
-    WHEN c.campaign_reply_campaign_id IS NULL THEN NULL
-    WHEN cp.color ~ '^#[0-9A-Fa-f]{6}$' THEN UPPER(cp.color)
-    ELSE COALESCE(
-      (
-        SELECT UPPER(m.raw_payload->>'campaign_color')
-        FROM public.messages m
-        WHERE m.conversation_id = c.id
-          AND m.direction = 'out'
-          AND m.raw_payload->>'origin' = 'CAMPANHA'
-          AND m.raw_payload->>'campaign_color' ~ '^#[0-9A-Fa-f]{6}$'
-        ORDER BY m.created_at DESC
-        LIMIT 1
-      ),
-      '#6B7280'
-    )
+    WHEN c.campaign_reply_campaign_id IS NOT NULL THEN
+      CASE
+        WHEN cp.color ~ '^#[0-9A-Fa-f]{6}$' THEN UPPER(cp.color)
+        ELSE '#6B7280'
+      END
+    WHEN ocp_any.id IS NOT NULL THEN
+      CASE
+        WHEN ocp.color ~ '^#[0-9A-Fa-f]{6}$' THEN UPPER(ocp.color)
+        WHEN last_camp_out.payload_campaign_color ~ '^#[0-9A-Fa-f]{6}$'
+          THEN UPPER(last_camp_out.payload_campaign_color)
+        WHEN ocp_any.color ~ '^#[0-9A-Fa-f]{6}$' THEN UPPER(ocp_any.color)
+        ELSE '#6B7280'
+      END
+    ELSE NULL
   END
 `;
 
@@ -186,9 +188,28 @@ export async function listConversationsForCompany(opts: {
       c.campaign_service_status,
       c.campaign_last_inbound_at,
       c.campaign_last_human_reply_at,
-      cp.id AS campaign_id,
-      COALESCE(cp.name, c.campaign_reply_campaign_name) AS campaign_name,
-      ${campaignColorExpr} AS campaign_color,
+      cp.name AS reply_joined_campaign_name,
+      cp.color AS reply_joined_campaign_color,
+      last_camp_out.payload_campaign_id AS outbound_payload_campaign_id,
+      last_camp_out.payload_campaign_name AS outbound_payload_campaign_name,
+      last_camp_out.payload_campaign_color AS outbound_payload_campaign_color,
+      ocp_any.id AS outbound_company_campaign_id,
+      ocp_any.name AS outbound_company_campaign_name,
+      ocp_any.color AS outbound_company_campaign_color,
+      (ocp_any.deleted_at IS NOT NULL) AS outbound_company_campaign_deleted,
+      CASE
+        WHEN c.campaign_reply_campaign_id IS NOT NULL THEN c.campaign_reply_campaign_id
+        WHEN ocp_any.id IS NOT NULL THEN ocp_any.id
+        ELSE NULL
+      END AS resolved_campaign_id,
+      CASE
+        WHEN c.campaign_reply_campaign_id IS NOT NULL
+          THEN COALESCE(cp.name, c.campaign_reply_campaign_name)
+        WHEN ocp_any.id IS NOT NULL
+          THEN COALESCE(ocp.name, ocp_any.name, last_camp_out.payload_campaign_name)
+        ELSE NULL
+      END AS resolved_campaign_name,
+      ${resolvedCampaignColorExpr} AS resolved_campaign_color,
       CASE
         WHEN c.campaign_last_inbound_at IS NOT NULL
         THEN EXTRACT(EPOCH FROM (now() - c.campaign_last_inbound_at))::int
@@ -197,10 +218,30 @@ export async function listConversationsForCompany(opts: {
     FROM public.conversations c
     JOIN public.contacts ct ON ct.id = c.contact_id
     JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
+    LEFT JOIN LATERAL (
+      SELECT
+        NULLIF(m.raw_payload->>'campaign_id', '') AS payload_campaign_id,
+        NULLIF(m.raw_payload->>'campaign_name', '') AS payload_campaign_name,
+        NULLIF(m.raw_payload->>'campaign_color', '') AS payload_campaign_color
+      FROM public.messages m
+      WHERE m.conversation_id = c.id
+        AND m.direction = 'out'
+        AND m.raw_payload->>'origin' = 'CAMPANHA'
+      ORDER BY m.created_at DESC
+      LIMIT 1
+    ) last_camp_out ON true
     LEFT JOIN public.campaigns cp
       ON cp.id = c.campaign_reply_campaign_id
       AND cp.company_id = c.company_id
       AND cp.deleted_at IS NULL
+    LEFT JOIN public.campaigns ocp_any
+      ON c.campaign_reply_campaign_id IS NULL
+      AND last_camp_out.payload_campaign_id ~ ${UUID_TEXT_RE}
+      AND ocp_any.id = last_camp_out.payload_campaign_id::uuid
+      AND ocp_any.company_id = c.company_id
+    LEFT JOIN public.campaigns ocp
+      ON ocp.id = ocp_any.id
+      AND ocp.deleted_at IS NULL
     LEFT JOIN public.conversation_assignments a
       ON a.conversation_id = c.id
       AND a.active = true
@@ -214,7 +255,7 @@ export async function listConversationsForCompany(opts: {
       AND (${campaignServiceStatus}::text IS NULL OR c.campaign_service_status = ${campaignServiceStatus})
       AND (${interestedFilter}::boolean = false OR c.campaign_reply_intent = 'interested')
       AND (${campaignId}::uuid IS NULL OR c.campaign_reply_campaign_id = ${campaignId}::uuid)
-      AND (${campaignColor}::text IS NULL OR ${campaignColorExpr} = ${campaignColor})
+      AND (${campaignColor}::text IS NULL OR ${resolvedCampaignColorExpr} = ${campaignColor})
       AND (${channelType}::text IS NULL OR lower(ch.channel_type) = lower(${channelType}))
       AND (${assignedUserId}::uuid IS NULL OR a.user_id = ${assignedUserId}::uuid)
       AND (${unassignedOnly}::boolean = false OR a.user_id IS NULL)
@@ -227,16 +268,26 @@ export async function listConversationsForCompany(opts: {
   `;
 
   return rows.map((c) => {
-    const hasCampaign = !!c.campaign_reply_campaign_id;
+    const hasCampaignReply = !!c.campaign_reply_campaign_id;
     const resolvedStatus = resolveCampaignServiceStatus(
       c.campaign_service_status as string | null,
       c.status as string | null,
-      hasCampaign,
+      hasCampaignReply,
     );
-    const rawColor = c.campaign_color as string | null | undefined;
-    const campaignColor = hasCampaign
-      ? normalizeCampaignColor(rawColor ?? undefined)
-      : null;
+    const visual = resolveConversationCampaignVisual({
+      campaign_reply_campaign_id: c.campaign_reply_campaign_id as string | null,
+      campaign_reply_campaign_name: c.campaign_reply_campaign_name as string | null,
+      reply_joined_campaign_name: c.reply_joined_campaign_name as string | null,
+      reply_joined_campaign_color: c.reply_joined_campaign_color as string | null,
+      outbound_payload_campaign_id: c.outbound_payload_campaign_id as string | null,
+      outbound_payload_campaign_name: c.outbound_payload_campaign_name as string | null,
+      outbound_payload_campaign_color: c.outbound_payload_campaign_color as string | null,
+      outbound_company_campaign_id: c.outbound_company_campaign_id as string | null,
+      outbound_company_campaign_name: c.outbound_company_campaign_name as string | null,
+      outbound_company_campaign_color: c.outbound_company_campaign_color as string | null,
+      outbound_company_campaign_deleted: c.outbound_company_campaign_deleted as boolean | null,
+    });
+
     return {
       id: c.id,
       status: c.status,
@@ -267,11 +318,14 @@ export async function listConversationsForCompany(opts: {
       campaign_last_inbound_at: c.campaign_last_inbound_at,
       campaign_last_human_reply_at: c.campaign_last_human_reply_at,
       waiting_duration_seconds: c.waiting_duration_seconds,
-      campaign_id: hasCampaign ? c.campaign_id ?? c.campaign_reply_campaign_id : null,
-      campaign_name: hasCampaign
-        ? (c.campaign_name as string | null) ?? c.campaign_reply_campaign_name
-        : null,
-      campaign_color: campaignColor,
+      resolved_campaign_id: visual.resolved_campaign_id,
+      resolved_campaign_name: visual.resolved_campaign_name,
+      resolved_campaign_color: visual.resolved_campaign_color,
+      campaign_id: visual.resolved_campaign_id,
+      campaign_name: visual.resolved_campaign_name,
+      campaign_color: visual.resolved_campaign_color,
     };
   });
 }
+
+export { resolveConversationCampaignVisual };

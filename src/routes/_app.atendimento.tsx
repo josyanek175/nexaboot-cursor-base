@@ -99,6 +99,10 @@ interface Conversation {
   campaignServiceStatus?: string;
   campaignLastInboundAt?: string;
   waitingDurationSeconds?: number;
+  /** Campanha visual da lista lateral (reply ou último outbound). */
+  resolvedCampaignId?: string;
+  resolvedCampaignName?: string;
+  resolvedCampaignColor?: string;
 }
 interface Message {
   id: string;
@@ -355,15 +359,25 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
   const assignedTo = c.assigned_user_id ?? undefined;
   const assignedUserName =
     c.assigned_user_name || c.assigned_user_email || undefined;
-  const campaignId =
-    c.campaign_id ?? c.campaign_reply_campaign_id ?? c.campaignId ?? undefined;
-  const campaignName =
-    c.campaign_name ??
-    c.campaign_reply_campaign_name ??
-    c.campaignName ??
+  const replyCampaignId = c.campaign_reply_campaign_id ?? undefined;
+  const resolvedId =
+    c.resolved_campaign_id ??
+    c.resolvedCampaignId ??
+    c.campaign_id ??
     undefined;
-  const rawCampaignColor =
-    c.campaign_color ?? c.campaignColor ?? undefined;
+  const resolvedName =
+    c.resolved_campaign_name ??
+    c.resolvedCampaignName ??
+    c.campaign_name ??
+    undefined;
+  const rawResolvedColor =
+    c.resolved_campaign_color ??
+    c.resolvedCampaignColor ??
+    c.campaign_color ??
+    undefined;
+  const resolvedColor = resolvedId
+    ? normalizeCampaignColor(rawResolvedColor ?? DEFAULT_CAMPAIGN_COLOR)
+    : undefined;
   return {
     id: c.id,
     tenantId,
@@ -376,21 +390,22 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
     isMine: c.is_mine === true,
     lastMessageAt: c.last_message_at ?? new Date().toISOString(),
     tags: [],
-    campaignReplyCampaignId: campaignId,
-    campaignReplyCampaignName: campaignName,
+    campaignReplyCampaignId: replyCampaignId,
+    campaignReplyCampaignName: c.campaign_reply_campaign_name ?? undefined,
     campaignReplyText: c.campaign_reply_text ?? undefined,
     campaignReplyIntent: c.campaign_reply_intent ?? undefined,
-    campaignColor: campaignId && rawCampaignColor
-      ? normalizeCampaignColor(rawCampaignColor)
-      : campaignId
-        ? DEFAULT_CAMPAIGN_COLOR
-        : undefined,
+    campaignColor: replyCampaignId
+      ? normalizeCampaignColor(c.campaign_color ?? DEFAULT_CAMPAIGN_COLOR)
+      : undefined,
     campaignServiceStatus: c.campaign_service_status ?? undefined,
     campaignLastInboundAt: c.campaign_last_inbound_at ?? undefined,
     waitingDurationSeconds:
       typeof c.waiting_duration_seconds === "number"
         ? c.waiting_duration_seconds
         : undefined,
+    resolvedCampaignId: resolvedId,
+    resolvedCampaignName: resolvedName,
+    resolvedCampaignColor: resolvedColor,
   };
 }
 
@@ -957,8 +972,8 @@ function AtendimentoPage() {
     return base
       .filter((c) => {
         if (campaignColorFilter === "all") return true;
-        if (!c.campaignReplyCampaignId) return false;
-        return normalizeCampaignColor(c.campaignColor) === campaignColorFilter;
+        if (!c.resolvedCampaignId) return false;
+        return normalizeCampaignColor(c.resolvedCampaignColor) === campaignColorFilter;
       })
       .filter((c) => {
         if (listMode !== "campaign") return true;
@@ -975,7 +990,7 @@ function AtendimentoPage() {
         if (!ct) return false;
         const s = search.toLowerCase();
         if ((ct.name || "").toLowerCase().includes(s) || (ct.phone || "").includes(s)) return true;
-        if ((c.campaignReplyCampaignName || "").toLowerCase().includes(s)) return true;
+        if ((c.resolvedCampaignName || c.campaignReplyCampaignName || "").toLowerCase().includes(s)) return true;
         return (msgs[c.id] ?? []).some((m) => m.text?.toLowerCase().includes(s));
       })
       .sort((a, b) => {
@@ -1823,11 +1838,11 @@ function ConversationRow({
 }: { conv: Conversation; msgs: Message[]; active: boolean; highlight?: boolean; onClick: () => void }) {
   const ct = getContact(conv.contactId);
   const ch = getChannel(conv.channelId);
-  const hasCampaign = !!conv.campaignReplyCampaignId;
-  const campaignColor = hasCampaign
-    ? normalizeCampaignColor(conv.campaignColor ?? DEFAULT_CAMPAIGN_COLOR)
+  const hasCampaignVisual = !!conv.resolvedCampaignId;
+  const campaignColor = hasCampaignVisual
+    ? normalizeCampaignColor(conv.resolvedCampaignColor ?? DEFAULT_CAMPAIGN_COLOR)
     : null;
-  const campaignName = conv.campaignReplyCampaignName;
+  const campaignName = conv.resolvedCampaignName;
   const last = msgs[msgs.length - 1];
   const preview =
     last?.type === "text" || last?.type === "internal" ? last?.text :
@@ -1845,12 +1860,12 @@ function ConversationRow({
       <button
         onClick={onClick}
         className={`relative flex w-full items-start gap-3 overflow-hidden border-b border-border py-3 text-left transition-colors ${
-          hasCampaign ? "pl-4 pr-3" : "px-3"
+          hasCampaignVisual ? "pl-4 pr-3" : "px-3"
         } ${
           active ? "bg-accent/60" : highlight ? "bg-whatsapp/10 animate-pulse" : "hover:bg-muted/60"
         }`}
       >
-        {hasCampaign && campaignColor && (
+        {hasCampaignVisual && campaignColor && (
           <span
             className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[6px]"
             style={{ backgroundColor: campaignColor }}
@@ -1861,7 +1876,7 @@ function ConversationRow({
           className="relative z-[1] box-border grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
           style={{
             backgroundColor: ct.avatarColor,
-            border: hasCampaign && campaignColor ? `2px solid ${campaignColor}` : undefined,
+            border: hasCampaignVisual && campaignColor ? `2px solid ${campaignColor}` : undefined,
           }}
         >
           {(ct.name || ct.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("")}
@@ -1872,7 +1887,7 @@ function ConversationRow({
 
             <span className="shrink-0 text-[11px] text-muted-foreground">{formatTime(conv.lastMessageAt)}</span>
           </div>
-          {hasCampaign && campaignName && campaignColor && (
+          {hasCampaignVisual && campaignName && campaignColor && (
             <span
               className="mt-0.5 inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[10px] font-semibold"
               style={{

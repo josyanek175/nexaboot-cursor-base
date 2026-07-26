@@ -16,6 +16,11 @@ import {
   resolveCampaignServiceStatus,
   CAMPAIGN_SERVICE_STATUSES,
 } from "../src/lib/campaign-service-status.server.ts";
+import { resolveConversationCampaignVisual } from "../src/lib/conversation-campaign-visual.ts";
+
+const CID_A = "11111111-1111-4111-8111-111111111111";
+const CID_B = "22222222-2222-4222-8222-222222222222";
+const CID_OTHER = "33333333-3333-4333-8333-333333333333";
 
 let failed = 0;
 
@@ -35,36 +40,106 @@ assert("2 cor inválida bloqueada", !isValidCampaignColor("#2563EBB") && !isVali
 assert("3 campanha antiga cinza", normalizeCampaignColor(null) === DEFAULT_CAMPAIGN_COLOR);
 assert("4 regex hex", CAMPAIGN_COLOR_HEX_RE.test("#AABBCC"));
 
-// API contract: cor só quando há campanha; JOIN ausente usa fallback cinza
-function mapCampaignListFields(row) {
-  const hasCampaign = !!row.campaign_reply_campaign_id;
-  const rawColor = row.campaign_color;
-  return {
-    campaign_id: hasCampaign ? row.campaign_id ?? row.campaign_reply_campaign_id : null,
-    campaign_name: hasCampaign ? row.campaign_name ?? row.campaign_reply_campaign_name : null,
-    campaign_color: hasCampaign ? normalizeCampaignColor(rawColor ?? undefined) : null,
-  };
-}
+const replyVisual = resolveConversationCampaignVisual({
+  campaign_reply_campaign_id: CID_A,
+  campaign_reply_campaign_name: "Promo Reply",
+  reply_joined_campaign_name: "Promo Reply",
+  reply_joined_campaign_color: "#7C3AED",
+});
 assert(
-  "4b JOIN retorna cor real",
-  mapCampaignListFields({
-    campaign_reply_campaign_id: "c1",
-    campaign_id: "c1",
-    campaign_name: "Promo",
-    campaign_color: "#7C3AED",
-  }).campaign_color === "#7C3AED",
+  "V1 reply usa campanha da resposta",
+  replyVisual.resolved_campaign_id === CID_A &&
+    replyVisual.resolved_campaign_name === "Promo Reply" &&
+    replyVisual.resolved_campaign_color === "#7C3AED",
 );
+
+const outboundVisual = resolveConversationCampaignVisual({
+  campaign_reply_campaign_id: null,
+  outbound_payload_campaign_id: CID_B,
+  outbound_payload_campaign_name: "tete",
+  outbound_payload_campaign_color: "#DC2626",
+  outbound_company_campaign_id: CID_B,
+  outbound_company_campaign_name: "tete",
+  outbound_company_campaign_color: "#DC2626",
+  outbound_company_campaign_deleted: false,
+});
 assert(
-  "4c sem campanha cor null",
-  mapCampaignListFields({ campaign_reply_campaign_id: null, campaign_color: "#2563EB" }).campaign_color === null,
+  "V2 sem reply com outbound usa disparo",
+  outboundVisual.resolved_campaign_id === CID_B &&
+    outboundVisual.resolved_campaign_name === "tete" &&
+    outboundVisual.resolved_campaign_color === "#DC2626",
 );
+
+const noneVisual = resolveConversationCampaignVisual({
+  campaign_reply_campaign_id: null,
+});
 assert(
-  "4d nome denormalizado + JOIN sem cor → cinza",
-  mapCampaignListFields({
-    campaign_reply_campaign_id: "c1",
-    campaign_reply_campaign_name: "Legado",
-    campaign_color: null,
-  }).campaign_color === DEFAULT_CAMPAIGN_COLOR,
+  "V3 sem campanha sem cor",
+  noneVisual.resolved_campaign_id === null &&
+    noneVisual.resolved_campaign_name === null &&
+    noneVisual.resolved_campaign_color === null,
+);
+
+const replyWins = resolveConversationCampaignVisual({
+  campaign_reply_campaign_id: CID_A,
+  reply_joined_campaign_name: "Resposta",
+  reply_joined_campaign_color: "#2563EB",
+  outbound_payload_campaign_id: CID_B,
+  outbound_payload_campaign_name: "Disparo novo",
+  outbound_payload_campaign_color: "#DC2626",
+  outbound_company_campaign_id: CID_B,
+  outbound_company_campaign_name: "Disparo novo",
+  outbound_company_campaign_color: "#DC2626",
+});
+assert(
+  "V4 reply tem prioridade sobre outbound",
+  replyWins.resolved_campaign_id === CID_A &&
+    replyWins.resolved_campaign_color === "#2563EB",
+);
+
+const crossTenant = resolveConversationCampaignVisual({
+  campaign_reply_campaign_id: null,
+  outbound_payload_campaign_id: CID_OTHER,
+  outbound_payload_campaign_name: "Outro tenant",
+  outbound_payload_campaign_color: "#2563EB",
+  outbound_company_campaign_id: null,
+});
+assert(
+  "V5 cross-tenant bloqueado",
+  crossTenant.resolved_campaign_id === null &&
+    crossTenant.resolved_campaign_name === null,
+);
+
+const deletedCamp = resolveConversationCampaignVisual({
+  campaign_reply_campaign_id: null,
+  outbound_payload_campaign_id: CID_B,
+  outbound_payload_campaign_name: "tete",
+  outbound_payload_campaign_color: "#7C3AED",
+  outbound_company_campaign_id: CID_B,
+  outbound_company_campaign_name: "tete",
+  outbound_company_campaign_color: "#6B7280",
+  outbound_company_campaign_deleted: true,
+});
+assert(
+  "V6 campanha excluída fallback payload",
+  deletedCamp.resolved_campaign_name === "tete" &&
+    deletedCamp.resolved_campaign_color === "#7C3AED",
+);
+
+const suelyCase = resolveConversationCampaignVisual({
+  campaign_reply_campaign_id: null,
+  outbound_payload_campaign_id: CID_B,
+  outbound_payload_campaign_name: "tete",
+  outbound_payload_campaign_color: "#EA580C",
+  outbound_company_campaign_id: CID_B,
+  outbound_company_campaign_name: "tete",
+  outbound_company_campaign_color: "#EA580C",
+});
+assert(
+  "V7 Suely-like outbound tete colorida",
+  suelyCase.resolved_campaign_id === CID_B &&
+    suelyCase.resolved_campaign_name === "tete" &&
+    suelyCase.resolved_campaign_color === "#EA580C",
 );
 
 // 5–10: classificação / status
