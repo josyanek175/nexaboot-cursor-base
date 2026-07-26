@@ -35,6 +35,7 @@ import {
   isPdfMime,
   fileExtension,
 } from "@/lib/whatsapp-document.constants";
+import { normalizeCampaignColor } from "@/lib/campaign-color";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
@@ -1761,6 +1762,9 @@ function ConversationRow({
 }: { conv: Conversation; msgs: Message[]; active: boolean; highlight?: boolean; onClick: () => void }) {
   const ct = getContact(conv.contactId);
   const ch = getChannel(conv.channelId);
+  const hasCampaign = !!conv.campaignReplyCampaignId;
+  const campaignColor = hasCampaign ? normalizeCampaignColor(conv.campaignColor) : null;
+  const campaignName = conv.campaignReplyCampaignName;
   const last = msgs[msgs.length - 1];
   const preview =
     last?.type === "text" || last?.type === "internal" ? last?.text :
@@ -1777,33 +1781,45 @@ function ConversationRow({
     <li>
       <button
         onClick={onClick}
-        className={`relative flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors ${
+        className={`relative flex w-full items-start gap-3 overflow-hidden border-b border-border py-3 text-left transition-colors ${
+          hasCampaign ? "pl-4 pr-3" : "px-3"
+        } ${
           active ? "bg-accent/60" : highlight ? "bg-whatsapp/10 animate-pulse" : "hover:bg-muted/60"
         }`}
       >
-        {conv.campaignReplyCampaignId && conv.campaignColor && (
+        {hasCampaign && campaignColor && (
           <span
-            className="absolute left-0 top-0 h-full w-1 rounded-r"
-            style={{ backgroundColor: conv.campaignColor }}
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[6px]"
+            style={{ backgroundColor: campaignColor }}
             aria-hidden
           />
         )}
         <div
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
-          style={{ backgroundColor: ct.avatarColor }}
+          className="relative z-[1] box-border grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+          style={{
+            backgroundColor: ct.avatarColor,
+            border: hasCampaign && campaignColor ? `2px solid ${campaignColor}` : undefined,
+          }}
         >
           {(ct.name || ct.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("")}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="relative z-[1] min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-sm font-medium">{ct.name || ct.phone}</span>
 
             <span className="shrink-0 text-[11px] text-muted-foreground">{formatTime(conv.lastMessageAt)}</span>
           </div>
-          {conv.campaignReplyCampaignName && (
-            <div className="truncate text-[11px] font-medium" style={{ color: conv.campaignColor ?? undefined }}>
-              {conv.campaignReplyCampaignName}
-            </div>
+          {hasCampaign && campaignName && campaignColor && (
+            <span
+              className="mt-0.5 inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{
+                backgroundColor: `${campaignColor}22`,
+                color: campaignColor,
+              }}
+              title={campaignName}
+            >
+              Campanha: {campaignName}
+            </span>
           )}
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs text-muted-foreground">{preview}</span>
@@ -1836,7 +1852,7 @@ function ConversationRow({
                   ? (conv.assignedUserName || getUser(conv.assignedTo)?.name || "Atendente")
                   : "Sem responsável"}
             </span>
-            {conv.campaignReplyCampaignId && (
+            {hasCampaign && (
               <>
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {campaignStatusLabel(conv.campaignServiceStatus)}
