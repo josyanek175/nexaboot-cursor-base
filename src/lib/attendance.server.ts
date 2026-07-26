@@ -5,6 +5,11 @@
 import { sql, ensureAttendanceSchema } from "@/lib/pg.server";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
+import {
+  onCampaignAssume,
+  onCampaignFinish,
+  onCampaignReopen,
+} from "@/lib/campaign-service-status.server";
 
 export type AssignmentResult = {
   conversationId: string;
@@ -199,6 +204,36 @@ export async function assumeConversation(
   };
 
   const result = await s.begin(async (tx) => {
+    const locked = await tx<{ id: string }[]>`
+      SELECT id FROM public.conversations
+      WHERE id = ${conversationId}::uuid
+        AND company_id = ${actor.companyId}::uuid
+      FOR UPDATE
+    `;
+    if (!locked[0]) {
+      throw new Error("not_found");
+    }
+
+    const existingAssignee = await tx<
+      { user_id: string; name: string | null; email: string | null }[]
+    >`
+      SELECT a.user_id, u.name, u.email
+      FROM public.conversation_assignments a
+      JOIN public.users u ON u.id = a.user_id
+      WHERE a.conversation_id = ${conversationId}::uuid
+        AND a.active = true
+        AND a.unassigned_at IS NULL
+      LIMIT 1
+    `;
+    const other = existingAssignee[0];
+    if (other && other.user_id !== actor.userId) {
+      const conflictName = other.name || other.email || "Outro atendente";
+      return {
+        conflict: true as const,
+        assigned_user_name: conflictName,
+      };
+    }
+
     const { assigned_at } = await replaceAssignment(tx as unknown as ReturnType<typeof sql>, {
       companyId: actor.companyId,
       conversationId,
@@ -206,7 +241,6 @@ export async function assumeConversation(
       assignedBy: actor.userId,
     });
 
-    // Abre a conversa se estava aguardando.
     await tx`
       UPDATE public.conversations
       SET status = CASE WHEN status = 'waiting' THEN 'open' ELSE status END,
@@ -214,17 +248,34 @@ export async function assumeConversation(
       WHERE id = ${conversationId}::uuid
     `;
 
+    await onCampaignAssume({
+      companyId: actor.companyId,
+      conversationId,
+    });
+
     return {
+      conflict: false as const,
       conversationId,
       assigned_user_id: me.id,
       assigned_user_name: me.name,
       assigned_user_email: me.email,
       assigned_at,
       assigned_by: actor.userId,
-    } satisfies AssignmentResult;
+    };
   });
 
-  return result;
+  if ("conflict" in result && result.conflict) {
+    return Response.json(
+      {
+        error: "already_assigned",
+        message: `Esta conversa já foi assumida por ${result.assigned_user_name}.`,
+        assigned_user_name: result.assigned_user_name,
+      },
+      { status: 409 },
+    );
+  }
+
+  return result as AssignmentResult;
 }
 
 export async function transferConversation(
@@ -319,4 +370,74 @@ export async function transferConversation(
   });
 
   return result;
+}
+
+export async function finishConversation(
+  conversationId: string,
+): Promise<{ ok: true; status: string; campaign_service_status: string | null } | Response> {
+  await ensureAttendanceSchema();
+  const actor = await requireAttendanceActor();
+  if (actor instanceof Response) return actor;
+
+  if (!canAssumeAttendance(actor.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const s = sql();
+  const owns = await s`
+    SELECT id FROM public.conversations
+    WHERE id = ${conversationId}::uuid AND company_id = ${actor.companyId}::uuid
+    LIMIT 1
+  `;
+  if (!owns[0]) return Response.json({ error: "not_found" }, { status: 404 });
+
+  await onCampaignFinish({ companyId: actor.companyId, conversationId });
+
+  const rows = await s<{ status: string; campaign_service_status: string | null }[]>`
+    SELECT status, campaign_service_status FROM public.conversations
+    WHERE id = ${conversationId}::uuid
+    LIMIT 1
+  `;
+  return {
+    ok: true,
+    status: rows[0]?.status ?? "finished",
+    campaign_service_status: rows[0]?.campaign_service_status ?? null,
+  };
+}
+
+export async function reopenConversation(
+  conversationId: string,
+): Promise<
+  | { ok: true; status: string; campaign_service_status: string | null }
+  | Response
+> {
+  await ensureAttendanceSchema();
+  const actor = await requireAttendanceActor();
+  if (actor instanceof Response) return actor;
+
+  if (!canAssumeAttendance(actor.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const s = sql();
+  const owns = await s`
+    SELECT id FROM public.conversations
+    WHERE id = ${conversationId}::uuid AND company_id = ${actor.companyId}::uuid
+    LIMIT 1
+  `;
+  if (!owns[0]) return Response.json({ error: "not_found" }, { status: 404 });
+
+  try {
+    const result = await onCampaignReopen({
+      companyId: actor.companyId,
+      conversationId,
+    });
+    return {
+      ok: true,
+      status: result.status,
+      campaign_service_status: result.campaign_service_status,
+    };
+  } catch {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
 }

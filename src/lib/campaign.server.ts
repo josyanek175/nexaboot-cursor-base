@@ -38,12 +38,14 @@ import {
   isCampaignManualStartAllowed,
   MANUAL_PAUSED_STATUS,
 } from "@/lib/campaign-manual-control";
+import { normalizeCampaignColor, isValidCampaignColor } from "@/lib/campaign-color.server";
 
 export type CampaignRow = {
   id: string;
   company_id: string;
   whatsapp_channel_id: string | null;
   name: string;
+  color?: string;
   message_text: string | null;
   message_type: string;
   status: string;
@@ -265,6 +267,7 @@ async function resolveValidatedMetaTemplateFields(opts: {
 
 export type CampaignWriteInput = {
   name?: string;
+  color?: string | null;
   message_text?: string | null;
   whatsapp_channel_id?: string | null;
   schedule_date?: string | null;
@@ -291,7 +294,9 @@ export async function listCampaigns(companyId: string, status?: string): Promise
     const rows = status
       ? await sql<CampaignRow[]>`
           SELECT
-            c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
+            c.id, c.company_id, c.whatsapp_channel_id, c.name,
+            COALESCE(c.color, '#6B7280') AS color,
+            c.message_text,
             c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
             c.send_interval_ms, c.schedule_date, c.window_start_time, c.window_end_time,
             COALESCE(c.send_mode, 'auto_safe') AS send_mode,
@@ -313,7 +318,9 @@ export async function listCampaigns(companyId: string, status?: string): Promise
         `
       : await sql<CampaignRow[]>`
           SELECT
-            c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
+            c.id, c.company_id, c.whatsapp_channel_id, c.name,
+            COALESCE(c.color, '#6B7280') AS color,
+            c.message_text,
             c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
             c.send_interval_ms, c.schedule_date, c.window_start_time, c.window_end_time,
             COALESCE(c.send_mode, 'auto_safe') AS send_mode,
@@ -706,7 +713,9 @@ export async function scheduleCampaign(
     WHERE id = ${campaignId}::uuid
       AND company_id = ${companyId}::uuid
       AND deleted_at IS NULL
-    RETURNING id, company_id, whatsapp_channel_id, name, message_text,
+    RETURNING id, company_id, whatsapp_channel_id, name,
+              COALESCE(color, '#6B7280') AS color,
+              message_text,
               message_type, status, scheduled_at, started_at, finished_at,
               send_interval_ms, schedule_date, window_start_time, window_end_time,
               send_mode, total_contacts, sent_count, failed_count, skipped_count,
@@ -870,7 +879,9 @@ export async function startCampaignNow(
       AND company_id = ${companyId}::uuid
       AND deleted_at IS NULL
       AND status IN ('draft', 'scheduled', 'paused', ${MANUAL_PAUSED_STATUS})
-    RETURNING id, company_id, whatsapp_channel_id, name, message_text,
+    RETURNING id, company_id, whatsapp_channel_id, name,
+              COALESCE(color, '#6B7280') AS color,
+              message_text,
               message_type, status, scheduled_at, started_at, finished_at,
               send_interval_ms, schedule_date, window_start_time, window_end_time,
               send_mode, total_contacts, sent_count, failed_count, skipped_count,
@@ -1007,7 +1018,9 @@ export async function getCampaignById(
 ): Promise<CampaignRow | null> {
   const rows = await sql<CampaignRow[]>`
     SELECT
-      c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
+      c.id, c.company_id, c.whatsapp_channel_id, c.name,
+      COALESCE(c.color, '#6B7280') AS color,
+      c.message_text,
       c.message_type, c.status, c.scheduled_at, c.started_at, c.finished_at,
       c.send_interval_ms, c.schedule_date, c.window_start_time, c.window_end_time,
       COALESCE(c.send_mode, 'auto_safe') AS send_mode,
@@ -1118,9 +1131,14 @@ export async function createCampaign(
     { requiresConfirmation: !isMeta && templateVarCount > 0 },
   );
 
+  const campaignColor = normalizeCampaignColor(data.color);
+  if (data.color != null && data.color !== "" && !isValidCampaignColor(data.color)) {
+    throw new Error("invalid_color");
+  }
+
   const rows = await sql<CampaignRow[]>`
     INSERT INTO public.campaigns (
-      company_id, whatsapp_channel_id, name, message_text,
+      company_id, whatsapp_channel_id, name, color, message_text,
       message_type, status, send_interval_ms, send_mode,
       schedule_date, window_start_time, window_end_time,
       template_id, source_campaign_id,
@@ -1131,6 +1149,7 @@ export async function createCampaign(
       ${companyId}::uuid,
       ${data.whatsapp_channel_id ?? null}::uuid,
       ${data.name},
+      ${campaignColor},
       ${data.message_text ?? null},
       ${messageType},
       'draft',
@@ -1147,7 +1166,9 @@ export async function createCampaign(
       ${JSON.stringify(storedMappings)}::jsonb,
       ${userId ?? null}::uuid
     )
-    RETURNING id, company_id, whatsapp_channel_id, name, message_text,
+    RETURNING id, company_id, whatsapp_channel_id, name,
+              COALESCE(color, '#6B7280') AS color,
+              message_text,
               message_type, status, scheduled_at, started_at, finished_at,
               send_interval_ms, schedule_date, window_start_time, window_end_time,
               send_mode, total_contacts, sent_count, failed_count, skipped_count,
@@ -1278,9 +1299,18 @@ export async function updateCampaign(
     { requiresConfirmation: !isMeta && templateVarCount > 0 },
   );
 
+  const nextColor =
+    data.color !== undefined
+      ? normalizeCampaignColor(data.color ?? undefined)
+      : normalizeCampaignColor(existing.color);
+  if (data.color != null && data.color !== "" && !isValidCampaignColor(data.color)) {
+    throw new Error("invalid_color");
+  }
+
   const rows = await sql<CampaignRow[]>`
     UPDATE public.campaigns
     SET name = ${nextName},
+        color = ${nextColor},
         message_text = ${nextMessage},
         whatsapp_channel_id = ${nextChannel}::uuid,
         schedule_date = ${nextSchedule}::date,
@@ -1298,7 +1328,9 @@ export async function updateCampaign(
       AND company_id = ${companyId}::uuid
       AND status = 'draft'
       AND deleted_at IS NULL
-    RETURNING id, company_id, whatsapp_channel_id, name, message_text,
+    RETURNING id, company_id, whatsapp_channel_id, name,
+              COALESCE(color, '#6B7280') AS color,
+              message_text,
               message_type, status, scheduled_at, started_at, finished_at,
               send_interval_ms, schedule_date, window_start_time, window_end_time,
               send_mode, total_contacts, sent_count, failed_count, skipped_count,
@@ -1610,6 +1642,7 @@ export async function createCampaignFromSource(
 
   return createCampaign(companyId, userId, {
     name,
+    color: source.color,
     message_text: source.message_text,
     whatsapp_channel_id: source.whatsapp_channel_id,
     source_campaign_id: sourceCampaignId,

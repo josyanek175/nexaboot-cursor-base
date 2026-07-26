@@ -405,19 +405,24 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
     WHERE id = ${conversationId}::uuid
   `;
 
-  // Resposta a disparo de campanha (somente inbound de texto).
-  if (!fromMe && parsed.type === "text" && parsed.body) {
-    try {
-      await ensureCampaignsSchema();
-      await handleCampaignInboundReply({
-        companyId: channel.company_id,
-        channelId: channel.id,
-        conversationId,
-        phone,
-        responseText: parsed.body,
-      });
-    } catch (e) {
-      console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", e);
+  // Resposta a disparo de campanha (texto ou mídia).
+  if (!fromMe) {
+    const isText = parsed.type === "text" && !!parsed.body;
+    const isMedia = ["image", "audio", "document", "video"].includes(parsed.type);
+    if (isText || isMedia) {
+      try {
+        await ensureCampaignsSchema();
+        await handleCampaignInboundReply({
+          companyId: channel.company_id,
+          channelId: channel.id,
+          conversationId,
+          phone,
+          responseText: isText ? parsed.body! : (parsed.body ?? null),
+          allowEmptyText: isMedia,
+        });
+      } catch (e) {
+        console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", e);
+      }
     }
   }
 }

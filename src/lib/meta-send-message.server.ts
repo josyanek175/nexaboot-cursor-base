@@ -5,6 +5,7 @@ import {
   bumpConversationAfterOutboundMessage,
   insertOutboundTextMessage,
 } from "@/lib/crm-outbound.server";
+import { tryApplyHumanReplyFromMessage } from "@/lib/campaign-service-status.server";
 import { recordMetaChannelError, clearMetaChannelError } from "@/lib/meta-channels.server";
 import { sanitizeMetaWebhookPayload } from "@/lib/meta-webhook-parse";
 import { isValidE164Digits, normalizePhoneE164 } from "@/lib/phone";
@@ -419,6 +420,18 @@ export async function sendMetaManualText(params: {
   }
 
   await bumpConversationAfterOutboundMessage({ conversationId, lastMessageText: text });
+
+  if (sentByUserId) {
+    try {
+      await tryApplyHumanReplyFromMessage({
+        companyId,
+        conversationId,
+        messageId: inserted.id,
+      });
+    } catch (e) {
+      console.error("[CAMPAIGN_HUMAN_REPLY_HOOK_FAIL]", e);
+    }
+  }
 
   console.log("[META_OUTBOUND_SAVED]", {
     conversationId,

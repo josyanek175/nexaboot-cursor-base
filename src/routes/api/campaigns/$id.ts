@@ -37,6 +37,11 @@ const EvolutionVariableMappingsSchema = z
 
 const PatchBody = z.object({
   name: z.string().trim().min(1).max(200).optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, "Cor inválida (use #RRGGBB)")
+    .optional()
+    .nullable(),
   message_text: z.string().trim().max(4000).optional().nullable(),
   whatsapp_channel_id: z.string().uuid().optional().nullable(),
   schedule_date: z
@@ -95,6 +100,9 @@ export const Route = createFileRoute("/api/campaigns/$id")({
           }
           if (msg === "invalid_window") {
             return Response.json({ error: "invalid_window" }, { status: 400 });
+          }
+          if (msg === "invalid_color") {
+            return Response.json({ error: "invalid_color" }, { status: 400 });
           }
           if (
             msg === "missing_meta_template" ||

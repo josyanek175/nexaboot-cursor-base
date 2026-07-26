@@ -7,6 +7,7 @@ import {
   UserPlus, ArrowRightLeft, CheckCircle, RotateCcw, StickyNote, History,
   Filter, PanelRightClose, PanelRightOpen, Image as ImageIcon, FileVideo, FileAudio,
   Wifi, WifiOff, ContactRound,
+  Megaphone,
 } from "lucide-react";
 import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
@@ -93,6 +94,10 @@ interface Conversation {
   campaignReplyCampaignName?: string;
   campaignReplyText?: string;
   campaignReplyIntent?: string;
+  campaignColor?: string;
+  campaignServiceStatus?: string;
+  campaignLastInboundAt?: string;
+  waitingDurationSeconds?: number;
 }
 interface Message {
   id: string;
@@ -116,6 +121,31 @@ interface Message {
   sharedContacts?: SharedContact[];
   /** Botões de template Meta (campanha), exibidos abaixo do corpo. */
   templateButtons?: string[];
+  /** Origem campanha (outbound automático). */
+  campaignOriginName?: string;
+  campaignOriginColor?: string;
+}
+
+function formatWaitingDuration(seconds?: number): string {
+  if (seconds == null || seconds < 0) return "";
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm > 0 ? `${h}h ${rm}min` : `${h}h`;
+}
+
+function campaignStatusLabel(status?: string): string {
+  switch (status) {
+    case "awaiting_reply": return "Não respondida";
+    case "in_service": return "Em atendimento";
+    case "answered": return "Respondida";
+    case "completed": return "Finalizada";
+    case "not_interested": return "Sem interesse";
+    case "opt_out": return "Opt-out";
+    default: return "Campanha";
+  }
 }
 
 // ───────── Utilitários de formatação ─────────
@@ -337,9 +367,16 @@ function transformApiConversation(c: any, tenantId: string): Conversation {
     lastMessageAt: c.last_message_at ?? new Date().toISOString(),
     tags: [],
     campaignReplyCampaignId: c.campaign_reply_campaign_id ?? undefined,
-    campaignReplyCampaignName: c.campaign_reply_campaign_name ?? undefined,
+    campaignReplyCampaignName: c.campaign_name ?? c.campaign_reply_campaign_name ?? undefined,
     campaignReplyText: c.campaign_reply_text ?? undefined,
     campaignReplyIntent: c.campaign_reply_intent ?? undefined,
+    campaignColor: c.campaign_color ?? undefined,
+    campaignServiceStatus: c.campaign_service_status ?? undefined,
+    campaignLastInboundAt: c.campaign_last_inbound_at ?? undefined,
+    waitingDurationSeconds:
+      typeof c.waiting_duration_seconds === "number"
+        ? c.waiting_duration_seconds
+        : undefined,
   };
 }
 
@@ -460,6 +497,15 @@ function transformApiMessage(m: any, conversationId: string): Message {
     ? `data:image/jpeg;base64,${thumbB64}`
     : undefined;
 
+  const campaignOriginName =
+    rpObj.origin === "CAMPANHA" && typeof rpObj.campaign_name === "string"
+      ? rpObj.campaign_name
+      : undefined;
+  const campaignOriginColor =
+    rpObj.origin === "CAMPANHA" && typeof rpObj.campaign_color === "string"
+      ? rpObj.campaign_color
+      : undefined;
+
   return {
     id: m.id ?? m.external_message_id ?? m.externalMessageId ?? `${conversationId}-${Math.random()}`,
     conversationId,
@@ -479,6 +525,8 @@ function transformApiMessage(m: any, conversationId: string): Message {
     reactionEmoji: m.reaction_emoji ?? m.reactionEmoji ?? undefined,
     sharedContacts,
     templateButtons,
+    campaignOriginName,
+    campaignOriginColor,
   };
 }
 
@@ -504,6 +552,25 @@ const statusFilters: { value: Status; label: string }[] = [
   { value: "finished", label: "Finalizadas" },
 ];
 
+type CampaignSubFilter =
+  | "all"
+  | "awaiting_reply"
+  | "interested"
+  | "in_service"
+  | "answered"
+  | "not_interested"
+  | "opt_out";
+
+const campaignSubFilters: { value: CampaignSubFilter; label: string }[] = [
+  { value: "awaiting_reply", label: "Não respondidas" },
+  { value: "interested", label: "Interessados" },
+  { value: "in_service", label: "Em atendimento" },
+  { value: "answered", label: "Respondidas" },
+  { value: "not_interested", label: "Sem interesse" },
+  { value: "opt_out", label: "Opt-out" },
+  { value: "all", label: "Todas" },
+];
+
 // ───────── Página ─────────
 function AtendimentoPage() {
   const { session, user, tenant } = useSession();
@@ -526,6 +593,9 @@ function AtendimentoPage() {
       ? (new URLSearchParams(window.location.search).get("c") ?? "")
       : "";
   const [selectedId, setSelectedId] = useState<string>(initialConversationId);
+  const [listMode, setListMode] = useState<"all" | "campaign">("all");
+  const [campaignSubFilter, setCampaignSubFilter] = useState<CampaignSubFilter>("awaiting_reply");
+  const [campaignCounts, setCampaignCounts] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<Status>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
@@ -573,7 +643,26 @@ function AtendimentoPage() {
       setConvsError(null);
     }
     try {
-      const data = await apiGet("/conversations");
+      const params = new URLSearchParams();
+      if (listMode === "campaign") {
+        params.set("campaign_queue", "true");
+        params.set("include_counts", "true");
+        if (campaignSubFilter !== "all") {
+          params.set("campaign_service_status", campaignSubFilter);
+        }
+        if (assigneeFilter !== "all") {
+          params.set("assigned_user_id", assigneeFilter);
+        }
+        if (channelFilter !== "all") {
+          const ch = channelList.find((c) => c.id === channelFilter);
+          if (ch?.provider) params.set("channel_type", ch.provider.toLowerCase());
+        }
+      }
+      const qs = params.toString();
+      const data = await apiGet(`/conversations${qs ? `?${qs}` : ""}`);
+      if (data?.counts) {
+        setCampaignCounts(data.counts as Record<string, number>);
+      }
       const list: any[] = Array.isArray(data?.conversations)
         ? data.conversations
         : Array.isArray(data)
@@ -629,7 +718,7 @@ function AtendimentoPage() {
     const id = setInterval(() => reloadConversations({ silent: true }), 5000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.tenantId]);
+  }, [session.tenantId, listMode, campaignSubFilter, assigneeFilter, channelFilter]);
 
   // Carrega canais reais conectados/cadastrados (Evolution) para o filtro.
   const reloadChannels = async () => {
@@ -825,35 +914,51 @@ function AtendimentoPage() {
   const tenantUsers = userList;
 
   const filtered = useMemo(() => {
-    // Fase 1 Evolution: dados reais vêm do banco principal (single-company).
-    // Filtros de tenant/permissão/telefone (baseados em mocks) ficam desligados
-    // aqui para não esconder conversas reais; mantemos status/canal/tipo/busca.
-    return convs
-      .filter((c) => statusFilter === "all" || c.status === statusFilter)
-      .filter((c) => channelFilter === "all" || c.channelId === channelFilter)
+    const base = listMode === "campaign"
+      ? convs
+      : convs
+          .filter((c) => statusFilter === "all" || c.status === statusFilter)
+          .filter((c) => channelFilter === "all" || c.channelId === channelFilter)
+          .filter((c) => {
+            if (typeFilter === "all") return true;
+            const isGroup = groupContactIds.has(c.contactId);
+            return typeFilter === "groups" ? isGroup : !isGroup;
+          })
+          .filter((c) =>
+            assigneeFilter === "all"
+              ? true
+              : assigneeFilter === "unassigned"
+              ? !c.assignedTo
+              : c.assignedTo === assigneeFilter,
+          );
+
+    return base
       .filter((c) => {
-        if (typeFilter === "all") return true;
-        const isGroup = groupContactIds.has(c.contactId);
-        return typeFilter === "groups" ? isGroup : !isGroup;
+        if (listMode !== "campaign") return true;
+        if (channelFilter !== "all" && c.channelId !== channelFilter) return false;
+        if (assigneeFilter === "unassigned" && c.assignedTo) return false;
+        if (assigneeFilter !== "all" && assigneeFilter !== "unassigned" && c.assignedTo !== assigneeFilter) {
+          return false;
+        }
+        return true;
       })
-      .filter((c) =>
-        assigneeFilter === "all"
-          ? true
-          : assigneeFilter === "unassigned"
-          ? !c.assignedTo
-          : c.assignedTo === assigneeFilter,
-      )
       .filter((c) => {
         if (!search) return true;
         const ct = getContact(c.contactId);
         if (!ct) return false;
         const s = search.toLowerCase();
         if ((ct.name || "").toLowerCase().includes(s) || (ct.phone || "").includes(s)) return true;
+        if ((c.campaignReplyCampaignName || "").toLowerCase().includes(s)) return true;
         return (msgs[c.id] ?? []).some((m) => m.text?.toLowerCase().includes(s));
       })
-      .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
+      .sort((a, b) => {
+        if (listMode === "campaign") {
+          return (b.waitingDurationSeconds ?? 0) - (a.waitingDurationSeconds ?? 0);
+        }
+        return b.lastMessageAt.localeCompare(a.lastMessageAt);
+      });
 
-  }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search]);
+  }, [convs, msgs, statusFilter, channelFilter, assigneeFilter, typeFilter, search, listMode]);
 
   // Busca contatos reais (mesmo sem conversa) em /api/contacts?q= ao digitar.
   useEffect(() => {
@@ -1292,15 +1397,30 @@ function AtendimentoPage() {
       toast.error(e instanceof Error ? e.message : "Falha ao transferir atendimento");
     }
   }
-  function finish() {
+  async function finish() {
     if (!selected) return;
-    patchConv(selected.id, { status: "finished" });
-    log(selected.id, "Atendimento finalizado");
+    try {
+      await apiPost(`/conversations/${encodeURIComponent(selected.id)}/finish`, {});
+      patchConv(selected.id, { status: "finished", campaignServiceStatus: "completed" });
+      log(selected.id, "Atendimento finalizado");
+      await reloadConversations({ silent: true });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao finalizar");
+    }
   }
-  function reopen() {
+  async function reopen() {
     if (!selected) return;
-    patchConv(selected.id, { status: "open" });
-    log(selected.id, "Atendimento reaberto");
+    try {
+      const res = await apiPost(`/conversations/${encodeURIComponent(selected.id)}/reopen`, {});
+      patchConv(selected.id, {
+        status: "open",
+        campaignServiceStatus: res.campaign_service_status ?? undefined,
+      });
+      log(selected.id, "Atendimento reaberto");
+      await reloadConversations({ silent: true });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao reabrir");
+    }
   }
   function addTag(tag: string) {
     if (!selected || !tag.trim()) return;
@@ -1332,6 +1452,58 @@ function AtendimentoPage() {
           </div>
 
           <div className="mt-3 flex gap-1">
+            <button
+              onClick={() => setListMode("all")}
+              className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                listMode === "all"
+                  ? "bg-whatsapp text-whatsapp-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              Atendimento
+            </button>
+            <button
+              onClick={() => {
+                setListMode("campaign");
+                setCampaignSubFilter("awaiting_reply");
+              }}
+              className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                listMode === "campaign"
+                  ? "bg-whatsapp text-whatsapp-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              <Megaphone className="mr-1 inline h-3 w-3" />
+              Campanhas
+            </button>
+          </div>
+
+          {listMode === "campaign" && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {campaignSubFilters.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setCampaignSubFilter(f.value)}
+                  className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${
+                    campaignSubFilter === f.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {f.label}
+                  {typeof campaignCounts[f.value === "interested" ? "interested" : f.value] === "number" &&
+                    f.value !== "all" && (
+                      <span className="ml-1 opacity-80">
+                        ({campaignCounts[f.value === "interested" ? "interested" : f.value]})
+                      </span>
+                    )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {listMode === "all" && (
+          <div className="mt-3 flex gap-1">
             {statusFilters.map((f) => (
               <button
                 key={f.value}
@@ -1346,6 +1518,7 @@ function AtendimentoPage() {
               </button>
             ))}
           </div>
+          )}
 
           <div className="mt-2 grid grid-cols-2 gap-2">
             <FilterSelect
@@ -1455,14 +1628,27 @@ function AtendimentoPage() {
               onAssume={assumeSelf}
             />
             {selected.campaignReplyCampaignId && (
-              <div className="border-b border-border bg-amber-50 px-4 py-2 text-xs text-amber-900">
+              <div
+                className="border-b border-border px-4 py-2 text-xs"
+                style={{
+                  backgroundColor: `${selected.campaignColor ?? "#6B7280"}14`,
+                  borderLeft: `4px solid ${selected.campaignColor ?? "#6B7280"}`,
+                }}
+              >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold">
-                    Resposta de Campanha
+                  <span className="font-semibold text-foreground">
+                    Campanha de origem:{" "}
+                    <span style={{ color: selected.campaignColor ?? undefined }}>
+                      {selected.campaignReplyCampaignName}
+                    </span>
                   </span>
-                  <span className="font-medium">{selected.campaignReplyCampaignName}</span>
+                  {selected.campaignServiceStatus && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                      {campaignStatusLabel(selected.campaignServiceStatus)}
+                    </span>
+                  )}
                   {selected.campaignReplyIntent && (
-                    <span className="text-amber-800/80">
+                    <span className="text-muted-foreground">
                       ·{" "}
                       {selected.campaignReplyIntent === "interested"
                         ? "Interessado"
@@ -1475,7 +1661,7 @@ function AtendimentoPage() {
                   )}
                 </div>
                 {selected.campaignReplyText && (
-                  <p className="mt-1 truncate text-amber-900/90">
+                  <p className="mt-1 truncate text-muted-foreground">
                     Resposta: “{selected.campaignReplyText}”
                   </p>
                 )}
@@ -1591,10 +1777,17 @@ function ConversationRow({
     <li>
       <button
         onClick={onClick}
-        className={`flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors ${
+        className={`relative flex w-full items-start gap-3 border-b border-border px-3 py-3 text-left transition-colors ${
           active ? "bg-accent/60" : highlight ? "bg-whatsapp/10 animate-pulse" : "hover:bg-muted/60"
         }`}
       >
+        {conv.campaignReplyCampaignId && conv.campaignColor && (
+          <span
+            className="absolute left-0 top-0 h-full w-1 rounded-r"
+            style={{ backgroundColor: conv.campaignColor }}
+            aria-hidden
+          />
+        )}
         <div
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
           style={{ backgroundColor: ct.avatarColor }}
@@ -1607,6 +1800,11 @@ function ConversationRow({
 
             <span className="shrink-0 text-[11px] text-muted-foreground">{formatTime(conv.lastMessageAt)}</span>
           </div>
+          {conv.campaignReplyCampaignName && (
+            <div className="truncate text-[11px] font-medium" style={{ color: conv.campaignColor ?? undefined }}>
+              {conv.campaignReplyCampaignName}
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs text-muted-foreground">{preview}</span>
             {conv.unreadCount > 0 && (
@@ -1639,9 +1837,21 @@ function ConversationRow({
                   : "Sem responsável"}
             </span>
             {conv.campaignReplyCampaignId && (
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                Campanha
-              </span>
+              <>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {campaignStatusLabel(conv.campaignServiceStatus)}
+                </span>
+                {conv.campaignReplyIntent && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {conv.campaignReplyIntent}
+                  </span>
+                )}
+                {conv.waitingDurationSeconds != null && conv.campaignServiceStatus === "awaiting_reply" && (
+                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">
+                    Aguardando há {formatWaitingDuration(conv.waitingDurationSeconds)}
+                  </span>
+                )}
+              </>
             )}
             <StatusChip status={conv.status} />
           </div>
@@ -2094,6 +2304,14 @@ function BubbleInner({ m, onRetryDocument }: { m: Message; onRetryDocument?: (id
         ) : m.type !== "document" ? (
           m.text && <div className="whitespace-pre-wrap">{m.text}</div>
         ) : null}
+        {m.campaignOriginName && (
+          <div
+            className="mt-2 border-t border-black/10 pt-2 text-[10px] font-medium"
+            style={{ color: m.campaignOriginColor ?? undefined }}
+          >
+            Enviado pela campanha “{m.campaignOriginName}”
+          </div>
+        )}
         {m.templateButtons && m.templateButtons.length > 0 && (
           <div className="mt-2 space-y-1 border-t border-black/10 pt-2">
             {m.templateButtons.map((label) => (

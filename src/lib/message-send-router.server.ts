@@ -2,6 +2,7 @@
 
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { sendMetaManualText } from "@/lib/meta-send-message.server";
+import { tryApplyHumanReplyFromMessage } from "@/lib/campaign-service-status.server";
 import {
   getProviderByKind,
   normalizeProviderKind,
@@ -172,6 +173,18 @@ export async function sendConversationText(params: {
   const row = inserted[0];
   if (!row) {
     return { ok: false, status: 500, error: "message_save_failed", provider: "evolution" };
+  }
+
+  if (row.sent_by_user_id) {
+    try {
+      await tryApplyHumanReplyFromMessage({
+        companyId,
+        conversationId,
+        messageId: row.id,
+      });
+    } catch (e) {
+      console.error("[CAMPAIGN_HUMAN_REPLY_HOOK_FAIL]", e);
+    }
   }
 
   return {
