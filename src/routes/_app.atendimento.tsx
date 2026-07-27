@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Search, Paperclip, Send, Smile, Mic, MoreVertical, Phone, Video,
@@ -36,6 +36,12 @@ import {
   fileExtension,
 } from "@/lib/whatsapp-document.constants";
 import { normalizeCampaignColor, CAMPAIGN_COLOR_PALETTE, DEFAULT_CAMPAIGN_COLOR } from "@/lib/campaign-color";
+import {
+  transformApiConversation,
+  campaignServiceStatusDisplay,
+  matchesCampaignColorFilter,
+  resolveConversationRowCampaign,
+} from "@/lib/atendimento-conversation";
 
 // ───────── Tipos locais (dados 100% reais — sem mocks) ─────────
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
@@ -141,18 +147,6 @@ function formatWaitingDuration(seconds?: number): string {
   return rm > 0 ? `${h}h ${rm}min` : `${h}h`;
 }
 
-function campaignStatusLabel(status?: string): string {
-  switch (status) {
-    case "awaiting_reply": return "Não respondida";
-    case "in_service": return "Em atendimento";
-    case "answered": return "Respondida";
-    case "completed": return "Finalizada";
-    case "not_interested": return "Sem interesse";
-    case "opt_out": return "Opt-out";
-    default: return "Campanha";
-  }
-}
-
 // ───────── Utilitários de formatação ─────────
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -228,11 +222,6 @@ const conversationPhone = new Map<string, string>();
 /** Debug temporário: por conversationId, último pushName/remoteJid observado. */
 const conversationDebug = new Map<string, { pushName?: string; remoteJid?: string }>();
 
-function mapApiStatus(s: unknown): ConversationStatus {
-  if (s === "waiting" || s === "pending") return "waiting";
-  if (s === "closed" || s === "finished" || s === "resolved") return "finished";
-  return "open";
-}
 function mapApiProvider(t: unknown): Provider {
   if (t === "META") return "META";
   if (t === "INTERNAL") return "INTERNAL";
@@ -355,60 +344,6 @@ function upsertRealUser(u: any, tenantId: string): AttUser {
   else users.push(user);
   return user;
 }
-function transformApiConversation(c: any, tenantId: string): Conversation {
-  const assignedTo = c.assigned_user_id ?? undefined;
-  const assignedUserName =
-    c.assigned_user_name || c.assigned_user_email || undefined;
-  const replyCampaignId = c.campaign_reply_campaign_id ?? undefined;
-  const resolvedId =
-    c.resolved_campaign_id ??
-    c.resolvedCampaignId ??
-    c.campaign_id ??
-    undefined;
-  const resolvedName =
-    c.resolved_campaign_name ??
-    c.resolvedCampaignName ??
-    c.campaign_name ??
-    undefined;
-  const rawResolvedColor =
-    c.resolved_campaign_color ??
-    c.resolvedCampaignColor ??
-    c.campaign_color ??
-    undefined;
-  const resolvedColor = resolvedId
-    ? normalizeCampaignColor(rawResolvedColor ?? DEFAULT_CAMPAIGN_COLOR)
-    : undefined;
-  return {
-    id: c.id,
-    tenantId,
-    channelId: c.whatsapp_channel_id,
-    contactId: c.contact_id,
-    status: mapApiStatus(c.status),
-    unreadCount: typeof c.unread_count === "number" ? c.unread_count : 0,
-    assignedTo,
-    assignedUserName: assignedTo ? assignedUserName : undefined,
-    isMine: c.is_mine === true,
-    lastMessageAt: c.last_message_at ?? new Date().toISOString(),
-    tags: [],
-    campaignReplyCampaignId: replyCampaignId,
-    campaignReplyCampaignName: c.campaign_reply_campaign_name ?? undefined,
-    campaignReplyText: c.campaign_reply_text ?? undefined,
-    campaignReplyIntent: c.campaign_reply_intent ?? undefined,
-    campaignColor: replyCampaignId
-      ? normalizeCampaignColor(c.campaign_color ?? DEFAULT_CAMPAIGN_COLOR)
-      : undefined,
-    campaignServiceStatus: c.campaign_service_status ?? undefined,
-    campaignLastInboundAt: c.campaign_last_inbound_at ?? undefined,
-    waitingDurationSeconds:
-      typeof c.waiting_duration_seconds === "number"
-        ? c.waiting_duration_seconds
-        : undefined,
-    resolvedCampaignId: resolvedId,
-    resolvedCampaignName: resolvedName,
-    resolvedCampaignColor: resolvedColor,
-  };
-}
-
 function responsibleLabel(conv: Conversation, currentUserId?: string): string {
   if (!conv.assignedTo) return "Sem responsável";
   if (conv.isMine || (currentUserId && conv.assignedTo === currentUserId)) {
@@ -970,11 +905,11 @@ function AtendimentoPage() {
           );
 
     return base
-      .filter((c) => {
-        if (campaignColorFilter === "all") return true;
-        if (!c.resolvedCampaignId) return false;
-        return normalizeCampaignColor(c.resolvedCampaignColor) === campaignColorFilter;
-      })
+      .filter((c) =>
+        campaignColorFilter === "all"
+          ? true
+          : matchesCampaignColorFilter(c, campaignColorFilter),
+      )
       .filter((c) => {
         if (listMode !== "campaign") return true;
         if (channelFilter !== "all" && c.channelId !== channelFilter) return false;
@@ -1653,14 +1588,15 @@ function AtendimentoPage() {
             </li>
           )}
           {!loadingConvs && !convsError && filtered.map((c) => (
-            <ConversationRow
-              key={c.id}
-              conv={c}
-              msgs={msgs[c.id] ?? []}
-              active={c.id === selectedId}
-              highlight={highlighted.has(c.id)}
-              onClick={() => { setSelectedId(c.id); setMobileView("chat"); }}
-            />
+            <ConversationRowBoundary key={c.id} conversationId={c.id}>
+              <ConversationRow
+                conv={c}
+                msgs={msgs[c.id] ?? []}
+                active={c.id === selectedId}
+                highlight={highlighted.has(c.id)}
+                onClick={() => { setSelectedId(c.id); setMobileView("chat"); }}
+              />
+            </ConversationRowBoundary>
           ))}
 
           {/* Contatos sem conversa no canal alvo — mesmo telefone pode ter conversa em outro canal. */}
@@ -1721,7 +1657,7 @@ function AtendimentoPage() {
                   </span>
                   {selected.campaignServiceStatus && (
                     <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                      {campaignStatusLabel(selected.campaignServiceStatus)}
+                      {campaignServiceStatusDisplay(selected)}
                     </span>
                   )}
                   {selected.campaignReplyIntent && (
@@ -1833,16 +1769,39 @@ function AtendimentoPage() {
 }
 
 // ───────── Lista lateral ─────────
+class ConversationRowBoundary extends Component<
+  { children: ReactNode; conversationId: string },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[ConversationRow]", this.props.conversationId, error);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <li className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+          Não foi possível exibir esta conversa.
+        </li>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function ConversationRow({
   conv, msgs, active, highlight, onClick,
 }: { conv: Conversation; msgs: Message[]; active: boolean; highlight?: boolean; onClick: () => void }) {
   const ct = getContact(conv.contactId);
   const ch = getChannel(conv.channelId);
-  const hasCampaignVisual = !!conv.resolvedCampaignId;
-  const campaignColor = hasCampaignVisual
-    ? normalizeCampaignColor(conv.resolvedCampaignColor ?? DEFAULT_CAMPAIGN_COLOR)
-    : null;
-  const campaignName = conv.resolvedCampaignName;
+  const { campaignName, campaignColor, hasCampaignVisual, hasCampaignQueue } =
+    resolveConversationRowCampaign(conv);
   const last = msgs[msgs.length - 1];
   const preview =
     last?.type === "text" || last?.type === "internal" ? last?.text :
@@ -1930,10 +1889,10 @@ function ConversationRow({
                   ? (conv.assignedUserName || getUser(conv.assignedTo)?.name || "Atendente")
                   : "Sem responsável"}
             </span>
-            {hasCampaign && (
+            {hasCampaignQueue && (
               <>
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  {campaignStatusLabel(conv.campaignServiceStatus)}
+                  {campaignServiceStatusDisplay(conv)}
                 </span>
                 {conv.campaignReplyIntent && (
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">

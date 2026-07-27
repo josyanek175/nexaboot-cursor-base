@@ -17,6 +17,12 @@ import {
   CAMPAIGN_SERVICE_STATUSES,
 } from "../src/lib/campaign-service-status.server.ts";
 import { resolveConversationCampaignVisual } from "../src/lib/conversation-campaign-visual.ts";
+import {
+  transformApiConversation,
+  resolveConversationRowCampaign,
+  campaignServiceStatusDisplay,
+  matchesCampaignColorFilter,
+} from "../src/lib/atendimento-conversation.ts";
 
 const CID_A = "11111111-1111-4111-8111-111111111111";
 const CID_B = "22222222-2222-4222-8222-222222222222";
@@ -198,7 +204,127 @@ const older = new Date("2026-01-01T08:00:00Z").getTime();
 const newer = new Date("2026-01-01T09:00:00Z").getTime();
 assert("18 mais antigo primeiro (ASC inbound)", older < newer);
 
-// 19–22: status fallback / statuses
+// ── Frontend Atendimento: transformação + render resiliente (fixtures reais) ──
+const SUELY_CAMPAIGN_ID = "79ed87e1-0cad-41fe-bc68-a63004e91b0d";
+
+const suelyApiFixture = {
+  id: "conv-suely",
+  contact_id: "contact-suely",
+  whatsapp_channel_id: "channel-1",
+  status: "open",
+  unread_count: 0,
+  last_message_at: "2026-07-26T12:00:00.000Z",
+  contact_name: "suely",
+  campaign_service_status: "in_service",
+  assigned_user_id: null,
+  assigned_user_name: null,
+  resolved_campaign_id: SUELY_CAMPAIGN_ID,
+  resolved_campaign_name: "tete",
+  resolved_campaign_color: "#EA580C",
+  campaign_color: "#EA580C",
+};
+
+let suelyTransformed;
+try {
+  suelyTransformed = transformApiConversation(suelyApiFixture, "tenant-dev");
+  assert("F1 Suely transform não lança", !!suelyTransformed);
+} catch (e) {
+  failed += 1;
+  console.error("FAIL F1 Suely transform lançou", e);
+}
+
+if (suelyTransformed) {
+  assert(
+    "F2 Suely resolvedCampaignId",
+    suelyTransformed.resolvedCampaignId === SUELY_CAMPAIGN_ID,
+  );
+  assert(
+    "F3 Suely resolvedCampaignName",
+    suelyTransformed.resolvedCampaignName === "tete",
+  );
+  assert(
+    "F4 Suely resolvedCampaignColor",
+    suelyTransformed.resolvedCampaignColor === "#EA580C",
+  );
+  assert(
+    "F5 Suely in_service sem atendente",
+    suelyTransformed.campaignServiceStatus === "in_service" &&
+      suelyTransformed.assignedTo === null &&
+      suelyTransformed.assignedUserName === null,
+  );
+  assert(
+    "F6 Suely status display sem atendente",
+    campaignServiceStatusDisplay(suelyTransformed) === "Em atendimento",
+  );
+
+  const suelyRow = resolveConversationRowCampaign(suelyTransformed);
+  assert("F7 Suely row campaignId", suelyRow.campaignId === SUELY_CAMPAIGN_ID);
+  assert("F8 Suely row campaignName", suelyRow.campaignName === "tete");
+  assert("F9 Suely row campaignColor", suelyRow.campaignColor === "#EA580C");
+  assert("F10 Suely row visual", suelyRow.hasCampaignVisual === true);
+  assert(
+    "F11 Suely filtro cor laranja",
+    matchesCampaignColorFilter(suelyTransformed, "#EA580C"),
+  );
+  assert(
+    "F12 Suely excluída por outra cor",
+    !matchesCampaignColorFilter(suelyTransformed, "#2563EB"),
+  );
+}
+
+const brunoApiFixture = {
+  id: "conv-bruno",
+  contact_id: "contact-bruno",
+  whatsapp_channel_id: "channel-1",
+  status: "open",
+  unread_count: 1,
+  last_message_at: "2026-07-26T11:00:00.000Z",
+  contact_name: "bruno",
+  campaign_service_status: "awaiting_reply",
+  assigned_user_id: null,
+  assigned_user_name: null,
+  resolved_campaign_id: SUELY_CAMPAIGN_ID,
+  resolved_campaign_name: "tete",
+  resolved_campaign_color: "#EA580C",
+  campaign_color: "#EA580C",
+};
+
+let brunoTransformed;
+try {
+  brunoTransformed = transformApiConversation(brunoApiFixture, "tenant-dev");
+  assert("F13 Bruno transform não lança", !!brunoTransformed);
+} catch (e) {
+  failed += 1;
+  console.error("FAIL F13 Bruno transform lançou", e);
+}
+
+if (brunoTransformed) {
+  assert(
+    "F14 Bruno awaiting_reply",
+    brunoTransformed.campaignServiceStatus === "awaiting_reply",
+  );
+  assert(
+    "F15 Bruno cor #EA580C",
+    brunoTransformed.resolvedCampaignColor === "#EA580C",
+  );
+  assert(
+    "F16 Bruno status label",
+    campaignServiceStatusDisplay(brunoTransformed) === "Não respondida",
+  );
+  const brunoRow = resolveConversationRowCampaign(brunoTransformed);
+  assert("F17 Bruno row cor", brunoRow.campaignColor === "#EA580C");
+}
+
+assert(
+  "F18 conversa sem campanha passa filtro all",
+  matchesCampaignColorFilter({ resolvedCampaignColor: null }, null),
+);
+assert(
+  "F19 conversa sem campanha removida com filtro ativo",
+  !matchesCampaignColorFilter({ resolvedCampaignColor: null }, "#EA580C"),
+);
+
+// 22: status fallback / statuses
 assert("19 fallback awaiting_reply", resolveCampaignServiceStatus(null, "open", true) === "awaiting_reply");
 assert("20 fallback completed finished", resolveCampaignServiceStatus(null, "finished", true) === "completed");
 assert("21 sem campanha null", resolveCampaignServiceStatus(null, "open", false) === null);
