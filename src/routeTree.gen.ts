@@ -86,8 +86,10 @@ import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messa
 import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
 import { Route as ApiEvolutionChannelsIdRouteImport } from './routes/api/evolution/channels/$id'
 import { Route as ApiConversationsIdTransferRouteImport } from './routes/api/conversations/$id/transfer'
+import { Route as ApiConversationsIdReopenRouteImport } from './routes/api/conversations/$id/reopen'
 import { Route as ApiConversationsIdReadRouteImport } from './routes/api/conversations/$id/read'
 import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
+import { Route as ApiConversationsIdFinishRouteImport } from './routes/api/conversations/$id/finish'
 import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
 import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
 import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
@@ -506,6 +508,12 @@ const ApiConversationsIdTransferRoute =
     path: '/$id/transfer',
     getParentRoute: () => ApiConversationsRoute,
   } as any)
+const ApiConversationsIdReopenRoute =
+  ApiConversationsIdReopenRouteImport.update({
+    id: '/$id/reopen',
+    path: '/$id/reopen',
+    getParentRoute: () => ApiConversationsRoute,
+  } as any)
 const ApiConversationsIdReadRoute = ApiConversationsIdReadRouteImport.update({
   id: '/$id/read',
   path: '/$id/read',
@@ -515,6 +523,12 @@ const ApiConversationsIdMessagesRoute =
   ApiConversationsIdMessagesRouteImport.update({
     id: '/$id/messages',
     path: '/$id/messages',
+    getParentRoute: () => ApiConversationsRoute,
+  } as any)
+const ApiConversationsIdFinishRoute =
+  ApiConversationsIdFinishRouteImport.update({
+    id: '/$id/finish',
+    path: '/$id/finish',
     getParentRoute: () => ApiConversationsRoute,
   } as any)
 const ApiConversationsIdAssumeRoute =
@@ -730,8 +744,10 @@ export interface FileRoutesByFullPath {
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
+  '/api/conversations/$id/finish': typeof ApiConversationsIdFinishRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
   '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/conversations/$id/reopen': typeof ApiConversationsIdReopenRoute
   '/api/conversations/$id/transfer': typeof ApiConversationsIdTransferRoute
   '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
@@ -833,8 +849,10 @@ export interface FileRoutesByTo {
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
+  '/api/conversations/$id/finish': typeof ApiConversationsIdFinishRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
   '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/conversations/$id/reopen': typeof ApiConversationsIdReopenRoute
   '/api/conversations/$id/transfer': typeof ApiConversationsIdTransferRoute
   '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
@@ -939,8 +957,10 @@ export interface FileRoutesById {
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
+  '/api/conversations/$id/finish': typeof ApiConversationsIdFinishRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
   '/api/conversations/$id/read': typeof ApiConversationsIdReadRoute
+  '/api/conversations/$id/reopen': typeof ApiConversationsIdReopenRoute
   '/api/conversations/$id/transfer': typeof ApiConversationsIdTransferRoute
   '/api/evolution/channels/$id': typeof ApiEvolutionChannelsIdRouteWithChildren
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
@@ -1045,8 +1065,10 @@ export interface FileRouteTypes {
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
+    | '/api/conversations/$id/finish'
     | '/api/conversations/$id/messages'
     | '/api/conversations/$id/read'
+    | '/api/conversations/$id/reopen'
     | '/api/conversations/$id/transfer'
     | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
@@ -1148,8 +1170,10 @@ export interface FileRouteTypes {
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
+    | '/api/conversations/$id/finish'
     | '/api/conversations/$id/messages'
     | '/api/conversations/$id/read'
+    | '/api/conversations/$id/reopen'
     | '/api/conversations/$id/transfer'
     | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
@@ -1253,8 +1277,10 @@ export interface FileRouteTypes {
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
     | '/api/conversations/$id/assume'
+    | '/api/conversations/$id/finish'
     | '/api/conversations/$id/messages'
     | '/api/conversations/$id/read'
+    | '/api/conversations/$id/reopen'
     | '/api/conversations/$id/transfer'
     | '/api/evolution/channels/$id'
     | '/api/messages/$messageId/media'
@@ -1869,6 +1895,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConversationsIdTransferRouteImport
       parentRoute: typeof ApiConversationsRoute
     }
+    '/api/conversations/$id/reopen': {
+      id: '/api/conversations/$id/reopen'
+      path: '/$id/reopen'
+      fullPath: '/api/conversations/$id/reopen'
+      preLoaderRoute: typeof ApiConversationsIdReopenRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
     '/api/conversations/$id/read': {
       id: '/api/conversations/$id/read'
       path: '/$id/read'
@@ -1881,6 +1914,13 @@ declare module '@tanstack/react-router' {
       path: '/$id/messages'
       fullPath: '/api/conversations/$id/messages'
       preLoaderRoute: typeof ApiConversationsIdMessagesRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/finish': {
+      id: '/api/conversations/$id/finish'
+      path: '/$id/finish'
+      fullPath: '/api/conversations/$id/finish'
+      preLoaderRoute: typeof ApiConversationsIdFinishRouteImport
       parentRoute: typeof ApiConversationsRoute
     }
     '/api/conversations/$id/assume': {
@@ -2215,16 +2255,20 @@ const ApiContactsRouteWithChildren = ApiContactsRoute._addFileChildren(
 interface ApiConversationsRouteChildren {
   ApiConversationsStartRoute: typeof ApiConversationsStartRoute
   ApiConversationsIdAssumeRoute: typeof ApiConversationsIdAssumeRoute
+  ApiConversationsIdFinishRoute: typeof ApiConversationsIdFinishRoute
   ApiConversationsIdMessagesRoute: typeof ApiConversationsIdMessagesRoute
   ApiConversationsIdReadRoute: typeof ApiConversationsIdReadRoute
+  ApiConversationsIdReopenRoute: typeof ApiConversationsIdReopenRoute
   ApiConversationsIdTransferRoute: typeof ApiConversationsIdTransferRoute
 }
 
 const ApiConversationsRouteChildren: ApiConversationsRouteChildren = {
   ApiConversationsStartRoute: ApiConversationsStartRoute,
   ApiConversationsIdAssumeRoute: ApiConversationsIdAssumeRoute,
+  ApiConversationsIdFinishRoute: ApiConversationsIdFinishRoute,
   ApiConversationsIdMessagesRoute: ApiConversationsIdMessagesRoute,
   ApiConversationsIdReadRoute: ApiConversationsIdReadRoute,
+  ApiConversationsIdReopenRoute: ApiConversationsIdReopenRoute,
   ApiConversationsIdTransferRoute: ApiConversationsIdTransferRoute,
 }
 

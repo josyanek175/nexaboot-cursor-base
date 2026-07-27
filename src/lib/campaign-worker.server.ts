@@ -54,6 +54,7 @@ type WorkerCampaign = {
   company_id: string;
   whatsapp_channel_id: string;
   name: string;
+  color: string;
   message_text: string | null;
   message_type: string;
   status: string;
@@ -238,7 +239,11 @@ async function saveOutboundCampaignMessage(opts: {
   text: string;
   providerId: string | null;
   campaignId: string;
+  campaignName: string;
+  campaignColor: string;
   campaignContactId: string;
+  provider: "meta" | "evolution";
+  sentAt: string;
   metaTemplate?: {
     template_name: string;
     template_language: string;
@@ -260,7 +265,11 @@ async function saveOutboundCampaignMessage(opts: {
   const payload: Record<string, unknown> = {
     origin: "CAMPANHA",
     campaign_id: opts.campaignId,
+    campaign_name: opts.campaignName,
+    campaign_color: opts.campaignColor,
     campaign_contact_id: opts.campaignContactId,
+    provider: opts.provider,
+    sent_at: opts.sentAt,
     sender: SYSTEM_SENDER_NAME,
   };
   if (opts.metaTemplate) {
@@ -333,7 +342,9 @@ async function loadDueCampaigns(): Promise<WorkerCampaign[]> {
   const s = sql();
   const rows = await s<Record<string, unknown>[]>`
     SELECT
-      c.id, c.company_id, c.whatsapp_channel_id, c.name, c.message_text,
+      c.id, c.company_id, c.whatsapp_channel_id, c.name,
+      COALESCE(c.color, '#6B7280') AS color,
+      c.message_text,
       c.message_type, c.status, c.schedule_date, c.window_start_time, c.window_end_time,
       c.sent_count, c.started_at,
       c.meta_template_name, c.meta_language_code,
@@ -382,6 +393,7 @@ async function loadDueCampaigns(): Promise<WorkerCampaign[]> {
       company_id: String(r.company_id),
       whatsapp_channel_id: String(r.whatsapp_channel_id),
       name: String(r.name),
+      color: String(r.color ?? "#6B7280"),
       message_text: r.message_text != null ? String(r.message_text) : null,
       message_type: String(r.message_type ?? "text"),
       status: String(r.status),
@@ -1577,7 +1589,11 @@ export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
         text: text!,
         providerId,
         campaignId: campaign.id,
+        campaignName: campaign.name,
+        campaignColor: campaign.color,
         campaignContactId: contact.id,
+        provider: isMeta ? "meta" : "evolution",
+        sentAt: new Date().toISOString(),
         metaTemplate: metaTemplatePersist
           ? {
               ...metaTemplatePersist,

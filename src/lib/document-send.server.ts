@@ -4,6 +4,7 @@ import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import {
   bumpConversationAfterOutboundMessage,
 } from "@/lib/crm-outbound.server";
+import { tryApplyHumanReplyFromMessage } from "@/lib/campaign-service-status.server";
 import {
   isWithinMetaServiceWindow,
   metaSendRejectionMessage,
@@ -492,6 +493,14 @@ export async function sendConversationDocument(params: {
     });
     await bumpConversationAfterOutboundMessage({ conversationId, lastMessageText: lastMessagePreview });
 
+    if (sentByUserId) {
+      try {
+        await tryApplyHumanReplyFromMessage({ companyId, conversationId, messageId });
+      } catch (e) {
+        console.error("[CAMPAIGN_HUMAN_REPLY_HOOK_FAIL]", e);
+      }
+    }
+
     console.log("[DOCUMENT_MESSAGE_SAVED]", {
       companyId,
       channelId: conv.whatsapp_channel_id,
@@ -589,6 +598,14 @@ export async function sendConversationDocument(params: {
     },
   });
   await bumpConversationAfterOutboundMessage({ conversationId, lastMessageText: lastMessagePreview });
+
+  if (sentByUserId) {
+    try {
+      await tryApplyHumanReplyFromMessage({ companyId, conversationId, messageId });
+    } catch (e) {
+      console.error("[CAMPAIGN_HUMAN_REPLY_HOOK_FAIL]", e);
+    }
+  }
 
   console.log("[DOCUMENT_MESSAGE_SAVED]", {
     companyId,

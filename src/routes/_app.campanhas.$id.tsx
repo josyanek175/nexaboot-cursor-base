@@ -23,10 +23,13 @@ import {
   MANUAL_PAUSED_STATUS,
   shouldShowManualStartButton,
 } from "@/lib/campaign-manual-control";
+import { CampaignColorPicker } from "@/components/campaign-color-picker";
+import { DEFAULT_CAMPAIGN_COLOR } from "@/lib/campaign-color";
 
 type Campaign = {
   id: string;
   name: string;
+  color?: string;
   status: string;
   message_text: string | null;
   message_type?: string;
@@ -144,6 +147,7 @@ function EditarCampanhaPage() {
   const [dispatchAction, setDispatchAction] = useState<"start" | "pause" | "resume" | null>(null);
 
   const [name, setName] = useState("");
+  const [campaignColor, setCampaignColor] = useState(DEFAULT_CAMPAIGN_COLOR);
   const [messageText, setMessageText] = useState("");
   const [channelId, setChannelId] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
@@ -316,6 +320,7 @@ function EditarCampanhaPage() {
     const data = (await res.json()) as { campaign: Campaign };
     setCampaign(data.campaign);
     setName(data.campaign.name);
+    setCampaignColor(data.campaign.color ?? DEFAULT_CAMPAIGN_COLOR);
     setMessageText(data.campaign.message_text ?? "");
     setChannelId(data.campaign.whatsapp_channel_id ?? "");
     setMetaVariableMappings(data.campaign.meta_variable_mappings ?? {});
@@ -457,6 +462,7 @@ function EditarCampanhaPage() {
   function campaignPayload() {
     return {
       name: name.trim(),
+      color: campaignColor,
       message_text: messageText.trim() || null,
       whatsapp_channel_id: channelId || null,
       schedule_date: scheduleDate || null,
@@ -918,6 +924,11 @@ function EditarCampanhaPage() {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
               />
             </label>
+            <CampaignColorPicker
+              value={campaignColor}
+              onChange={setCampaignColor}
+              disabled={!canManage || !isDraft}
+            />
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">
                 Canal / número de envio

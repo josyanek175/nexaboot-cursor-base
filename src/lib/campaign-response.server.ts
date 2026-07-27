@@ -1,11 +1,16 @@
 /**
  * Tratamento de respostas inbound a disparos de campanha.
- * Chamado pelo webhook Evolution após gravar a mensagem recebida.
+ * Chamado pelos webhooks Meta/Evolution após gravar a mensagem recebida.
  */
 import { sql } from "@/lib/pg.server";
 import { getPhoneVariants, normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import { insertCampaignEvent, syncCampaignContactCounters } from "@/lib/campaign.server";
 import { MANUAL_PAUSED_STATUS } from "@/lib/campaign-manual-control";
+import { normalizeCampaignColor } from "@/lib/campaign-color.server";
+import {
+  markCampaignOptOut,
+  onCampaignInbound,
+} from "@/lib/campaign-service-status.server";
 
 export type ResponseIntent = "interested" | "not_interested" | "opt_out" | "unknown";
 
@@ -68,7 +73,6 @@ export function classifyCampaignResponse(text: string | null | undefined): Respo
   const templateIntent = TEMPLATE_BUTTON_INTENT[t];
   if (templateIntent) return templateIntent;
 
-  // Opt-out tem prioridade.
   for (const p of OPT_OUT) {
     const n = normalizeReply(p);
     if (t === n || t.includes(n)) return "opt_out";
@@ -128,34 +132,30 @@ async function registerOptOut(opts: {
   `;
 }
 
-/**
- * Se o telefone respondeu a um disparo recente de campanha, marca como responded
- * e anota a conversa para o atendimento.
- */
-export async function handleCampaignInboundReply(opts: {
+type CampaignAssociation = {
+  campaignId: string;
+  campaignName: string;
+  campaignColor: string;
+  campaignContactId: string | null;
+  phone: string;
+  source: "contact" | "message" | "payload";
+};
+
+async function findCampaignContactAssociation(opts: {
   companyId: string;
   channelId: string;
-  conversationId: string;
   phone: string;
-  responseText: string | null;
-  inboundMessageId?: string | null;
-}): Promise<{
-  matched: boolean;
-  campaignId?: string;
-  campaignName?: string;
-  intent?: ResponseIntent;
-} | null> {
-  if (!opts.responseText?.trim()) return { matched: false };
-
+}): Promise<CampaignAssociation | null> {
   const s = sql();
   const variants = getPhoneVariants(opts.phone);
-  if (variants.length === 0) return { matched: false };
+  if (variants.length === 0) return null;
 
   const rows = await s<
     {
       id: string;
       campaign_id: string;
       campaign_name: string;
+      campaign_color: string | null;
       phone: string;
     }[]
   >`
@@ -163,9 +163,10 @@ export async function handleCampaignInboundReply(opts: {
       cc.id,
       cc.campaign_id,
       c.name AS campaign_name,
+      c.color AS campaign_color,
       cc.phone
     FROM public.campaign_contacts cc
-    JOIN public.campaigns c ON c.id = cc.campaign_id
+    JOIN public.campaigns c ON c.id = cc.campaign_id AND c.company_id = cc.company_id
     WHERE cc.company_id = ${opts.companyId}::uuid
       AND cc.phone = ANY(${variants}::text[])
       AND cc.status = 'sent'
@@ -181,99 +182,243 @@ export async function handleCampaignInboundReply(opts: {
   `;
 
   const hit = rows[0];
-  if (!hit) return { matched: false };
+  if (!hit) return null;
+  return {
+    campaignId: hit.campaign_id,
+    campaignName: hit.campaign_name,
+    campaignColor: normalizeCampaignColor(hit.campaign_color),
+    campaignContactId: hit.id,
+    phone: hit.phone,
+    source: "contact",
+  };
+}
+
+function parsePayloadCampaignId(raw: unknown): string | null {
+  if (!raw) return null;
+  let obj: Record<string, unknown> | null = null;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  } else if (typeof raw === "object" && !Array.isArray(raw)) {
+    obj = raw as Record<string, unknown>;
+  }
+  const id = obj?.campaign_id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
+async function findCampaignFromOutboundMessage(opts: {
+  companyId: string;
+  conversationId: string;
+  inboundMessageId?: string | null;
+}): Promise<CampaignAssociation | null> {
+  const s = sql();
+  let inboundCreatedAt: Date | null = null;
+  if (opts.inboundMessageId) {
+    const inboundRows = await s<{ created_at: Date }[]>`
+      SELECT created_at FROM public.messages
+      WHERE conversation_id = ${opts.conversationId}::uuid
+        AND (external_message_id = ${opts.inboundMessageId} OR external_id = ${opts.inboundMessageId})
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    inboundCreatedAt = inboundRows[0]?.created_at ? new Date(inboundRows[0].created_at) : null;
+  }
+
+  const msgRows = await s<
+    {
+      raw_payload: unknown;
+      created_at: Date;
+    }[]
+  >`
+    SELECT m.raw_payload, m.created_at
+    FROM public.messages m
+    JOIN public.conversations c ON c.id = m.conversation_id
+    WHERE m.conversation_id = ${opts.conversationId}::uuid
+      AND c.company_id = ${opts.companyId}::uuid
+      AND m.direction = 'out'
+      AND (
+        ${inboundCreatedAt}::timestamptz IS NULL
+        OR m.created_at < ${inboundCreatedAt}::timestamptz
+      )
+      AND (
+        m.raw_payload->>'origin' = 'CAMPANHA'
+      )
+    ORDER BY m.created_at DESC
+    LIMIT 1
+  `;
+
+  const msg = msgRows[0];
+  if (!msg) return null;
+
+  let payload: Record<string, unknown> | null = null;
+  if (msg.raw_payload && typeof msg.raw_payload === "object" && !Array.isArray(msg.raw_payload)) {
+    payload = msg.raw_payload as Record<string, unknown>;
+  } else if (typeof msg.raw_payload === "string") {
+    try {
+      payload = JSON.parse(msg.raw_payload) as Record<string, unknown>;
+    } catch {
+      payload = null;
+    }
+  }
+  if (payload?.origin !== "CAMPANHA") return null;
+
+  const campaignId = typeof payload.campaign_id === "string" ? payload.campaign_id : null;
+  if (!campaignId) return null;
+
+  const campRows = await s<
+    {
+      id: string;
+      name: string;
+      color: string | null;
+    }[]
+  >`
+    SELECT id, name, color FROM public.campaigns
+    WHERE id = ${campaignId}::uuid
+      AND company_id = ${opts.companyId}::uuid
+      AND deleted_at IS NULL
+    LIMIT 1
+  `;
+  const camp = campRows[0];
+  if (!camp) return null;
+
+  const contactId =
+    typeof payload.campaign_contact_id === "string" ? payload.campaign_contact_id : null;
+
+  return {
+    campaignId: camp.id,
+    campaignName: camp.name,
+    campaignColor: normalizeCampaignColor(camp.color),
+    campaignContactId: contactId,
+    phone: "",
+    source: "message",
+  };
+}
+
+async function resolveCampaignAssociation(opts: {
+  companyId: string;
+  channelId: string;
+  conversationId: string;
+  phone: string;
+  inboundMessageId?: string | null;
+}): Promise<CampaignAssociation | null> {
+  const byContact = await findCampaignContactAssociation(opts);
+  if (byContact) return byContact;
+
+  const byMessage = await findCampaignFromOutboundMessage({
+    companyId: opts.companyId,
+    conversationId: opts.conversationId,
+    inboundMessageId: opts.inboundMessageId,
+  });
+  if (byMessage) return byMessage;
+
+  return null;
+}
+
+/**
+ * Processa inbound relacionado a campanha (texto ou mídia).
+ * Nova resposta do cliente reabre a fila mesmo com responded_at preenchido.
+ */
+export async function handleCampaignInboundReply(opts: {
+  companyId: string;
+  channelId: string;
+  conversationId: string;
+  phone: string;
+  responseText: string | null;
+  inboundMessageId?: string | null;
+  /** Quando true, processa mesmo sem texto (mídia sem caption). */
+  allowEmptyText?: boolean;
+}): Promise<{
+  matched: boolean;
+  campaignId?: string;
+  campaignName?: string;
+  campaignColor?: string;
+  intent?: ResponseIntent;
+} | null> {
+  const hasText = !!opts.responseText?.trim();
+  if (!hasText && !opts.allowEmptyText) return { matched: false };
+
+  const association = await resolveCampaignAssociation(opts);
+  if (!association) return { matched: false };
 
   const intent = classifyCampaignResponse(opts.responseText);
-  const text = opts.responseText.slice(0, 4000);
+  const text = hasText ? opts.responseText!.slice(0, 4000) : null;
 
-  const updated = await s<{ id: string }[]>`
-    UPDATE public.campaign_contacts
-    SET status = 'responded',
-        responded_at = now(),
-        response_text = ${text},
-        response_intent = ${intent}
-    WHERE id = ${hit.id}::uuid
-      AND company_id = ${opts.companyId}::uuid
-      AND status = 'sent'
-      AND responded_at IS NULL
-    RETURNING id
-  `;
+  if (association.campaignContactId && association.source === "contact") {
+    const updated = await sql<{ id: string }[]>`
+      UPDATE public.campaign_contacts
+      SET status = 'responded',
+          responded_at = COALESCE(responded_at, now()),
+          response_text = COALESCE(${text}, response_text),
+          response_intent = ${intent}
+      WHERE id = ${association.campaignContactId}::uuid
+        AND company_id = ${opts.companyId}::uuid
+        AND status IN ('sent', 'responded')
+      RETURNING id
+    `;
 
-  if (!updated[0]) {
-    console.log("[CAMPAIGN_RESPONSE_ALREADY_HANDLED]", {
-      campaignId: hit.campaign_id,
-      contactRowId: hit.id,
-      inboundMessageId: opts.inboundMessageId ?? null,
-      conversationId: opts.conversationId,
-    });
-    return {
-      matched: true,
-      campaignId: hit.campaign_id,
-      campaignName: hit.campaign_name,
-      intent,
-    };
+    if (updated[0]) {
+      await syncCampaignContactCounters(association.campaignId, opts.companyId);
+      await insertCampaignEvent(
+        opts.companyId,
+        association.campaignId,
+        "campaign.response_received",
+        null,
+        { intent, response_text: text, phone: association.phone },
+        association.campaignContactId,
+      );
+
+      if (intent === "interested") {
+        await insertCampaignEvent(
+          opts.companyId,
+          association.campaignId,
+          "campaign.response_interested",
+          null,
+          { response_text: text, phone: association.phone },
+          association.campaignContactId,
+        );
+      }
+
+      if (intent === "opt_out") {
+        await registerOptOut({
+          companyId: opts.companyId,
+          phone: association.phone,
+          campaignId: association.campaignId,
+          campaignContactId: association.campaignContactId,
+        });
+        await insertCampaignEvent(
+          opts.companyId,
+          association.campaignId,
+          "campaign.response_opt_out",
+          null,
+          { response_text: text, phone: association.phone },
+          association.campaignContactId,
+        );
+      }
+    }
   }
 
-  await syncCampaignContactCounters(hit.campaign_id, opts.companyId);
-
-  await insertCampaignEvent(
-    opts.companyId,
-    hit.campaign_id,
-    "campaign.response_received",
-    null,
-    { intent, response_text: text, phone: hit.phone },
-    hit.id,
-  );
-
-  if (intent === "interested") {
-    await insertCampaignEvent(
-      opts.companyId,
-      hit.campaign_id,
-      "campaign.response_interested",
-      null,
-      { response_text: text, phone: hit.phone },
-      hit.id,
-    );
-  }
+  await onCampaignInbound({
+    companyId: opts.companyId,
+    conversationId: opts.conversationId,
+    campaignId: association.campaignId,
+    campaignName: association.campaignName,
+    intent,
+    responseText: text,
+  });
 
   if (intent === "opt_out") {
-    await registerOptOut({
+    await markCampaignOptOut({
       companyId: opts.companyId,
-      phone: hit.phone,
-      campaignId: hit.campaign_id,
-      campaignContactId: hit.id,
-    });
-    await insertCampaignEvent(
-      opts.companyId,
-      hit.campaign_id,
-      "campaign.response_opt_out",
-      null,
-      { response_text: text, phone: hit.phone },
-      hit.id,
-    );
-    console.log("[CAMPAIGN_RESPONSE_OPT_OUT]", {
-      campaignId: hit.campaign_id,
-      phone: hit.phone,
+      conversationId: opts.conversationId,
     });
   }
 
-  // Marca a conversa para o atendimento (interessado / unknown / not_interested).
-  // Opt-out também fica visível, mas com indicação de origem.
-  await s`
-    UPDATE public.conversations
-    SET campaign_reply_campaign_id = ${hit.campaign_id}::uuid,
-        campaign_reply_campaign_name = ${hit.campaign_name},
-        campaign_reply_text = ${text},
-        campaign_reply_intent = ${intent},
-        campaign_reply_at = now(),
-        updated_at = now()
-    WHERE id = ${opts.conversationId}::uuid
-      AND company_id = ${opts.companyId}::uuid
-  `;
-
   console.log("[CAMPAIGN_RESPONSE_MATCHED]", {
-    campaignId: hit.campaign_id,
-    contactRowId: hit.id,
+    campaignId: association.campaignId,
+    source: association.source,
     intent,
     conversationId: opts.conversationId,
     inboundMessageId: opts.inboundMessageId ?? null,
@@ -281,8 +426,9 @@ export async function handleCampaignInboundReply(opts: {
 
   return {
     matched: true,
-    campaignId: hit.campaign_id,
-    campaignName: hit.campaign_name,
+    campaignId: association.campaignId,
+    campaignName: association.campaignName,
+    campaignColor: association.campaignColor,
     intent,
   };
 }

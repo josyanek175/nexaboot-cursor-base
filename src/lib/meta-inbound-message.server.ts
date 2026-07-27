@@ -328,6 +328,7 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
       phone: msg.phone,
       responseText: msg.caption ?? "",
       inboundMessageId: msg.externalMessageId,
+      allowEmptyText: true,
     });
   } catch (e) {
     console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", {

@@ -11,6 +11,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { tryApplyHumanReplyFromMessage } from "@/lib/campaign-service-status.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -232,6 +233,18 @@ export const Route = createFileRoute("/api/messages/send/media/evolution")({
           SET last_message = ${lastMessage}, last_message_at = now(), updated_at = now()
           WHERE id = ${conversationId}::uuid
         `;
+
+        if (attendant?.id && messageId) {
+          try {
+            await tryApplyHumanReplyFromMessage({
+              companyId,
+              conversationId,
+              messageId,
+            });
+          } catch (e) {
+            console.error("[CAMPAIGN_HUMAN_REPLY_HOOK_FAIL]", e);
+          }
+        }
 
         console.log("[EVOLUTION_MEDIA_SAVED]", { conversationId, kind, messageId });
         return Response.json({ ok: true, messageId, type: kind });

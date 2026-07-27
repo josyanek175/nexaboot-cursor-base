@@ -19,6 +19,8 @@ import {
   EVOLUTION_VARIABLE_SUGGESTIONS,
   type EvolutionVariableMappings,
 } from "@/lib/campaign-evolution-variables";
+import { CampaignColorPicker } from "@/components/campaign-color-picker";
+import { DEFAULT_CAMPAIGN_COLOR } from "@/lib/campaign-color";
 
 type ChannelOption = {
   id: string;
@@ -103,6 +105,7 @@ function NovaCampanhaPage() {
   const [audienceTotal, setAudienceTotal] = useState(0);
 
   const [name, setName] = useState("");
+  const [campaignColor, setCampaignColor] = useState(DEFAULT_CAMPAIGN_COLOR);
   const [messageText, setMessageText] = useState("");
   const [channelId, setChannelId] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
@@ -275,6 +278,9 @@ function NovaCampanhaPage() {
       .then((data: { campaign?: { name: string; message_text: string | null; whatsapp_channel_id: string | null } } | null) => {
         if (!data?.campaign) return;
         setName(`${data.campaign.name} — novo disparo`);
+        if ((data.campaign as { color?: string }).color) {
+          setCampaignColor((data.campaign as { color?: string }).color!);
+        }
         setMessageText(data.campaign.message_text ?? "");
         if (data.campaign.whatsapp_channel_id) {
           setChannelId(data.campaign.whatsapp_channel_id);
@@ -345,6 +351,7 @@ function NovaCampanhaPage() {
   async function persistCampaign(partial = false): Promise<string | null> {
     const payload = {
       name: name.trim(),
+      color: campaignColor,
       message_text: messageText.trim() || null,
       whatsapp_channel_id: channelId || null,
       schedule_date: scheduleDate || null,
@@ -561,6 +568,7 @@ function NovaCampanhaPage() {
                 placeholder="Ex.: Promoção de março"
               />
             </label>
+            <CampaignColorPicker value={campaignColor} onChange={setCampaignColor} />
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Tipo de canal</span>
               <select
