@@ -1,5 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { MessageCircle } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  LEGAL_CONTACT_EMAIL,
+  LegalSection,
+  PublicLegalLayout,
+} from "@/components/public-legal-layout";
 
 export const Route = createFileRoute("/politica-de-privacidade")({
   component: PoliticaPrivacidadePage,
@@ -15,132 +19,154 @@ export const Route = createFileRoute("/politica-de-privacidade")({
   }),
 });
 
-const CONTACT_EMAIL = "contato@nexaboot.com";
-
 function PoliticaPrivacidadePage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
-          <Link to="/login" className="flex items-center gap-3 hover:opacity-90">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-whatsapp text-whatsapp-foreground">
-              <MessageCircle className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold">NexaBoot</div>
-              <div className="text-xs text-muted-foreground">NexaTech</div>
-            </div>
-          </Link>
-          <Link
-            to="/login"
-            className="text-sm font-medium text-primary hover:underline"
+    <PublicLegalLayout
+      title="Política de Privacidade — NexaBoot"
+      currentPath="/politica-de-privacidade"
+    >
+      <p className="mt-6 text-base leading-relaxed text-muted-foreground">
+        A NexaBoot, produto da NexaTech, é uma plataforma de atendimento e comunicação empresarial
+        integrada ao WhatsApp e à WhatsApp Cloud API (Meta). Esta Política de Privacidade explica
+        como coletamos, usamos, armazenamos e protegemos informações tratadas durante o uso da
+        plataforma.
+      </p>
+
+      <LegalSection title="1. Dados coletados">
+        <p>
+          Durante o uso do NexaBoot, podemos tratar, conforme a configuração da conta e o uso dos
+          recursos:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong className="text-foreground">Dados de login e autenticação:</strong> e-mail,
+            senha (armazenada de forma criptografada/hash), tokens de sessão e registros de acesso
+            necessários à segurança da conta.
+          </li>
+          <li>
+            <strong className="text-foreground">Dados de empresas e usuários:</strong> nome da
+            empresa, identificação da conta, nomes de usuários operadores, papéis/permissões e
+            dados cadastrais informados na plataforma.
+          </li>
+          <li>
+            <strong className="text-foreground">Contatos e mensagens:</strong> nome e número de
+            telefone de contatos, conteúdo de mensagens enviadas e recebidas, mídias quando
+            aplicável, status de entrega e leitura, e histórico de atendimento.
+          </li>
+          <li>
+            <strong className="text-foreground">Dados técnicos:</strong> informações de canais
+            conectados, logs operacionais, identificadores técnicos e metadados necessários à
+            operação, segurança e auditoria do serviço.
+          </li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="2. Finalidade do tratamento">
+        <p>Os dados são utilizados para:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>permitir o atendimento a clientes via WhatsApp;</li>
+          <li>organizar conversas e registrar histórico de atendimento;</li>
+          <li>gerenciar canais conectados e usuários da empresa;</li>
+          <li>enviar e receber mensagens e acompanhar o status das comunicações;</li>
+          <li>autenticar usuários e proteger o acesso à plataforma;</li>
+          <li>cumprir obrigações legais e manter a segurança e a auditoria do serviço.</li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="3. Dados de login e autenticação">
+        <p>
+          Credenciais e sessões são tratadas exclusivamente para autenticação, controle de acesso e
+          prevenção de uso indevido. Não utilizamos senhas em texto puro; o acesso às informações
+          da conta depende de autenticação válida e das permissões configuradas pela empresa
+          contratante.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="4. Dados de empresas, usuários, contatos e mensagens">
+        <p>
+          O NexaBoot processa dados de empresas e usuários operadores para gestão da conta, e dados
+          de contatos e mensagens para viabilizar o multiatendimento. A empresa contratante é
+          responsável pelas finalidades e pela base legal do tratamento dos dados dos seus
+          clientes/contatos no contexto do atendimento.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="5. Integração com WhatsApp e Meta">
+        <p>
+          Para envio e recebimento de mensagens, o NexaBoot integra-se a serviços da Meta,
+          incluindo a WhatsApp Cloud API e, quando aplicável, fluxos de autenticação ou conexão
+          associados à Meta. Dados necessários à entrega das mensagens (como número de telefone,
+          conteúdo e metadados da conversa) podem ser transmitidos à Meta conforme as políticas e
+          termos da Meta/WhatsApp vigentes. O uso desses serviços também está sujeito às regras da
+          Meta.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="6. Armazenamento e segurança">
+        <p>
+          Adotamos medidas técnicas e organizacionais para proteger os dados contra acesso não
+          autorizado, perda, alteração ou uso indevido. O acesso às informações é restrito a
+          usuários autorizados conforme as permissões configuradas na plataforma. Utilizamos
+          infraestrutura de hospedagem e banco de dados adequados à operação do serviço.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="7. Compartilhamento com fornecedores">
+        <p>
+          A NexaBoot <strong className="text-foreground">não vende</strong> dados pessoais. Os
+          dados podem ser compartilhados apenas com fornecedores necessários à operação do
+          serviço, como Meta/WhatsApp Cloud API, provedores de hospedagem, banco de dados e demais
+          ferramentas técnicas essenciais ao funcionamento da plataforma, sempre limitados ao
+          necessário para a prestação do serviço.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="8. Direitos do titular (LGPD)">
+        <p>
+          Nos termos da Lei Geral de Proteção de Dados Pessoais (LGPD — Lei nº 13.709/2018), os
+          titulares podem solicitar confirmação de tratamento, acesso, correção, anonimização,
+          portabilidade (quando aplicável), eliminação e demais direitos previstos na legislação,
+          observadas as hipóteses legais de retenção. Solicitações podem ser feitas pelo e-mail
+          indicado na seção de contato.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="9. Retenção e exclusão">
+        <p>
+          Os dados são mantidos pelo tempo necessário para cumprir as finalidades desta política,
+          obrigações legais, contratuais ou operacionais. Após solicitação válida de exclusão, ou
+          quando não houver mais necessidade de retenção, procederemos à eliminação ou
+          anonimização, ressalvados os casos em que a manutenção seja exigida por lei ou necessária
+          para exercício regular de direitos. Para o procedimento detalhado de solicitação, consulte
+          a página{" "}
+          <a href="/exclusao-de-dados" className="font-medium text-primary hover:underline">
+            Exclusão de Dados
+          </a>
+          .
+        </p>
+      </LegalSection>
+
+      <LegalSection title="10. Contato para privacidade">
+        <p>
+          Para dúvidas ou solicitações relacionadas à privacidade e proteção de dados, entre em
+          contato com a NexaTech/NexaBoot pelo e-mail:{" "}
+          <a
+            href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+            className="font-medium text-primary hover:underline"
           >
-            Entrar
-          </Link>
-        </div>
-      </header>
+            {LEGAL_CONTACT_EMAIL}
+          </a>
+          .
+        </p>
+      </LegalSection>
 
-      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
-        <article className="max-w-none">
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Política de Privacidade — NexaBoot
-          </h1>
-          <p className="text-sm text-muted-foreground">Última atualização: Julho de 2026</p>
-
-          <p className="mt-6 text-base leading-relaxed text-muted-foreground">
-            A NexaBoot é uma plataforma de atendimento e comunicação empresarial integrada ao
-            WhatsApp e à WhatsApp Cloud API. Esta Política de Privacidade explica como coletamos,
-            usamos, armazenamos e protegemos informações tratadas durante o uso da plataforma.
-          </p>
-
-          <section className="mt-10 space-y-3">
-            <h2 className="text-xl font-semibold">1. Dados tratados</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Durante o uso do NexaBoot, podemos tratar dados como nome, número de telefone,
-              mensagens enviadas e recebidas, status de entrega e leitura, informações de
-              atendimento, canais conectados e dados técnicos necessários para operação da
-              plataforma.
-            </p>
-          </section>
-
-          <section className="mt-8 space-y-3">
-            <h2 className="text-xl font-semibold">2. Finalidade do uso</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Os dados são utilizados para permitir o atendimento a clientes via WhatsApp,
-              organizar conversas, registrar histórico de atendimento, gerenciar canais
-              conectados, enviar e receber mensagens, acompanhar status das comunicações e manter a
-              segurança e auditoria da plataforma.
-            </p>
-          </section>
-
-          <section className="mt-8 space-y-3">
-            <h2 className="text-xl font-semibold">3. Compartilhamento de dados</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              A NexaBoot <strong>não vende</strong> dados pessoais. Os dados podem ser
-              compartilhados apenas com provedores necessários para a operação do serviço, como a
-              Meta/WhatsApp Cloud API, serviços de hospedagem, banco de dados e ferramentas
-              técnicas essenciais ao funcionamento da plataforma.
-            </p>
-          </section>
-
-          <section className="mt-8 space-y-3">
-            <h2 className="text-xl font-semibold">4. Armazenamento e segurança</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Adotamos medidas técnicas e organizacionais para proteger os dados contra acesso não
-              autorizado, perda, alteração ou uso indevido. O acesso às informações é restrito a
-              usuários autorizados conforme as permissões configuradas na plataforma.
-            </p>
-          </section>
-
-          <section className="mt-8 space-y-3">
-            <h2 className="text-xl font-semibold">5. Direitos dos titulares</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Nos termos da Lei Geral de Proteção de Dados Pessoais (LGPD), os titulares podem
-              solicitar informações sobre seus dados, correção, exclusão ou demais direitos
-              aplicáveis, conforme a legislação vigente.
-            </p>
-          </section>
-
-          <section className="mt-8 space-y-3">
-            <h2 className="text-xl font-semibold">6. Retenção de dados</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Os dados são mantidos pelo tempo necessário para cumprir as finalidades descritas
-              nesta política, obrigações legais, contratuais ou operacionais.
-            </p>
-          </section>
-
-          <section className="mt-8 space-y-3">
-            <h2 className="text-xl font-semibold">7. Contato</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Para dúvidas ou solicitações relacionadas à privacidade e proteção de dados, entre
-              em contato pelo e-mail:{" "}
-              <a
-                href={`mailto:${CONTACT_EMAIL}`}
-                className="font-medium text-primary hover:underline"
-              >
-                {CONTACT_EMAIL}
-              </a>
-            </p>
-          </section>
-
-          <section className="mt-8 space-y-3">
-            <h2 className="text-xl font-semibold">8. Alterações nesta política</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Esta Política de Privacidade poderá ser atualizada periodicamente. A versão mais
-              recente estará sempre disponível nesta página.
-            </p>
-          </section>
-        </article>
-      </main>
-
-      <footer className="border-t border-border bg-card">
-        <div className="mx-auto flex max-w-3xl flex-col items-center justify-between gap-2 px-4 py-6 text-center text-xs text-muted-foreground sm:flex-row sm:px-6 sm:text-left">
-          <span>© {new Date().getFullYear()} NexaBoot — NexaTech</span>
-          <Link to="/login" className="hover:text-foreground hover:underline">
-            Voltar ao login
-          </Link>
-        </div>
-      </footer>
-    </div>
+      <LegalSection title="11. Alterações nesta política">
+        <p>
+          Esta Política de Privacidade poderá ser atualizada periodicamente. A versão mais recente
+          estará sempre disponível nesta página, com a data da última atualização indicada no
+          topo.
+        </p>
+      </LegalSection>
+    </PublicLegalLayout>
   );
 }

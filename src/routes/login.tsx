@@ -102,7 +102,15 @@ function LoginPage() {
         <div className="text-xs opacity-70">
           © {new Date().getFullYear()} NexaBoot ·{" "}
           <a href="/politica-de-privacidade" className="underline hover:opacity-100">
-            Política de Privacidade
+            Privacidade
+          </a>
+          {" · "}
+          <a href="/termos-de-uso" className="underline hover:opacity-100">
+            Termos
+          </a>
+          {" · "}
+          <a href="/exclusao-de-dados" className="underline hover:opacity-100">
+            Exclusão de Dados
           </a>
         </div>
       </aside>
@@ -212,9 +220,15 @@ function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-8 text-center text-xs text-muted-foreground">
+          <p className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-xs text-muted-foreground">
             <a href="/politica-de-privacidade" className="hover:text-foreground hover:underline">
-              Política de Privacidade
+              Privacidade
+            </a>
+            <a href="/termos-de-uso" className="hover:text-foreground hover:underline">
+              Termos de Uso
+            </a>
+            <a href="/exclusao-de-dados" className="hover:text-foreground hover:underline">
+              Exclusão de Dados
             </a>
           </p>
         </div>

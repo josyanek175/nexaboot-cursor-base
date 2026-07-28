@@ -9,9 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermosDeUsoRouteImport } from './routes/termos-de-uso'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as PoliticaDePrivacidadeRouteImport } from './routes/politica-de-privacidade'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ExclusaoDeDadosRouteImport } from './routes/exclusao-de-dados'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution'
@@ -115,6 +117,11 @@ import { Route as ApiCampaignsIdImportConfirmRouteImport } from './routes/api/ca
 import { Route as ApiCampaignsIdContactsContactRowIdRouteImport } from './routes/api/campaigns/$id/contacts/$contactRowId'
 import { Route as ApiMetaChannelsIdTemplatesSyncRouteImport } from './routes/api/meta/channels/$id/templates.sync'
 
+const TermosDeUsoRoute = TermosDeUsoRouteImport.update({
+  id: '/termos-de-uso',
+  path: '/termos-de-uso',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
@@ -128,6 +135,11 @@ const PoliticaDePrivacidadeRoute = PoliticaDePrivacidadeRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExclusaoDeDadosRoute = ExclusaoDeDadosRouteImport.update({
+  id: '/exclusao-de-dados',
+  path: '/exclusao-de-dados',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -668,9 +680,11 @@ const ApiMetaChannelsIdTemplatesSyncRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/exclusao-de-dados': typeof ExclusaoDeDadosRoute
   '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/register': typeof RegisterRoute
+  '/termos-de-uso': typeof TermosDeUsoRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
   '/campanhas': typeof AppCampanhasRouteWithChildren
@@ -774,9 +788,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/exclusao-de-dados': typeof ExclusaoDeDadosRoute
   '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/register': typeof RegisterRoute
+  '/termos-de-uso': typeof TermosDeUsoRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
   '/canais': typeof AppCanaisRoute
@@ -881,9 +897,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/exclusao-de-dados': typeof ExclusaoDeDadosRoute
   '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
   '/register': typeof RegisterRoute
+  '/termos-de-uso': typeof TermosDeUsoRoute
   '/_app/atendimento': typeof AppAtendimentoRoute
   '/_app/automacoes': typeof AppAutomacoesRoute
   '/_app/campanhas': typeof AppCampanhasRouteWithChildren
@@ -989,9 +1007,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/exclusao-de-dados'
     | '/login'
     | '/politica-de-privacidade'
     | '/register'
+    | '/termos-de-uso'
     | '/atendimento'
     | '/automacoes'
     | '/campanhas'
@@ -1095,9 +1115,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/exclusao-de-dados'
     | '/login'
     | '/politica-de-privacidade'
     | '/register'
+    | '/termos-de-uso'
     | '/atendimento'
     | '/automacoes'
     | '/canais'
@@ -1201,9 +1223,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/exclusao-de-dados'
     | '/login'
     | '/politica-de-privacidade'
     | '/register'
+    | '/termos-de-uso'
     | '/_app/atendimento'
     | '/_app/automacoes'
     | '/_app/campanhas'
@@ -1309,9 +1333,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  ExclusaoDeDadosRoute: typeof ExclusaoDeDadosRoute
   LoginRoute: typeof LoginRoute
   PoliticaDePrivacidadeRoute: typeof PoliticaDePrivacidadeRoute
   RegisterRoute: typeof RegisterRoute
+  TermosDeUsoRoute: typeof TermosDeUsoRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
@@ -1356,6 +1382,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/termos-de-uso': {
+      id: '/termos-de-uso'
+      path: '/termos-de-uso'
+      fullPath: '/termos-de-uso'
+      preLoaderRoute: typeof TermosDeUsoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
@@ -1375,6 +1408,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/exclusao-de-dados': {
+      id: '/exclusao-de-dados'
+      path: '/exclusao-de-dados'
+      fullPath: '/exclusao-de-dados'
+      preLoaderRoute: typeof ExclusaoDeDadosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -2434,9 +2474,11 @@ const ApiWebhooksMetaRouteWithChildren = ApiWebhooksMetaRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  ExclusaoDeDadosRoute: ExclusaoDeDadosRoute,
   LoginRoute: LoginRoute,
   PoliticaDePrivacidadeRoute: PoliticaDePrivacidadeRoute,
   RegisterRoute: RegisterRoute,
+  TermosDeUsoRoute: TermosDeUsoRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
