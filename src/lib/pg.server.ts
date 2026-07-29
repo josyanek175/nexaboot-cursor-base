@@ -2,6 +2,8 @@
 // Usa postgres.js. Servidor-only.
 import postgres from "postgres";
 import { normalizePhoneForMatch } from "@/lib/phone";
+import { createBootstrapCoordinator } from "@/lib/db-bootstrap-coordinator";
+import type { DatabaseBootstrapState } from "@/lib/db-bootstrap-coordinator";
 
 let _sql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
@@ -46,10 +48,9 @@ export async function reserveSqlConnection(): Promise<ReservedSql> {
   const originalRelease = reserved.release.bind(reserved);
   let released = false;
   reserved.release = () => {
-    if (!released) {
-      released = true;
-      _pgReservedOpen = Math.max(0, _pgReservedOpen - 1);
-    }
+    if (released) return;
+    released = true;
+    _pgReservedOpen = Math.max(0, _pgReservedOpen - 1);
     return originalRelease();
   };
   return reserved;
@@ -1292,17 +1293,16 @@ export async function ensureSchema() {
 
 // ───────────────────────────────────────────────────────────────────────────
 // Bootstrap único de schema (boot do processo).
-// Todas as rotas HTTP devem assumir que o schema já foi aplicado aqui.
-// Promise compartilhada + advisory lock (sessão reservada) serializam réplicas.
+// Estado explícito + watchdog: evita Promise pendurada para sempre quando
+// reserve()/DDL trava sem query ativa no PostgreSQL.
 // ───────────────────────────────────────────────────────────────────────────
 
 /** Lock advisory estável (não conflita com locks de tabela). */
 const DB_SCHEMA_BOOT_LOCK_KEY = 872_014_01;
 const BOOTSTRAP_RETRY_COOLDOWN_MS = 5_000;
-
-let _dbBootstrap: Promise<void> | null = null;
-let _dbBootstrapAttempt = 0;
-let _dbBootstrapCooldownUntil = 0;
+const BOOTSTRAP_WATCHDOG_MS = 30_000;
+/** Timeout por etapa (reserve/lock/DDL) — menor que o watchdog global. */
+const BOOTSTRAP_STEP_TIMEOUT_MS = 20_000;
 
 /** Erro seguro para o cliente HTTP (sem detalhes internos). */
 export class DatabaseBootstrapUnavailableError extends Error {
@@ -1324,46 +1324,167 @@ export function isDatabaseBootstrapUnavailable(
   );
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  step: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`bootstrap_step_timeout:${step}`));
+    }, ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 /**
- * Executa o DDL idempotente uma vez por processo com sucesso.
- * Em falha: limpa a Promise, aplica cooldown e permite nova tentativa depois.
- * Concurrent callers compartilham a mesma Promise enquanto pending/sucesso.
+ * Libera reserve() que chegar depois de timeout/abort (evita vazar slot do pool).
+ * release() no postgres.js 3.4.9 é síncrono (void).
+ * - resolve tardio → release exatamente uma vez (por Promise)
+ * - reject tardio → engole (sem unhandledRejection)
+ * - não guarda referência global à conexão
  */
-export function bootstrapDatabaseSchema(): Promise<void> {
-  if (_dbBootstrap) return _dbBootstrap;
+const _lateReleaseAttached = new WeakSet<Promise<unknown>>();
 
-  const now = Date.now();
-  if (now < _dbBootstrapCooldownUntil) {
-    return Promise.reject(new DatabaseBootstrapUnavailableError());
-  }
-
-  const attempt = ++_dbBootstrapAttempt;
-  const t0 = Date.now();
-
-  _dbBootstrap = (async () => {
-    console.log("[DB_BOOTSTRAP_START]", { attempt });
-
-    // postgres.js 3.x: reserve() fixa uma sessão do pool para lock/unlock.
-    const reserved = await reserveSqlConnection();
-    try {
-      await reserved.unsafe(
-        `SELECT pg_advisory_lock(${DB_SCHEMA_BOOT_LOCK_KEY})`,
-      );
+function releaseReserveWhenReady(
+  reservePromise: Promise<{ release: () => void }>,
+): void {
+  if (_lateReleaseAttached.has(reservePromise)) return;
+  _lateReleaseAttached.add(reservePromise);
+  void reservePromise.then(
+    (r) => {
       try {
-        await ensureSchema();
-        await ensureCrmSchema();
-        // users.company_id vive em company.server — import dinâmico evita ciclo.
+        r.release();
+      } catch {
+        /* ignore */
+      }
+    },
+    () => {
+      // Rejeição após timeout: não há conexão para liberar.
+    },
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Aguarda a Promise subjacente assentar após timeout do waiter JS,
+ * para não abandonar query/reserve sem cleanup (capado).
+ */
+async function settleAbandoned<T>(
+  work: Promise<T>,
+  capMs: number,
+): Promise<void> {
+  await Promise.race([work.then(() => {}, () => {}), sleep(capMs)]);
+}
+
+async function runDatabaseBootstrapWork(ctx: {
+  attempt: number;
+  signal: { readonly aborted: boolean };
+  logStep: (
+    phase: "START" | "OK" | "ERROR" | "TIMEOUT",
+    step: string,
+    durationMs: number,
+    extra?: Record<string, unknown>,
+  ) => void;
+}): Promise<void> {
+  const { signal, logStep } = ctx;
+  let reserved: Awaited<ReturnType<typeof reserveSqlConnection>> | null = null;
+  let reservePromise: Promise<
+    Awaited<ReturnType<typeof reserveSqlConnection>>
+  > | null = null;
+  let lockHeld = false;
+
+  const runStep = async <T>(step: string, fn: () => Promise<T>): Promise<T> => {
+    if (signal.aborted) throw new Error("bootstrap_aborted");
+    const t0 = Date.now();
+    logStep("START", step, 0);
+    const work = fn();
+    try {
+      const result = await withTimeout(work, BOOTSTRAP_STEP_TIMEOUT_MS, step);
+      logStep("OK", step, Date.now() - t0);
+      return result;
+    } catch (e) {
+      const durationMs = Date.now() - t0;
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.startsWith("bootstrap_step_timeout:")) {
+        logStep("TIMEOUT", step, durationMs, { message });
+      } else {
+        logStep("ERROR", step, durationMs, { message });
+      }
+      // Não abandona a Promise original sem tentar assentar (evita slot/query fantasma).
+      await settleAbandoned(work, BOOTSTRAP_STEP_TIMEOUT_MS);
+      throw e;
+    }
+  };
+
+  try {
+    // postgres.js 3.x: reserve() fixa uma sessão do pool para lock/unlock.
+    // release() é síncrono (types: release(): void) — sempre após unlock no finally.
+    reservePromise = reserveSqlConnection();
+    try {
+      reserved = await runStep("reserve", () => reservePromise!);
+    } catch (e) {
+      // Timeout/erro no reserve: a Promise pode completar depois → release tardio.
+      releaseReserveWhenReady(reservePromise);
+      reservePromise = null;
+      throw e;
+    }
+    if (signal.aborted) throw new Error("bootstrap_aborted");
+
+    const lockPromise = reserved.unsafe(
+      `SELECT pg_advisory_lock(${DB_SCHEMA_BOOT_LOCK_KEY})`,
+    );
+    try {
+      await runStep("advisory_lock", () => lockPromise);
+      lockHeld = true;
+    } catch (e) {
+      // Timeout do waiter: lockPromise pode ter adquirido o lock depois.
+      try {
+        await Promise.race([
+          lockPromise.then(() => {
+            lockHeld = true;
+          }),
+          sleep(5_000),
+        ]);
+      } catch {
+        /* ignore */
+      }
+      throw e;
+    }
+
+    try {
+      await runStep("ensureSchema", () => ensureSchema());
+      if (signal.aborted) throw new Error("bootstrap_aborted");
+
+      await runStep("ensureCrmSchema", () => ensureCrmSchema());
+      if (signal.aborted) throw new Error("bootstrap_aborted");
+
+      // users.company_id vive em company.server — import dinâmico evita ciclo.
+      // ensureUserCompanySchema → ensureCrmSchema (reusa _crmReady; sem reentrar bootstrap).
+      await runStep("ensureUserCompanySchema", async () => {
         const { ensureUserCompanySchema } = await import("@/lib/company.server");
         await ensureUserCompanySchema();
-        console.log("[DB_BOOTSTRAP_OK]", {
-          totalMs: Date.now() - t0,
-          attempt,
-        });
-      } finally {
+      });
+    } finally {
+      // Unlock na MESMA conexão reservada, antes do release.
+      if (reserved && lockHeld) {
         try {
           await reserved.unsafe(
             `SELECT pg_advisory_unlock(${DB_SCHEMA_BOOT_LOCK_KEY})`,
           );
+          lockHeld = false;
         } catch (unlockErr) {
           console.warn(
             "[DB_BOOTSTRAP_UNLOCK_WARN]",
@@ -1371,25 +1492,62 @@ export function bootstrapDatabaseSchema(): Promise<void> {
           );
         }
       }
-    } finally {
-      reserved.release();
     }
-  })().catch((e) => {
-    _dbBootstrap = null;
-    _dbBootstrapCooldownUntil = Date.now() + BOOTSTRAP_RETRY_COOLDOWN_MS;
-    console.error("[DB_BOOTSTRAP_ERROR]", {
-      message: e instanceof Error ? e.message : String(e),
-      name: e instanceof Error ? e.name : undefined,
-      totalMs: Date.now() - t0,
-      attempt,
-      cooldownMs: BOOTSTRAP_RETRY_COOLDOWN_MS,
-    });
-    throw e instanceof DatabaseBootstrapUnavailableError
-      ? e
-      : new DatabaseBootstrapUnavailableError();
-  });
+  } finally {
+    if (reserved) {
+      if (lockHeld) {
+        try {
+          await reserved.unsafe(
+            `SELECT pg_advisory_unlock(${DB_SCHEMA_BOOT_LOCK_KEY})`,
+          );
+        } catch {
+          /* ignore */
+        }
+        lockHeld = false;
+      }
+      try {
+        reserved.release();
+      } catch (releaseErr) {
+        console.warn(
+          "[DB_BOOTSTRAP_RELEASE_WARN]",
+          releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
+        );
+      }
+      reserved = null;
+    } else if (reservePromise) {
+      releaseReserveWhenReady(reservePromise);
+    }
+  }
+}
 
-  return _dbBootstrap;
+let _bootstrapWatchdogMs = BOOTSTRAP_WATCHDOG_MS;
+
+const _bootstrapCoordinator = createBootstrapCoordinator({
+  cooldownMs: BOOTSTRAP_RETRY_COOLDOWN_MS,
+  watchdogMs: _bootstrapWatchdogMs,
+  run: (ctx) => runDatabaseBootstrapWork(ctx),
+});
+
+// Recria coordinator quando testes alteram watchdog — ver hooks abaixo.
+let _bootstrapCoordinatorRef = _bootstrapCoordinator;
+
+function getBootstrapCoordinator() {
+  return _bootstrapCoordinatorRef;
+}
+
+/**
+ * Executa o DDL idempotente uma vez por processo com sucesso.
+ * Em falha/timeout: limpa Promise, cooldown e permite nova tentativa.
+ * Nunca inicia duas tentativas simultâneas (estado running compartilha Promise).
+ */
+export function bootstrapDatabaseSchema(): Promise<void> {
+  return getBootstrapCoordinator()
+    .bootstrap()
+    .catch((e) => {
+      throw e instanceof DatabaseBootstrapUnavailableError
+        ? e
+        : new DatabaseBootstrapUnavailableError();
+    });
 }
 
 /** Aguarda o bootstrap (idempotente; retentável após falha + cooldown). */
@@ -1409,15 +1567,25 @@ export function getDatabaseRuntimeDiag(): {
   bootstrapCooldownUntil: number;
   bootstrapPromiseActive: boolean;
   bootstrapInCooldown: boolean;
+  bootstrapState: DatabaseBootstrapState;
+  bootstrapInstanceId: string;
+  bootstrapActiveRun: boolean;
+  bootstrapWaitersAbandoned: boolean;
 } {
+  const c = getBootstrapCoordinator();
+  const cooldownUntil = c.getCooldownUntil();
   return {
     poolMax: PG_POOL_MAX,
     clientInitialized: !!_sql,
     reservedOpenInProcess: _pgReservedOpen,
-    bootstrapAttempt: _dbBootstrapAttempt,
-    bootstrapCooldownUntil: _dbBootstrapCooldownUntil,
-    bootstrapPromiseActive: _dbBootstrap != null,
-    bootstrapInCooldown: Date.now() < _dbBootstrapCooldownUntil,
+    bootstrapAttempt: c.getAttempt(),
+    bootstrapCooldownUntil: cooldownUntil,
+    bootstrapPromiseActive: c.isActiveRun() || c.getState() === "ready",
+    bootstrapInCooldown: Date.now() < cooldownUntil,
+    bootstrapState: c.getState(),
+    bootstrapInstanceId: c.getInstanceId(),
+    bootstrapActiveRun: c.isActiveRun(),
+    bootstrapWaitersAbandoned: c.areWaitersAbandoned(),
   };
 }
 
@@ -1428,7 +1596,37 @@ export function awaitDatabaseReady(): Promise<void> {
 
 /** Só para testes de coordenação (não usar em produção). */
 export function __resetDatabaseBootstrapStateForTests(): void {
-  _dbBootstrap = null;
-  _dbBootstrapAttempt = 0;
-  _dbBootstrapCooldownUntil = 0;
+  getBootstrapCoordinator().reset();
+}
+
+export function __setBootstrapWatchdogMsForTests(ms: number): void {
+  _bootstrapWatchdogMs = ms;
+  _bootstrapCoordinatorRef = createBootstrapCoordinator({
+    cooldownMs: BOOTSTRAP_RETRY_COOLDOWN_MS,
+    watchdogMs: ms,
+    run: (ctx) => runDatabaseBootstrapWork(ctx),
+  });
+}
+
+export function __setBootstrapRunnerForTests(
+  run: (ctx: {
+    attempt: number;
+    signal: { readonly aborted: boolean };
+    logStep: (
+      phase: "START" | "OK" | "ERROR" | "TIMEOUT",
+      step: string,
+      durationMs: number,
+      extra?: Record<string, unknown>,
+    ) => void;
+  }) => Promise<void>,
+): void {
+  _bootstrapCoordinatorRef = createBootstrapCoordinator({
+    cooldownMs: BOOTSTRAP_RETRY_COOLDOWN_MS,
+    watchdogMs: _bootstrapWatchdogMs,
+    run,
+  });
+}
+
+export function __getDatabaseBootstrapStateForTests(): DatabaseBootstrapState {
+  return getBootstrapCoordinator().getState();
 }

@@ -64,6 +64,34 @@ export async function withMeDbTimeout<T>(
   ]);
 }
 
+/**
+ * Se Promise.race desistir, a reserve() original ainda pode completar depois.
+ * Sem este release, o slot do pool (max:5) vaza para sempre.
+ * - resolve tardio → release() exatamente uma vez (por Promise)
+ * - reject tardio → sem unhandledRejection
+ * - não guarda referência global
+ */
+const _lateReleaseAttached = new WeakSet<Promise<unknown>>();
+
+function releaseReserveWhenReady(
+  reservePromise: Promise<{ release: () => void }>,
+): void {
+  if (_lateReleaseAttached.has(reservePromise)) return;
+  _lateReleaseAttached.add(reservePromise);
+  void reservePromise.then(
+    (r) => {
+      try {
+        r.release();
+      } catch {
+        /* ignore */
+      }
+    },
+    () => {
+      // reject tardio: sem conexão
+    },
+  );
+}
+
 export type MeUserRow = {
   id: string;
   email: string;
@@ -94,13 +122,18 @@ export async function meUserQueryWithConnectionTiming(
   const tConn0 = Date.now();
   let connectionWaitMs = 0;
   let reserved: Awaited<ReturnType<typeof reserveSqlConnection>> | null = null;
+  const reservePromise = reserveSqlConnection();
 
   try {
-    reserved = await withMeDbTimeout(
-      "user_query_connection",
-      reserveSqlConnection(),
-      { connectionWaitMs: 0, queryMs: null },
-    );
+    try {
+      reserved = await withMeDbTimeout("user_query_connection", reservePromise, {
+        connectionWaitMs: 0,
+        queryMs: null,
+      });
+    } catch (err) {
+      releaseReserveWhenReady(reservePromise);
+      throw err;
+    }
     connectionWaitMs = Date.now() - tConn0;
 
     const tQuery0 = Date.now();
@@ -167,13 +200,19 @@ export async function meCompanyStepWithConnectionTiming<T>(
 
   const tConn0 = Date.now();
   let connectionWaitMs = 0;
+  const reservePromise = reserveSqlConnection();
 
   try {
-    const probe = await withMeDbTimeout(
-      "company_connection",
-      reserveSqlConnection(),
-      { connectionWaitMs: 0, queryMs: null },
-    );
+    let probe: Awaited<ReturnType<typeof reserveSqlConnection>>;
+    try {
+      probe = await withMeDbTimeout("company_connection", reservePromise, {
+        connectionWaitMs: 0,
+        queryMs: null,
+      });
+    } catch (err) {
+      releaseReserveWhenReady(reservePromise);
+      throw err;
+    }
     connectionWaitMs = Date.now() - tConn0;
     try {
       probe.release();
