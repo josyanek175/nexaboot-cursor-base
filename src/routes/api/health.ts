@@ -1,6 +1,7 @@
 // GET /api/health — diagnóstico de runtime (sem DB, auth ou integrações).
 import { createFileRoute } from "@tanstack/react-router";
 import { execSync } from "node:child_process";
+import { getDatabaseBootstrapState } from "@/lib/pg.server";
 
 function readGitCommit(): string | null {
   if (process.env.GIT_COMMIT?.trim()) return process.env.GIT_COMMIT.trim();
@@ -28,6 +29,7 @@ export const Route = createFileRoute("/api/health")({
           env: process.env.NODE_ENV ?? "unknown",
           port: process.env.PORT ?? null,
           commit: readGitCommit(),
+          databaseBootstrap: getDatabaseBootstrapState(),
           hasMetaVerifyToken: !!process.env.META_APP_VERIFY_TOKEN?.trim(),
           hasMetaAppSecret: !!process.env.META_APP_SECRET?.trim(),
           hasTokenEncryptionKey: !!process.env.META_TOKEN_ENCRYPTION_KEY?.trim(),

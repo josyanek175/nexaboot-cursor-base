@@ -1550,6 +1550,11 @@ export function bootstrapDatabaseSchema(): Promise<void> {
     });
 }
 
+/** Estado público do bootstrap (health) — sem segredos. */
+export function getDatabaseBootstrapState(): DatabaseBootstrapState {
+  return getBootstrapCoordinator().getState();
+}
+
 /** Aguarda o bootstrap (idempotente; retentável após falha + cooldown). */
 export function waitForDatabaseReady(): Promise<void> {
   return bootstrapDatabaseSchema();
@@ -1628,5 +1633,5 @@ export function __setBootstrapRunnerForTests(
 }
 
 export function __getDatabaseBootstrapStateForTests(): DatabaseBootstrapState {
-  return getBootstrapCoordinator().getState();
+  return getDatabaseBootstrapState();
 }

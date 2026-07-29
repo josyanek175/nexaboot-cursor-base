@@ -2,24 +2,34 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import {
-  isDatabaseBootstrapUnavailable,
-  waitForDatabaseReady,
-} from "./lib/pg.server";
+import { bootstrapDatabaseSchema } from "./lib/pg.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+let bootstrapStarted = false;
 
 /**
- * Cada request aguarda o bootstrap. A Promise é reutilizada enquanto
- * pending/sucesso; após falha + cooldown, uma nova tentativa é permitida.
+ * Bootstrap de schema em background (uma vez por processo).
+ * NÃO bloqueia requests HTTP — auth/health usam o banco diretamente.
+ * Coordenação (Promise compartilhada, advisory lock, activeRun, watchdog)
+ * permanece em bootstrapDatabaseSchema().
  */
-async function waitForDatabaseReadyOnRequest(): Promise<void> {
-  return waitForDatabaseReady();
+function startDatabaseBootstrapInBackground(): void {
+  if (bootstrapStarted) return;
+  bootstrapStarted = true;
+  void bootstrapDatabaseSchema().catch((error) => {
+    console.error("[DB_BOOTSTRAP_BACKGROUND_ERROR]", {
+      message: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : undefined,
+    });
+  });
 }
+
+// Dispara no carregamento do módulo do servidor (startup do processo).
+startDatabaseBootstrapInBackground();
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -35,13 +45,6 @@ function brandedErrorResponse(): Response {
     status: 500,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
-}
-
-function databaseUnavailableResponse(): Response {
-  return Response.json(
-    { error: "database_initialization_unavailable" },
-    { status: 503 },
-  );
 }
 
 function isCatastrophicSsrErrorBody(body: string, responseStatus: number): boolean {
@@ -87,34 +90,13 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Garante kickoff mesmo se o módulo foi carregado sem side-effect (testes).
+    startDatabaseBootstrapInBackground();
     try {
-      const path = new URL(request.url).pathname;
-      const tWait0 = Date.now();
-      await waitForDatabaseReadyOnRequest();
-      const waitMs = Date.now() - tWait0;
-      if (waitMs > 1000) {
-        console.log("[DB_BOOTSTRAP_WAIT]", { path, waitMs });
-      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
-      if (isDatabaseBootstrapUnavailable(error)) {
-        console.error("[DB_BOOTSTRAP_REQUEST_BLOCKED]", {
-          path: new URL(request.url).pathname,
-        });
-        return databaseUnavailableResponse();
-      }
-      // Bootstrap pode rejeitar com o wrapper genérico; também trate mensagem.
-      if (
-        error instanceof Error &&
-        error.message === "database_initialization_unavailable"
-      ) {
-        console.error("[DB_BOOTSTRAP_REQUEST_BLOCKED]", {
-          path: new URL(request.url).pathname,
-        });
-        return databaseUnavailableResponse();
-      }
       console.error(error);
       return brandedErrorResponse();
     }

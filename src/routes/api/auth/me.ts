@@ -54,9 +54,8 @@ export const Route = createFileRoute("/api/auth/me")({
         };
 
         try {
-          // Schema DDL roda no boot (server.ts → bootstrapDatabaseSchema).
-          // schemaMs permanece 0 nas rotas HTTP — validação pós-correção.
-          // waitForDatabaseReady() já rodou no fetch wrapper ANTES deste handler.
+          // Schema DDL roda em background (server.ts → bootstrapDatabaseSchema).
+          // Este handler NÃO aguarda ensure*Schema — consulta o banco diretamente.
           schemaMs = 0;
 
           // Diagnóstico do ciclo do cookie de sessão.

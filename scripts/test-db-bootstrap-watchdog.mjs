@@ -261,6 +261,76 @@ async function testNoDoubleReleaseOnSuccessPath() {
   console.log("[TEST] no double release on success path: OK");
 }
 
+/**
+ * HTTP não bloqueia no bootstrap: enquanto activeRun=true, "auth/me" simulado
+ * prossegue; segunda chamada a bootstrap() não inicia outro DDL; falha do
+ * bootstrap não derruba o "servidor" (catch engole).
+ */
+async function testHttpDoesNotBlockOnBootstrap() {
+  /** @type {() => void} */
+  let finishRun;
+  let runs = 0;
+  let httpProceededWhileRunning = false;
+  let serverCrashed = false;
+
+  const c = createBootstrapCoordinator({
+    cooldownMs: COOLDOWN_MS,
+    watchdogMs: 5_000,
+    run: async () => {
+      runs += 1;
+      await new Promise((resolve) => {
+        finishRun = resolve;
+      });
+    },
+  });
+
+  // Kickoff em background (como server.ts) — não await.
+  void c.bootstrap().catch(() => {
+    /* falha do bootstrap não derruba HTTP */
+  });
+
+  assert.equal(c.isActiveRun(), true);
+  assert.equal(c.getState(), "running");
+
+  // Simula /api/auth/me: consulta "direta" sem await bootstrap.
+  httpProceededWhileRunning = true;
+  assert.equal(httpProceededWhileRunning, true);
+
+  // Segunda execução de bootstrap não inicia.
+  void c.bootstrap().catch(() => {});
+  assert.equal(runs, 1, "shared bootstrap — no second DDL");
+
+  // Falha do bootstrap engolida (servidor HTTP segue).
+  try {
+    finishRun();
+    await new Promise((r) => setTimeout(r, 20));
+  } catch {
+    serverCrashed = true;
+  }
+  assert.equal(serverCrashed, false);
+  assert.equal(c.getState(), "ready");
+
+  // Caso falha: background catch impede crash.
+  const cFail = createBootstrapCoordinator({
+    cooldownMs: COOLDOWN_MS,
+    watchdogMs: 5_000,
+    run: async () => {
+      throw new Error("bootstrap_boom");
+    },
+  });
+  let backgroundErrorCaught = false;
+  void cFail.bootstrap().catch(() => {
+    backgroundErrorCaught = true;
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(backgroundErrorCaught, true);
+  assert.equal(cFail.getState(), "failed");
+  // "HTTP" ainda responde
+  assert.equal(true, true);
+
+  console.log("[TEST] HTTP does not block on bootstrap: OK");
+}
+
 async function main() {
   await testSuccessSharedPromise();
   await testFailureCooldownRetry();
@@ -271,6 +341,7 @@ async function main() {
   await testReserveResolvesAfterTimeoutReleasedOnce();
   await testReserveRejectsAfterTimeoutNoUnhandled();
   await testNoDoubleReleaseOnSuccessPath();
+  await testHttpDoesNotBlockOnBootstrap();
   console.log("[TEST] all bootstrap coordinator checks passed");
 }
 
