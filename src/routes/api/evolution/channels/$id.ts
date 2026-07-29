@@ -2,7 +2,7 @@
 // deleted_at=now). Preserva o histórico de conversas/mensagens. Faz logout
 // best-effort na Evolution.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { hasEvoConfig, logoutInstanceEvo } from "@/lib/evolution.server";
 
@@ -12,7 +12,6 @@ export const Route = createFileRoute("/api/evolution/channels/$id")({
   server: {
     handlers: {
       DELETE: async ({ params }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

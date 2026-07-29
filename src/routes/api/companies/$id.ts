@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 
@@ -25,7 +25,6 @@ export const Route = createFileRoute("/api/companies/$id")({
   server: {
     handlers: {
       PATCH: async ({ params, request }) => {
-        await ensureCrmSchema();
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
 

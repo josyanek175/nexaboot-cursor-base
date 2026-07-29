@@ -2,12 +2,20 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { bootstrapDatabaseSchema } from "./lib/pg.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+
+/** Schema DDL roda uma vez no boot, antes de atender tráfego. */
+const databaseReady = bootstrapDatabaseSchema().catch((error) => {
+  console.error("[DB_BOOTSTRAP_FAILED_AT_START]", error);
+  // Mantém a promise rejeitada para o fetch falhar de forma controlada.
+  throw error;
+});
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -69,6 +77,8 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      // Bloqueia tráfego até o DDL idempotente terminar (uma vez por processo).
+      await databaseReady;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

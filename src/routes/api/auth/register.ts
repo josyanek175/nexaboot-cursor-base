@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   buildSessionSetCookie,
   describeSessionCookie,
@@ -23,7 +23,6 @@ export const Route = createFileRoute("/api/auth/register")({
       // (primeiro usuário). Demais usuários são criados pela gestão (/api/users).
       GET: async () => {
         try {
-          await ensureSchema();
           const s = sql();
           const count = await s`SELECT COUNT(*)::int AS c FROM public.users`;
           const total = Number(count[0]?.c ?? 0);
@@ -39,16 +38,6 @@ export const Route = createFileRoute("/api/auth/register")({
       },
 
       POST: async ({ request }) => {
-        try {
-          await ensureSchema();
-        } catch (e) {
-          console.error("[register] ensureSchema falhou:", e);
-          return Response.json(
-            { error: "Falha ao preparar o banco de dados", detail: (e as Error).message },
-            { status: 500 },
-          );
-        }
-
         const json = await request.json().catch(() => null);
         const parsed = Body.safeParse(json);
         if (!parsed.success) {

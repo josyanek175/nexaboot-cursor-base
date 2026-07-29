@@ -2,7 +2,7 @@
  * Atribuição de atendimento por conversa (assume / transfer).
  * Usa public.conversation_assignments + public.attendance_notifications.
  */
-import { sql, ensureAttendanceSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 import {
@@ -165,9 +165,7 @@ async function replaceAssignment(
 
 export async function assumeConversation(
   conversationId: string,
-): Promise<AssignmentResult | Response> {
-  await ensureAttendanceSchema();
-  const actor = await requireAttendanceActor();
+): Promise<AssignmentResult | Response> {  const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
 
   if (!canAssumeAttendance(actor.role)) {
@@ -281,9 +279,7 @@ export async function assumeConversation(
 export async function transferConversation(
   conversationId: string,
   toUserId: string,
-): Promise<AssignmentResult | Response> {
-  await ensureAttendanceSchema();
-  const actor = await requireAttendanceActor();
+): Promise<AssignmentResult | Response> {  const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
 
   const s = sql();
@@ -374,9 +370,7 @@ export async function transferConversation(
 
 export async function finishConversation(
   conversationId: string,
-): Promise<{ ok: true; status: string; campaign_service_status: string | null } | Response> {
-  await ensureAttendanceSchema();
-  const actor = await requireAttendanceActor();
+): Promise<{ ok: true; status: string; campaign_service_status: string | null } | Response> {  const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
 
   if (!canAssumeAttendance(actor.role)) {
@@ -410,9 +404,7 @@ export async function reopenConversation(
 ): Promise<
   | { ok: true; status: string; campaign_service_status: string | null }
   | Response
-> {
-  await ensureAttendanceSchema();
-  const actor = await requireAttendanceActor();
+> {  const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
 
   if (!canAssumeAttendance(actor.role)) {

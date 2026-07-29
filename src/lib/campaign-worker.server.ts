@@ -3,7 +3,7 @@
  * Usa exclusivamente campaign-send-policy.ts para ritmo/janela/variação.
  * Não lê intervalo/velocidade da API pública.
  */
-import { sql, ensureCampaignsSchema, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { normalizePhone, normalizePhoneE164, normalizePhoneForMatch, isValidE164Digits } from "@/lib/phone";
 import {
   nextAllowedSendAt,
@@ -1046,11 +1046,7 @@ function logRunnableSelected(campaignId: string, pendingCount: number): void {
  * Processa no máximo UM envio (um contato de uma campanha).
  * Retorna delayMs sugerido até o próximo tick (política interna).
  */
-export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {
-  await ensureCrmSchema();
-  await ensureCampaignsSchema();
-
-  const processingStaleMs = readProcessingStaleMs();
+export async function processCampaignWorkerTick(): Promise<WorkerTickResult> {  const processingStaleMs = readProcessingStaleMs();
 
   const campaigns = await loadDueCampaigns();
   if (campaigns.length === 0) {

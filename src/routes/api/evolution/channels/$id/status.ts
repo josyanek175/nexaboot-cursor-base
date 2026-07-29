@@ -1,7 +1,7 @@
 // GET /api/evolution/channels/:id/status — consulta status na Evolution e
 // atualiza o banco. Mapeia o estado da Evolution para o status do NexaBoot.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { hasEvoConfig, instanceState, mapEvoStatus } from "@/lib/evolution.server";
 
@@ -11,7 +11,6 @@ export const Route = createFileRoute("/api/evolution/channels/$id/status")({
   server: {
     handlers: {
       GET: async ({ params }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

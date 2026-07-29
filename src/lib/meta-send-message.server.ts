@@ -1,6 +1,6 @@
 // Envio manual de texto outbound Meta WhatsApp Cloud API.
 
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   bumpConversationAfterOutboundMessage,
   insertOutboundTextMessage,
@@ -240,9 +240,7 @@ export async function sendMetaManualText(params: {
   text: string;
   sentByUserId?: string | null;
   sentByName?: string | null;
-}): Promise<MetaManualSendResult> {
-  await ensureCrmSchema();
-  const { companyId, conversationId, text, sentByUserId, sentByName } = params;
+}): Promise<MetaManualSendResult> {  const { companyId, conversationId, text, sentByUserId, sentByName } = params;
   const s = sql();
 
   const rows = await s<{
@@ -478,10 +476,7 @@ export type MetaTemplateSendResult =
  */
 export async function sendMetaTemplateMessage(
   input: MetaTemplateSendInput,
-): Promise<MetaTemplateSendResult> {
-  await ensureCrmSchema();
-
-  const toDigits = input.toPhone.replace(/\D/g, "");
+): Promise<MetaTemplateSendResult> {  const toDigits = input.toPhone.replace(/\D/g, "");
   console.log("[META_TEMPLATE_SEND_START]", {
     companyId: input.companyId,
     channelId: input.channelId,

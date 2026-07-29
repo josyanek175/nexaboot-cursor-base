@@ -1,6 +1,6 @@
 // Persistência de mensagens inbound Meta WhatsApp Cloud API (texto + mídia).
 
-import { ensureCampaignsSchema, ensureCrmSchema } from "@/lib/pg.server";
+
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
 import {
   bumpConversationAfterInboundMessage,
@@ -52,10 +52,7 @@ function enrichRawPayload(
 /** Persiste mensagens inbound Meta em contacts/conversations/messages. */
 export async function persistMetaInboundMessages(
   payload: unknown,
-): Promise<MetaInboundPersistResult> {
-  await ensureCrmSchema();
-
-  const webhookBody = unwrapMetaWebhookBody(payload);
+): Promise<MetaInboundPersistResult> {  const webhookBody = unwrapMetaWebhookBody(payload);
   const body = webhookBody ?? payload;
   const textMessages = extractMetaInboundTextMessages(body);
   const mediaMessages = extractMetaInboundMediaMessages(body);
@@ -158,9 +155,7 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
   });
 
   let campaignId: string | undefined;
-  try {
-    await ensureCampaignsSchema();
-    const campaignMatch = await handleCampaignInboundReply({
+  try {    const campaignMatch = await handleCampaignInboundReply({
       companyId: channel.companyId,
       channelId: channel.id,
       conversationId,
@@ -319,9 +314,7 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
     lastMessageText: messageText,
   });
 
-  try {
-    await ensureCampaignsSchema();
-    await handleCampaignInboundReply({
+  try {    await handleCampaignInboundReply({
       companyId: channel.companyId,
       channelId: channel.id,
       conversationId,

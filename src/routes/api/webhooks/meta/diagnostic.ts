@@ -1,15 +1,13 @@
 // GET /api/webhooks/meta/diagnostic — diagnóstico público do webhook Meta (sem segredos).
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 const WEBHOOK_PATH = "/api/webhooks/meta/whatsapp";
 
 export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        await ensureCrmSchema();
-        const url = new URL(request.url);
+      GET: async ({ request }) => {        const url = new URL(request.url);
         const phoneNumberId = url.searchParams.get("phone_number_id")?.trim() || null;
 
         let channel: Record<string, unknown> | null = null;

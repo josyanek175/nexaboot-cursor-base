@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireCompanyId } from "@/lib/company.server";
-import { ensureCampaignsSchema } from "@/lib/pg.server";
+
 import { getDashboardCampaigns } from "@/lib/dashboard-campaigns.server";
 
 export const Route = createFileRoute("/api/dashboard/campaigns")({
@@ -10,9 +10,7 @@ export const Route = createFileRoute("/api/dashboard/campaigns")({
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
 
-        try {
-          await ensureCampaignsSchema();
-          const payload = await getDashboardCampaigns(company);
+        try {          const payload = await getDashboardCampaigns(company);
           return Response.json(payload);
         } catch (e) {
           console.error("[DASHBOARD_CAMPAIGNS_API_FAIL]", e);

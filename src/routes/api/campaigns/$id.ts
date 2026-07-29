@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureCrmSchema } from "@/lib/pg.server";
+
 import {
   getCampaignActor,
   getCampaignDetail,
@@ -62,9 +62,7 @@ const PatchBody = z.object({
 export const Route = createFileRoute("/api/campaigns/$id")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
-        await ensureCrmSchema();
-        const ctx = await getCampaignActor("view");
+      GET: async ({ params }) => {        const ctx = await getCampaignActor("view");
         if (ctx instanceof Response) return ctx;
 
         const campaign = await getCampaignDetail(ctx.companyId, params.id);
@@ -72,9 +70,7 @@ export const Route = createFileRoute("/api/campaigns/$id")({
         return Response.json({ campaign });
       },
 
-      PATCH: async ({ params, request }) => {
-        await ensureCrmSchema();
-        const ctx = await getCampaignActor("manage");
+      PATCH: async ({ params, request }) => {        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);
@@ -116,9 +112,7 @@ export const Route = createFileRoute("/api/campaigns/$id")({
         }
       },
 
-      DELETE: async ({ params }) => {
-        await ensureCrmSchema();
-        const ctx = await getCampaignActor("delete");
+      DELETE: async ({ params }) => {        const ctx = await getCampaignActor("delete");
         if (ctx instanceof Response) return ctx;
 
         try {

@@ -3,7 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireCompanyId } from "@/lib/company.server";
 import { sendConversationDocument } from "@/lib/document-send.server";
-import { ensureCrmSchema, sql } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -11,9 +11,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const Route = createFileRoute("/api/messages/send-media")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      POST: async ({ request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

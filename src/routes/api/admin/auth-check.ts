@@ -3,7 +3,7 @@
 // NÃO retorna password_hash completo.
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { hasSessionSecret } from "@/lib/session.server";
 
 const BCRYPT_PREFIX_RE = /^\$2[aby]\$/;
@@ -26,7 +26,6 @@ export const Route = createFileRoute("/api/admin/auth-check")({
         }
 
         try {
-          await ensureSchema();
           const rows = await sql()`
             SELECT id, email, name, role, tenant_id, active, password_hash
             FROM public.users
@@ -79,7 +78,6 @@ export const Route = createFileRoute("/api/admin/auth-check")({
           );
         }
         try {
-          await ensureSchema();
           const rows = await sql()`
             SELECT id, email, role, tenant_id, active, password_hash
             FROM public.users

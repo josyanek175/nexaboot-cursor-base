@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 
@@ -14,7 +14,6 @@ export const Route = createFileRoute("/api/internal-chat/create")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        await ensureSchema();
         // Isolamento oficial por company_id: chat interno é operacional, então
         // exige empresa válida (inclui SUPER_ADMIN/TI sem empresa => 403).
         const company = await requireCompanyId();

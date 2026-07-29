@@ -8,7 +8,7 @@
 // expõe caminho interno do servidor. Reaproveita o padrão de mídia já existente
 // (base64 em media_base64 + media_url servido por /api/messages/:id/media).
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { tryApplyHumanReplyFromMessage } from "@/lib/campaign-service-status.server";
@@ -66,9 +66,7 @@ function sanitizeFileName(name: string, mime: string): string {
 export const Route = createFileRoute("/api/messages/send/media/evolution")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      POST: async ({ request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

@@ -1253,3 +1253,61 @@ export async function ensureSchema() {
   });
   return _schemaReady;
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Bootstrap único de schema (boot do processo).
+// Todas as rotas HTTP devem assumir que o schema já foi aplicado aqui.
+// Promise compartilhada + advisory lock evitam DDL concorrente entre réplicas.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Lock advisory estável (não conflita com locks de tabela). */
+const DB_SCHEMA_BOOT_LOCK_KEY = 872_014_01;
+
+let _dbBootstrap: Promise<void> | null = null;
+
+/**
+ * Executa TODO o DDL idempotente uma vez por processo (e serializa entre
+ * instâncias via pg_advisory_lock). Não apaga dados de produção além do que
+ * as funções ensure* já faziam (ex.: reset defensivo de chat interno legado).
+ */
+export function bootstrapDatabaseSchema(): Promise<void> {
+  if (_dbBootstrap) return _dbBootstrap;
+  _dbBootstrap = (async () => {
+    const t0 = Date.now();
+    console.log("[DB_BOOTSTRAP_START]");
+    const s = sql();
+    await s.unsafe(`SELECT pg_advisory_lock(${DB_SCHEMA_BOOT_LOCK_KEY})`);
+    try {
+      await ensureSchema();
+      await ensureCrmSchema();
+      // users.company_id vive em company.server — import dinâmico evita ciclo.
+      const { ensureUserCompanySchema } = await import("@/lib/company.server");
+      await ensureUserCompanySchema();
+      console.log("[DB_BOOTSTRAP_OK]", { totalMs: Date.now() - t0 });
+    } catch (e) {
+      console.error("[DB_BOOTSTRAP_FAIL]", {
+        message: e instanceof Error ? e.message : String(e),
+        totalMs: Date.now() - t0,
+      });
+      throw e;
+    } finally {
+      try {
+        await s.unsafe(`SELECT pg_advisory_unlock(${DB_SCHEMA_BOOT_LOCK_KEY})`);
+      } catch (unlockErr) {
+        console.warn(
+          "[DB_BOOTSTRAP_UNLOCK_WARN]",
+          unlockErr instanceof Error ? unlockErr.message : String(unlockErr),
+        );
+      }
+    }
+  })().catch((e) => {
+    _dbBootstrap = null;
+    throw e;
+  });
+  return _dbBootstrap;
+}
+
+/** Aguarda o bootstrap (idempotente). Use em workers se necessário. */
+export function awaitDatabaseReady(): Promise<void> {
+  return bootstrapDatabaseSchema();
+}

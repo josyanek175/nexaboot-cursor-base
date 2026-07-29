@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 
@@ -7,7 +7,6 @@ export const Route = createFileRoute("/api/internal-chat/list")({
   server: {
     handlers: {
       GET: async () => {
-        await ensureSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

@@ -1,7 +1,7 @@
 // GET /api/dashboard — indicadores operacionais de atendimento (por company_id).
 // Managers veem a empresa inteira; atendentes veem principalmente os seus + sem responsável.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema, ensureAttendanceSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   requireAttendanceActor,
   canTransferAny,
@@ -10,11 +10,7 @@ import {
 export const Route = createFileRoute("/api/dashboard")({
   server: {
     handlers: {
-      GET: async () => {
-        await ensureCrmSchema();
-        await ensureAttendanceSchema();
-
-        const actor = await requireAttendanceActor();
+      GET: async () => {        const actor = await requireAttendanceActor();
         if (actor instanceof Response) return actor;
 
         const companyId = actor.companyId;

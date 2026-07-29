@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ensureCrmSchema } from "@/lib/pg.server";
+
 import { getCampaignActor, removeCampaignContact } from "@/lib/campaign.server";
 
 export const Route = createFileRoute("/api/campaigns/$id/contacts/$contactRowId")({
   server: {
     handlers: {
       DELETE: async ({ params }) => {
-        await ensureCrmSchema();
         const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 

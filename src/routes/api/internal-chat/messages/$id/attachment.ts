@@ -7,7 +7,7 @@
 //   - lê do volume com proteção contra path traversal
 //   - inline para imagem/PDF; attachment (download) para documentos
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { readAttachment } from "@/lib/internal-upload.server";
@@ -26,7 +26,6 @@ export const Route = createFileRoute("/api/internal-chat/messages/$id/attachment
   server: {
     handlers: {
       GET: async ({ params }) => {
-        await ensureSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

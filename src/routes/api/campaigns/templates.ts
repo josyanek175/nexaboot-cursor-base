@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureCampaignsSchema } from "@/lib/pg.server";
+
 import { getCampaignActor } from "@/lib/campaign.server";
 import {
   listCampaignTemplates,
@@ -25,9 +25,7 @@ const CreateBody = z.object({
 export const Route = createFileRoute("/api/campaigns/templates")({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        await ensureCampaignsSchema();
-        const ctx = await getCampaignActor("view");
+      GET: async ({ request }) => {        const ctx = await getCampaignActor("view");
         if (ctx instanceof Response) return ctx;
 
         const url = new URL(request.url);
@@ -42,9 +40,7 @@ export const Route = createFileRoute("/api/campaigns/templates")({
         }
       },
 
-      POST: async ({ request }) => {
-        await ensureCampaignsSchema();
-        const ctx = await getCampaignActor("manage");
+      POST: async ({ request }) => {        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);

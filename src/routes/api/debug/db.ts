@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 /** Decompõe a DATABASE_URL para comparação, sem expor a senha. */
 function describeDbUrl(raw: string | undefined) {
@@ -30,7 +30,6 @@ export const Route = createFileRoute("/api/debug/db")({
           return Response.json({ hasDatabaseUrl: false, databaseUrl }, { status: 500 });
         }
         try {
-          await ensureSchema();
           const s = sql();
           const conn = await s`
             SELECT inet_server_addr()::text AS host, inet_server_port() AS port,

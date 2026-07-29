@@ -10,7 +10,7 @@
 //   - se a instância já existir em OUTRA empresa, bloqueia (409).
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 
 const Body = z
@@ -28,8 +28,6 @@ export const Route = createFileRoute("/api/evolution/register-channel")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        await ensureCrmSchema();
-
         // Empresa obrigatória: sem sessão => 401; sem empresa válida => 403.
         const company = await requireCompanyId();
         if (company instanceof Response) return company;

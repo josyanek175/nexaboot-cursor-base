@@ -2,7 +2,7 @@
 // DELETE /api/contacts/:id → remove contato (escopo da empresa do logado).
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 
@@ -22,7 +22,6 @@ export const Route = createFileRoute("/api/contacts/$id")({
   server: {
     handlers: {
       PUT: async ({ request, params }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -86,7 +85,6 @@ export const Route = createFileRoute("/api/contacts/$id")({
       // O registro permanece no banco; conversas e mensagens são preservadas.
       // Exclusão definitiva só pela TI, diretamente no banco de dados.
       DELETE: async ({ params }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

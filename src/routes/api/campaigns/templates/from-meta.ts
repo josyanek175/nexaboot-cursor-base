@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureCampaignsSchema } from "@/lib/pg.server";
+
 import { getCampaignActor } from "@/lib/campaign.server";
 import { getMetaTemplateRowById } from "@/lib/meta-message-templates.server";
 import { convertMetaTemplateToEvolutionDraft } from "@/lib/campaign-template-meta-convert";
@@ -16,9 +16,7 @@ const Body = z.object({
 export const Route = createFileRoute("/api/campaigns/templates/from-meta")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        await ensureCampaignsSchema();
-        const ctx = await getCampaignActor("manage");
+      POST: async ({ request }) => {        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);

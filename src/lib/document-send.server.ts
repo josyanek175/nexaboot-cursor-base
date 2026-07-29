@@ -1,6 +1,6 @@
 // Orquestra envio de documento outbound (Meta ou Evolution) com persistência.
 
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   bumpConversationAfterOutboundMessage,
 } from "@/lib/crm-outbound.server";
@@ -247,9 +247,7 @@ export async function sendConversationDocument(params: {
       }
       throw e;
     }
-  } else {
-    await ensureCrmSchema();
-    const s = sql();
+  } else {    const s = sql();
     const existing = await s<
       {
         id: string;
@@ -297,10 +295,7 @@ export async function sendConversationDocument(params: {
     mimeType: doc.mimeType,
     fileName: doc.fileName,
     size: doc.size,
-  });
-
-  await ensureCrmSchema();
-  const s = sql();
+  });  const s = sql();
 
   const rows = await s<{
     id: string;

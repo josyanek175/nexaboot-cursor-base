@@ -6,7 +6,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema, ensureCampaignsSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { isValidE164Digits, normalizePhoneE164, normalizePhoneForMatch } from "@/lib/phone";
 import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
@@ -410,9 +410,7 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
     const isText = parsed.type === "text" && !!parsed.body;
     const isMedia = ["image", "audio", "document", "video"].includes(parsed.type);
     if (isText || isMedia) {
-      try {
-        await ensureCampaignsSchema();
-        await handleCampaignInboundReply({
+      try {        await handleCampaignInboundReply({
           companyId: channel.company_id,
           channelId: channel.id,
           conversationId,
@@ -491,9 +489,7 @@ export async function handleEvolutionWebhookPOST(request: Request): Promise<Resp
     return new Response("Missing instance", { status: 400 });
   }
 
-  try {
-    await ensureCrmSchema();
-    const channel = await findChannelByInstance(String(instance));
+  try {    const channel = await findChannelByInstance(String(instance));
     if (!channel) {
       console.log("[WEBHOOK_CHANNEL_NOT_FOUND]", { instance, event });
       return new Response("Channel not found", { status: 404 });

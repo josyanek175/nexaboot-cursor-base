@@ -6,7 +6,7 @@
 // Não usa mocks. Os contatos recebidos pelo webhook da Evolution já caem aqui.
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 
@@ -24,7 +24,6 @@ export const Route = createFileRoute("/api/contacts")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -63,7 +62,6 @@ export const Route = createFileRoute("/api/contacts")({
       },
 
       POST: async ({ request }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

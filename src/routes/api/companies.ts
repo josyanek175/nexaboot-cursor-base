@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
-import { ensureUserCompanySchema, getCurrentUserCompanyInfo } from "@/lib/company.server";
+import { getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 
@@ -34,8 +34,6 @@ export const Route = createFileRoute("/api/companies")({
   server: {
     handlers: {
       GET: async () => {
-        await ensureCrmSchema();
-        await ensureUserCompanySchema();
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
 
@@ -68,8 +66,6 @@ export const Route = createFileRoute("/api/companies")({
       },
 
       POST: async ({ request }) => {
-        await ensureCrmSchema();
-        await ensureUserCompanySchema();
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
         if (!isPlatformRole(String(actor.role))) {

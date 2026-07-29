@@ -2,7 +2,7 @@
 // POST /api/meta/channels  — cadastro manual de canal Meta Cloud API.
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import {
   assertMetaPhoneNumberIdAvailable,
@@ -30,18 +30,14 @@ const CreateMetaChannelBody = z.object({
 export const Route = createFileRoute("/api/meta/channels")({
   server: {
     handlers: {
-      GET: async () => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      GET: async () => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
 
         const channels = await listMetaChannelsForCompany(company);
         return Response.json({ channels });
       },
 
-      POST: async ({ request }) => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      POST: async ({ request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

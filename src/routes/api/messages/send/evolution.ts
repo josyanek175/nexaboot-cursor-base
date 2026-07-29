@@ -3,7 +3,7 @@
 // Resolve a instância/telefone pela própria conversa; trata 401/403 da API.
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 
@@ -16,7 +16,6 @@ export const Route = createFileRoute("/api/messages/send/evolution")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 
@@ -31,9 +31,7 @@ async function getActor() {
 export const Route = createFileRoute("/api/users")({
   server: {
     handlers: {
-      GET: async () => {
-        await ensureSchema();
-        // Isolamento oficial por company_id: sem empresa válida => 403.
+      GET: async () => {        // Isolamento oficial por company_id: sem empresa válida => 403.
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -52,9 +50,7 @@ export const Route = createFileRoute("/api/users")({
         return Response.json({ users: rows });
       },
 
-      POST: async ({ request }) => {
-        await ensureSchema();
-        const company = await requireCompanyId();
+      POST: async ({ request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
         const actor = await getActor();

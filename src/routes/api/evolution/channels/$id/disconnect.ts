@@ -1,7 +1,7 @@
 // POST /api/evolution/channels/:id/disconnect — faz logout da instância na
 // Evolution e marca o canal como desconectado. Não remove histórico.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { hasEvoConfig, logoutInstanceEvo } from "@/lib/evolution.server";
 
@@ -11,7 +11,6 @@ export const Route = createFileRoute("/api/evolution/channels/$id/disconnect")({
   server: {
     handlers: {
       POST: async ({ params }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

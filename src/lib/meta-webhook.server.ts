@@ -2,7 +2,7 @@
 // Nunca logar tokens, headers sensíveis ou payload bruto com segredos.
 
 import { createHmac, timingSafeEqual } from "crypto";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   buildMetaWebhookAuditPayload,
   extractMetaEventTypes,
@@ -74,9 +74,7 @@ async function insertMetaWebhookLog(params: {
   httpStatus: number;
   payload: unknown;
   error?: string | null;
-}): Promise<void> {
-  await ensureCrmSchema();
-  const s = sql();
+}): Promise<void> {  const s = sql();
   const safePayload = sanitizeMetaWebhookPayload(params.payload);
 
   await s`
@@ -351,9 +349,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     }
 
     if (hasValidCompanyId(companyId) && channelId) {
-      try {
-        await ensureCrmSchema();
-        const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
+      try {        const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
         const persistResult = await persistMetaInboundMessages(webhookBody);
         if (persistResult.saved > 0) {
           processingStatus = "persisted";

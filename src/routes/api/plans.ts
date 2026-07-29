@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 
@@ -7,7 +7,6 @@ export const Route = createFileRoute("/api/plans")({
   server: {
     handlers: {
       GET: async () => {
-        await ensureCrmSchema();
         const uid = getSessionUserId();
         if (!uid) return Response.json({ error: "unauthenticated" }, { status: 401 });
 

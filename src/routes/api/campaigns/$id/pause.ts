@@ -1,6 +1,6 @@
 // POST /api/campaigns/:id/pause — pausa manual do disparo.
 import { createFileRoute } from "@tanstack/react-router";
-import { ensureCampaignsSchema } from "@/lib/pg.server";
+
 import { getCampaignActor, pauseCampaignManually } from "@/lib/campaign.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -8,9 +8,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const Route = createFileRoute("/api/campaigns/$id/pause")({
   server: {
     handlers: {
-      POST: async ({ params }) => {
-        await ensureCampaignsSchema();
-        if (!UUID_RE.test(params.id)) {
+      POST: async ({ params }) => {        if (!UUID_RE.test(params.id)) {
           return Response.json({ error: "invalid_id" }, { status: 400 });
         }
 

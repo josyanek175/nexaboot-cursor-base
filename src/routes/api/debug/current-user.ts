@@ -1,13 +1,12 @@
 // Endpoint de DEBUG do usuário corrente — lê a sessão PostgreSQL real (cookie httpOnly).
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 
 export const Route = createFileRoute("/api/debug/current-user")({
   server: {
     handlers: {
       GET: async () => {
-        await ensureSchema();
         const auth_source = "postgres-cookie-session";
         const uid = getSessionUserId();
         if (!uid) {

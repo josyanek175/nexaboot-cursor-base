@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 
@@ -34,7 +34,6 @@ export const Route = createFileRoute("/api/users/$id")({
   server: {
     handlers: {
       GET: async ({ params }) => {
-        await ensureSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -55,7 +54,6 @@ export const Route = createFileRoute("/api/users/$id")({
       },
 
       PUT: async ({ request, params }) => {
-        await ensureSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -115,7 +113,6 @@ export const Route = createFileRoute("/api/users/$id")({
       },
 
       DELETE: async ({ params }) => {
-        await ensureSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

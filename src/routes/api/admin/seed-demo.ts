@@ -3,7 +3,7 @@
 // Cria o tenant "Filtros e Velas" e os usuários com senha "demo123".
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 type SeedUser = {
   email: string;
@@ -23,7 +23,6 @@ const USERS: SeedUser[] = [
 ];
 
 async function runSeed() {
-  await ensureSchema();
   const s = sql();
   const passwordHash = await bcrypt.hash("demo123", 10);
 

@@ -1,6 +1,6 @@
 // GET /api/conversations — lista conversas com filtros server-side (incl. fila de campanhas).
 import { createFileRoute } from "@tanstack/react-router";
-import { ensureCrmSchema, ensureAttendanceSchema, ensureCampaignsSchema } from "@/lib/pg.server";
+
 import { requireCompanyId } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { getCurrentUserCompanyInfo } from "@/lib/company.server";
@@ -30,11 +30,7 @@ function parseFilters(url: URL): ConversationListFilters {
 export const Route = createFileRoute("/api/conversations")({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        await ensureCrmSchema();
-        await ensureAttendanceSchema();
-        await ensureCampaignsSchema();
-        const company = await requireCompanyId();
+      GET: async ({ request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

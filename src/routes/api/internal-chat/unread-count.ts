@@ -7,7 +7,7 @@
 // o usuário não tem empresa válida (ex.: SUPER_ADMIN/TI sem empresa), retorna
 // count=0 em vez de erro, para não poluir o badge.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { getCurrentUserCompanyInfo } from "@/lib/company.server";
 
@@ -15,7 +15,6 @@ export const Route = createFileRoute("/api/internal-chat/unread-count")({
   server: {
     handlers: {
       GET: async () => {
-        await ensureSchema();
         const uid = getSessionUserId();
         if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
 

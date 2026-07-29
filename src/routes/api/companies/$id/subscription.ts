@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { getCompanyPlanUsage } from "@/lib/subscription.server";
 import { isPlatformRole } from "@/lib/platform-roles";
@@ -22,7 +22,6 @@ export const Route = createFileRoute("/api/companies/$id/subscription")({
   server: {
     handlers: {
       GET: async ({ params }) => {
-        await ensureCrmSchema();
         if (!UUID_RE.test(params.id)) {
           return Response.json({ error: "invalid_id" }, { status: 400 });
         }

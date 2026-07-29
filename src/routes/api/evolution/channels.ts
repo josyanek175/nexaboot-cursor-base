@@ -3,7 +3,7 @@
 //   Evolution (se não existir) + configura webhook. Não expõe API key.
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
@@ -28,7 +28,6 @@ export const Route = createFileRoute("/api/evolution/channels")({
   server: {
     handlers: {
       GET: async () => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -46,7 +45,6 @@ export const Route = createFileRoute("/api/evolution/channels")({
       },
 
       POST: async ({ request }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

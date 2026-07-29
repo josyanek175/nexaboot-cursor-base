@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { requireCompanyId } from "@/lib/company.server";
 import { sendMetaManualText } from "@/lib/meta-send-message.server";
-import { ensureCrmSchema, sql } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 
 const Body = z
@@ -20,9 +20,7 @@ const Body = z
 export const Route = createFileRoute("/api/meta/messages/send-text")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      POST: async ({ request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

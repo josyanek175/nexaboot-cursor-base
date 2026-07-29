@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureCampaignsSchema } from "@/lib/pg.server";
+
 import { getCampaignActor, listCampaigns, createCampaign } from "@/lib/campaign.server";
 
 const CAMPAIGNS_AUTH_VERSION = "campaigns-auth-v5";
@@ -62,9 +62,7 @@ export const Route = createFileRoute("/api/campaigns")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        try {
-          await ensureCampaignsSchema();
-          const ctx = await getCampaignActor("view");
+        try {          const ctx = await getCampaignActor("view");
           if (ctx instanceof Response) return ctx;
 
           const status = new URL(request.url).searchParams.get("status") ?? undefined;
@@ -83,9 +81,7 @@ export const Route = createFileRoute("/api/campaigns")({
       },
 
       POST: async ({ request }) => {
-        try {
-          await ensureCampaignsSchema();
-          const ctx = await getCampaignActor("manage");
+        try {          const ctx = await getCampaignActor("manage");
           if (ctx instanceof Response) return ctx;
 
           const json = await request.json().catch(() => null);

@@ -1,7 +1,7 @@
 // Diagnóstico: schema de planos + execução dos SELECTs usados pela app.
 // GET /api/debug/plans-selects
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   listCompaniesWithPlanUsage,
   getCompanyPlanUsage,
@@ -28,8 +28,6 @@ export const Route = createFileRoute("/api/debug/plans-selects")({
           return Response.json({ error: "DATABASE_URL não configurada" }, { status: 500 });
         }
         try {
-          await ensureCrmSchema();
-
           const colRows = await sql<{ table_name: string; column_name: string }[]>`
             SELECT table_name, column_name
             FROM information_schema.columns

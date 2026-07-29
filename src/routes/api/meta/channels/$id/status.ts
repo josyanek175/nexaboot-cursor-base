@@ -1,6 +1,6 @@
 // GET /api/meta/channels/:id/status — consulta Graph API e status operacional (sem token).
 import { createFileRoute } from "@tanstack/react-router";
-import { ensureCrmSchema } from "@/lib/pg.server";
+
 import { requireCompanyId } from "@/lib/company.server";
 import { fetchMetaChannelLiveStatus } from "@/lib/meta-channel-status.server";
 import {
@@ -13,9 +13,7 @@ import { loadChannelForCompany } from "@/lib/whatsapp/whatsapp-provider-router.s
 export const Route = createFileRoute("/api/meta/channels/$id/status")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      GET: async ({ params }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

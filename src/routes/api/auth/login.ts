@@ -4,7 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   buildSessionSetCookie,
   describeSessionCookie,
@@ -46,19 +46,8 @@ export const Route = createFileRoute("/api/auth/login")({
             { status: 503 },
           );
         }
-        try {
-          await ensureSchema();
-        } catch (e) {
-          console.error("[LOGIN_DB_FAIL]", {
-            dbUrlMasked,
-            message: (e as Error).message,
-          });
-          return Response.json(
-            { error: "db_connection_error", reason: (e as Error).message },
-            { status: 503 },
-          );
-        }
 
+        // Schema é aplicado no boot (bootstrapDatabaseSchema). Daqui em diante só queries.
         // 1) Entrada -----------------------------------------------------
         const json = await request.json().catch(() => null);
         const parsed = Body.safeParse(json);

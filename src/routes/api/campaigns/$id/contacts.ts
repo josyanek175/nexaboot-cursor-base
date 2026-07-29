@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureCrmSchema } from "@/lib/pg.server";
+
 import {
   getCampaignActor,
   getCampaignById,
@@ -16,7 +16,6 @@ export const Route = createFileRoute("/api/campaigns/$id/contacts")({
   server: {
     handlers: {
       GET: async ({ params, request }) => {
-        await ensureCrmSchema();
         const ctx = await getCampaignActor("view");
         if (ctx instanceof Response) return ctx;
 
@@ -40,7 +39,6 @@ export const Route = createFileRoute("/api/campaigns/$id/contacts")({
       },
 
       POST: async ({ params, request }) => {
-        await ensureCrmSchema();
         const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 

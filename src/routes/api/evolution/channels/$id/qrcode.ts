@@ -1,6 +1,6 @@
 // GET /api/evolution/channels/:id/qrcode — solicita o QR Code da instância.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import {
   hasEvoConfig, connectInstanceEvo, extractQr, instanceState, mapEvoStatus,
@@ -12,7 +12,6 @@ export const Route = createFileRoute("/api/evolution/channels/$id/qrcode")({
   server: {
     handlers: {
       GET: async ({ params }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

@@ -2,7 +2,7 @@
 // POST /api/attendance/notifications — marca como lidas (body: { ids?: uuid[], conversationId?: uuid, all?: bool }).
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureAttendanceSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireAttendanceActor } from "@/lib/attendance.server";
 
 const MarkBody = z.object({
@@ -14,9 +14,7 @@ const MarkBody = z.object({
 export const Route = createFileRoute("/api/attendance/notifications")({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        await ensureAttendanceSchema();
-        const actor = await requireAttendanceActor();
+      GET: async ({ request }) => {        const actor = await requireAttendanceActor();
         if (actor instanceof Response) return actor;
 
         const unreadOnly =
@@ -57,9 +55,7 @@ export const Route = createFileRoute("/api/attendance/notifications")({
         });
       },
 
-      POST: async ({ request }) => {
-        await ensureAttendanceSchema();
-        const actor = await requireAttendanceActor();
+      POST: async ({ request }) => {        const actor = await requireAttendanceActor();
         if (actor instanceof Response) return actor;
 
         const json = await request.json().catch(() => null);

@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { requireCompanyId } from "@/lib/company.server";
 import { sendConversationText } from "@/lib/message-send-router.server";
-import { ensureCrmSchema, sql } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 
 const Body = z.object({
@@ -15,9 +15,7 @@ const Body = z.object({
 export const Route = createFileRoute("/api/messages/send")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      POST: async ({ request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

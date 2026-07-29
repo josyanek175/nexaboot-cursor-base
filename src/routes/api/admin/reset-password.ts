@@ -16,7 +16,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 const Body = z.object({
   token: z.string().min(1),
@@ -67,7 +67,6 @@ export const Route = createFileRoute("/api/admin/reset-password")({
         const newPassword = parsed.data.newPassword ?? "demo123";
 
         try {
-          await ensureSchema();
           const s = sql();
           const existing = await s`
             SELECT id, email, tenant_id, active FROM public.users WHERE lower(email) = ${email} LIMIT 1

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureCampaignsSchema } from "@/lib/pg.server";
+
 import { getCampaignActor } from "@/lib/campaign.server";
 import { confirmCampaignImport } from "@/lib/campaign-import.server";
 
@@ -12,9 +12,7 @@ const Body = z.object({
 export const Route = createFileRoute("/api/campaigns/$id/import/confirm")({
   server: {
     handlers: {
-      POST: async ({ params, request }) => {
-        await ensureCampaignsSchema();
-        const ctx = await getCampaignActor("manage");
+      POST: async ({ params, request }) => {        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);

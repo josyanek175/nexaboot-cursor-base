@@ -1,7 +1,7 @@
 // Roteador único de providers WhatsApp — escolhe Evolution ou Meta por canal.
 // Garante isolamento multitenant via company_id em todas as consultas.
 
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { evolutionProvider } from "@/lib/whatsapp/providers/evolution-provider.server";
 import { mapMetaChannelRow } from "@/lib/whatsapp/providers/meta-whatsapp-provider.server";
 import { metaWhatsAppProvider } from "@/lib/whatsapp/providers/meta-whatsapp-provider.server";
@@ -77,9 +77,7 @@ export function getProviderByKind(kind: WhatsAppProviderKind): WhatsAppProvider 
 export async function loadChannelForCompany(
   channelId: string,
   companyId: string,
-): Promise<WhatsAppChannelRecord | null> {
-  await ensureCrmSchema();
-  const s = sql();
+): Promise<WhatsAppChannelRecord | null> {  const s = sql();
   const rows = await s<ChannelRow[]>`
     SELECT
       id, company_id, name, channel_type, evolution_instance_name, status,
@@ -111,9 +109,7 @@ export async function resolveProviderForChannel(
 /** Resolve canal Meta globalmente por phone_number_id (uso futuro no webhook). */
 export async function loadMetaChannelByPhoneNumberId(
   phoneNumberId: string,
-): Promise<WhatsAppChannelRecord | null> {
-  await ensureCrmSchema();
-  const s = sql();
+): Promise<WhatsAppChannelRecord | null> {  const s = sql();
   const rows = await s<ChannelRow[]>`
     SELECT
       id, company_id, name, channel_type, evolution_instance_name, status,
@@ -136,9 +132,7 @@ export async function loadMetaChannelByPhoneNumberId(
 /** Diagnóstico quando loadMetaChannelByPhoneNumberId falha — não expõe segredos. */
 export async function diagnoseMetaChannelByPhoneNumberId(
   phoneNumberId: string,
-): Promise<Record<string, unknown>> {
-  await ensureCrmSchema();
-  const s = sql();
+): Promise<Record<string, unknown>> {  const s = sql();
   const rows = await s<{
     id: string;
     company_id: string | null;
@@ -188,9 +182,7 @@ export async function diagnoseMetaChannelByPhoneNumberId(
 export async function metaPhoneNumberIdOwner(
   phoneNumberId: string,
   excludeChannelId?: string,
-): Promise<{ companyId: string; channelId: string } | null> {
-  await ensureCrmSchema();
-  const s = sql();
+): Promise<{ companyId: string; channelId: string } | null> {  const s = sql();
   const rows = excludeChannelId
     ? await s<{ company_id: string; id: string }[]>`
         SELECT company_id, id FROM public.whatsapp_channels

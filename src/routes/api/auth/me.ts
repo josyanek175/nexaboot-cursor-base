@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomUUID } from "node:crypto";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import {
   getSessionUserId,
   buildClearSetCookie,
@@ -43,9 +43,9 @@ export const Route = createFileRoute("/api/auth/me")({
         };
 
         try {
-          const tSchema0 = Date.now();
-          await ensureSchema();
-          schemaMs = Date.now() - tSchema0;
+          // Schema DDL roda no boot (server.ts → bootstrapDatabaseSchema).
+          // schemaMs permanece 0 nas rotas HTTP — validação pós-correção.
+          schemaMs = 0;
 
           // Diagnóstico do ciclo do cookie de sessão.
           const rawCookie = getCookie(COOKIE_NAME);

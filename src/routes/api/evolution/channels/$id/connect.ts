@@ -1,7 +1,7 @@
 // POST /api/evolution/channels/:id/connect — garante a instância na Evolution,
 // configura o webhook e retorna o QR Code para escanear.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
@@ -14,7 +14,6 @@ export const Route = createFileRoute("/api/evolution/channels/$id/connect")({
   server: {
     handlers: {
       POST: async ({ params }) => {
-        await ensureCrmSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

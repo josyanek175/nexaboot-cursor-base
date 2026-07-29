@@ -119,8 +119,7 @@ export async function getCurrentUserCompanyInfo(
     companyValid: false,
   };
 
-  await ensureUserCompanySchema();
-  await ensureCrmSchema();
+  // Schema (users.company_id / CRM) é aplicado no boot — sem DDL por request.
   const s = sql();
 
   const tUser0 = Date.now();

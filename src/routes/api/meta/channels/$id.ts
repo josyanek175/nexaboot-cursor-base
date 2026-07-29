@@ -1,7 +1,7 @@
 // PATCH /api/meta/channels/:id — atualiza canal Meta (token cifrado, nunca retornado).
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import {
   META_CHANNEL_UUID_RE,
@@ -40,9 +40,7 @@ const PatchMetaChannelBody = z
 export const Route = createFileRoute("/api/meta/channels/$id")({
   server: {
     handlers: {
-      PATCH: async ({ params, request }) => {
-        await ensureCrmSchema();
-        const company = await requireCompanyId();
+      PATCH: async ({ params, request }) => {        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

@@ -5,7 +5,7 @@
 // Retorna { count } = total restante de não lidas do usuário (para o badge).
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 
@@ -17,7 +17,6 @@ export const Route = createFileRoute("/api/internal-chat/mark-read")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        await ensureSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

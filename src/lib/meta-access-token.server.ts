@@ -1,7 +1,7 @@
 // Leitura server-only do access token Meta (whatsapp_channel_secrets + decrypt).
 
 import { decryptToken, hasTokenEncryptionKey } from "@/lib/crypto/token-crypto.server";
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 export type MetaTokenMissingReason =
   | "missing_encryption_key"
@@ -57,10 +57,7 @@ export async function loadMetaAccessTokenDetailed(
       reason: "missing_encryption_key",
       errorMessage: "META_TOKEN_ENCRYPTION_KEY não configurada no nexaboot-web",
     };
-  }
-
-  await ensureCrmSchema();
-  const s = sql();
+  }  const s = sql();
 
   const rows = await s<
     {

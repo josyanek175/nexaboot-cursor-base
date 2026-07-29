@@ -1,6 +1,6 @@
 // Planos comerciais e assinaturas por empresa (server-only).
 // Fase 1: leitura e exibição — sem bloqueio de login/canais.
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 
 export interface PlanRow {
   id: string;
@@ -71,7 +71,6 @@ async function channelCountSubquery() {
 
 /** Canais que ocupam slot do plano. Usa deleted_at quando a coluna existir. */
 export async function countActiveWhatsAppChannels(companyId: string): Promise<number> {
-  await ensureCrmSchema();
   const hasDeletedAt = await channelsHaveDeletedAtColumn();
   const rows = hasDeletedAt
     ? await sql<{ count: number }[]>`
@@ -92,7 +91,6 @@ export async function countActiveWhatsAppChannels(companyId: string): Promise<nu
 export async function getActiveSubscription(
   companyId: string,
 ): Promise<{ subscription: ActiveSubscriptionRow; plan: PlanRow } | null> {
-  await ensureCrmSchema();
   const rows = await sql<
     ActiveSubscriptionRow &
       PlanRow & { plan_pk: string }
@@ -193,7 +191,6 @@ export async function listCompaniesWithPlanUsage(opts: {
     whatsapp_channels_used: number;
   }>
 > {
-  await ensureCrmSchema();
   const filterId = opts.companyId ?? null;
   const channelCount = await channelCountSubquery();
 

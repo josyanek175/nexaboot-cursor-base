@@ -1,6 +1,6 @@
 // Roteamento de envio outbound por provider (Meta ou Evolution) com logs de diagnóstico.
 
-import { sql, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { sendMetaManualText } from "@/lib/meta-send-message.server";
 import { tryApplyHumanReplyFromMessage } from "@/lib/campaign-service-status.server";
 import {
@@ -30,10 +30,7 @@ export async function sendConversationText(params: {
 }): Promise<SendConversationTextResult> {
   const { companyId, conversationId, text, sentByUserId, sentByName } = params;
 
-  console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId });
-
-  await ensureCrmSchema();
-  const s = sql();
+  console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId });  const s = sql();
 
   const rows = await s<{
     id: string;

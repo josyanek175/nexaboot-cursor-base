@@ -4,7 +4,7 @@
 // guarda apenas metadados + caminho. Notificações são criadas para os demais membros.
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql, ensureSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { saveInternalAttachment, UploadError, type SavedAttachment } from "@/lib/internal-upload.server";
@@ -19,7 +19,6 @@ export const Route = createFileRoute("/api/internal-chat/send")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        await ensureSchema();
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;

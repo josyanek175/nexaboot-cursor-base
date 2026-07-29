@@ -1,7 +1,7 @@
 // Sincronização e listagem de templates Meta (HSM) por canal.
 // Token via loadMetaAccessToken — nunca logar/expor access token.
 
-import { sql, ensureCampaignsSchema, ensureCrmSchema } from "@/lib/pg.server";
+import { sql } from "@/lib/pg.server";
 import { loadMetaAccessToken } from "@/lib/meta-access-token.server";
 import {
   extractBodyText,
@@ -144,11 +144,7 @@ export async function listMetaTemplatesForChannel(
   companyId: string,
   channelId: string,
   opts: { approvedOnly?: boolean } = {},
-): Promise<MetaTemplatePublic[]> {
-  await ensureCrmSchema();
-  await ensureCampaignsSchema();
-
-  const channel = await loadMetaChannelForCompany(channelId, companyId);
+): Promise<MetaTemplatePublic[]> {  const channel = await loadMetaChannelForCompany(channelId, companyId);
   if (!channel) return [];
 
   const rows = opts.approvedOnly
@@ -177,9 +173,7 @@ export async function listMetaTemplatesForChannel(
 export async function getMetaTemplateRowById(
   companyId: string,
   templateRowId: string,
-): Promise<MetaMessageTemplateRow | null> {
-  await ensureCampaignsSchema();
-  const rows = await sql<MetaMessageTemplateRow[]>`
+): Promise<MetaMessageTemplateRow | null> {  const rows = await sql<MetaMessageTemplateRow[]>`
     SELECT id, company_id, channel_id, meta_template_id, template_name, language_code,
            category, status, components, active, last_synced_at, created_at, updated_at
     FROM public.meta_message_templates
@@ -194,9 +188,7 @@ export async function getMetaTemplateById(
   companyId: string,
   channelId: string,
   templateRowId: string,
-): Promise<MetaMessageTemplateRow | null> {
-  await ensureCampaignsSchema();
-  const rows = await sql<MetaMessageTemplateRow[]>`
+): Promise<MetaMessageTemplateRow | null> {  const rows = await sql<MetaMessageTemplateRow[]>`
     SELECT id, company_id, channel_id, meta_template_id, template_name, language_code,
            category, status, components, active, last_synced_at, created_at, updated_at
     FROM public.meta_message_templates
@@ -215,11 +207,7 @@ export type MetaTemplateSyncResult =
 export async function syncMetaTemplatesForChannel(
   companyId: string,
   channelId: string,
-): Promise<MetaTemplateSyncResult> {
-  await ensureCrmSchema();
-  await ensureCampaignsSchema();
-
-  console.log("[META_TEMPLATE_SYNC_START]", { companyId, channelId });
+): Promise<MetaTemplateSyncResult> {  console.log("[META_TEMPLATE_SYNC_START]", { companyId, channelId });
 
   try {
     const channel = await loadMetaChannelForCompany(channelId, companyId);
@@ -420,9 +408,7 @@ export async function assertApprovedMetaTemplate(opts: {
 }): Promise<
   | { ok: true; row: MetaMessageTemplateRow }
   | { ok: false; error: "invalid_meta_template" | "meta_template_not_approved" }
-> {
-  await ensureCampaignsSchema();
-  const name = opts.templateName.trim();
+> {  const name = opts.templateName.trim();
   const language = opts.languageCode.trim();
   if (!name || !language) return { ok: false, error: "invalid_meta_template" };
 
