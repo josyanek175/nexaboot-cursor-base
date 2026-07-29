@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomUUID } from "node:crypto";
-import { sql } from "@/lib/pg.server";
 import {
   getSessionUserId,
   buildClearSetCookie,
@@ -15,6 +14,13 @@ import {
 } from "@/lib/company.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 import { buildAuthUserResponse } from "@/lib/auth-user";
+import { getDatabaseRuntimeDiag } from "@/lib/pg.server";
+import {
+  authContextTimeoutResponse,
+  isAuthContextTimeout,
+  meCompanyStepWithConnectionTiming,
+  meUserQueryWithConnectionTiming,
+} from "@/lib/auth-me-diag.server";
 
 export const Route = createFileRoute("/api/auth/me")({
   server: {
@@ -26,6 +32,8 @@ export const Route = createFileRoute("/api/auth/me")({
         let sessionMs = 0;
         let userQueryMs = 0;
         let companyQueryMs = 0;
+        let userConnectionWaitMs: number | null = null;
+        let companyConnectionWaitMs: number | null = null;
         let userId: string | null = null;
         let success = false;
 
@@ -36,15 +44,19 @@ export const Route = createFileRoute("/api/auth/me")({
             sessionMs,
             userQueryMs,
             companyQueryMs,
+            userConnectionWaitMs,
+            companyConnectionWaitMs,
             totalMs: Date.now() - t0,
             userId,
             success,
+            ...getDatabaseRuntimeDiag(),
           });
         };
 
         try {
           // Schema DDL roda no boot (server.ts → bootstrapDatabaseSchema).
           // schemaMs permanece 0 nas rotas HTTP — validação pós-correção.
+          // waitForDatabaseReady() já rodou no fetch wrapper ANTES deste handler.
           schemaMs = 0;
 
           // Diagnóstico do ciclo do cookie de sessão.
@@ -55,10 +67,12 @@ export const Route = createFileRoute("/api/auth/me")({
           userId = uid;
 
           console.log("[ME_SESSION_CHECK]", {
+            requestId,
             cookieReceived: !!rawCookie,
             cookieName: COOKIE_NAME,
             sessionResolved: !!uid,
             userId: uid,
+            ...getDatabaseRuntimeDiag(),
           });
 
           if (!uid) {
@@ -75,17 +89,18 @@ export const Route = createFileRoute("/api/auth/me")({
             );
           }
 
-          const tUser0 = Date.now();
-          const rows = await sql()`
-            SELECT id, email, name, role, tenant_id, active
-            FROM public.users
-            WHERE id = ${uid}
-            LIMIT 1
-          `;
-          userQueryMs = Date.now() - tUser0;
-          const u = rows[0];
+          // ── Etapa DB 1: user query (mesmo SQL; timeout 5s; connection vs query) ──
+          const userStep = await meUserQueryWithConnectionTiming(uid, requestId);
+          userConnectionWaitMs = userStep.connectionWaitMs;
+          userQueryMs = userStep.queryMs;
+          const u = userStep.rows[0];
           if (!u || u.active === false) {
-            console.log("[ME_USER_INVALID]", { userId: uid, found: !!u, active: u?.active });
+            console.log("[ME_USER_INVALID]", {
+              requestId,
+              userId: uid,
+              found: !!u,
+              active: u?.active,
+            });
             success = true;
             logTiming();
             return Response.json(
@@ -101,11 +116,14 @@ export const Route = createFileRoute("/api/auth/me")({
             );
           }
 
-          // Empresa (isolamento oficial por company_id). O front usa company_valid
-          // para bloquear os módulos operacionais quando não há empresa válida.
-          const tCompany0 = Date.now();
-          const company = await getCurrentUserCompanyInfo(uid);
-          companyQueryMs = Date.now() - tCompany0;
+          // ── Etapa DB 2: empresa (mesma função; timeout 5s) ──
+          const companyStep = await meCompanyStepWithConnectionTiming(
+            requestId,
+            () => getCurrentUserCompanyInfo(uid),
+          );
+          companyConnectionWaitMs = companyStep.connectionWaitMs;
+          companyQueryMs = companyStep.queryMs;
+          const company = companyStep.result;
 
           // SUPER_ADMIN e TI têm acesso de PLATAFORMA: podem entrar mesmo sem
           // empresa, mas os módulos operacionais continuam exigindo empresa válida.
@@ -118,7 +136,14 @@ export const Route = createFileRoute("/api/auth/me")({
               ? PLATFORM_NO_COMPANY_MESSAGE
               : NO_COMPANY_MESSAGE;
 
+          console.log("[ME_STEP_RESPONSE_START]", {
+            requestId,
+            userId: u.id,
+            company_valid: company.companyValid,
+          });
+
           console.log("[ME_OK]", {
+            requestId,
             userId: u.id,
             email: u.email,
             tenant_id: u.tenant_id,
@@ -126,9 +151,8 @@ export const Route = createFileRoute("/api/auth/me")({
             company_valid: company.companyValid,
             platform_access: platformAccess,
           });
-          success = true;
-          logTiming();
-          return Response.json({
+
+          const body = {
             user: buildAuthUserResponse(
               {
                 id: u.id,
@@ -141,8 +165,29 @@ export const Route = createFileRoute("/api/auth/me")({
               platformAccess,
             ),
             ...(companyMessage ? { company_message: companyMessage } : {}),
+          };
+
+          console.log("[ME_STEP_RESPONSE_END]", {
+            requestId,
+            totalMs: Date.now() - t0,
           });
+
+          success = true;
+          logTiming();
+          return Response.json(body);
         } catch (err) {
+          if (isAuthContextTimeout(err)) {
+            success = false;
+            logTiming();
+            console.error("[ME_AUTH_CONTEXT_TIMEOUT]", {
+              requestId,
+              step: err.step,
+              connectionWaitMs: err.connectionWaitMs,
+              queryMs: err.queryMs,
+              ...getDatabaseRuntimeDiag(),
+            });
+            return authContextTimeoutResponse();
+          }
           success = false;
           logTiming();
           throw err;

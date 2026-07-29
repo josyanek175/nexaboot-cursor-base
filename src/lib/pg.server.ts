@@ -6,6 +6,12 @@ import { normalizePhoneForMatch } from "@/lib/phone";
 let _sql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
 
+/** Tamanho do pool postgres.js (diagnóstico de esgotamento). */
+export const PG_POOL_MAX = 5;
+
+/** Contagem de sessões reserve() ainda não liberadas neste processo (diagnóstico). */
+let _pgReservedOpen = 0;
+
 /** Cliente postgres.js. Use `sql()`…` ou `const s = sql(); s`…``. */
 export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
   if (!_sql) {
@@ -16,7 +22,7 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
         url.includes("sslmode=require") || url.includes("supabase") || url.includes("neon")
           ? "require"
           : undefined,
-      max: 5,
+      max: PG_POOL_MAX,
       prepare: false,
     });
   }
@@ -26,6 +32,27 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
   }
   // Chamada normal: const s = sql(); await s`SELECT …`
   return _sql;
+}
+
+type ReservedSql = Awaited<ReturnType<ReturnType<typeof postgres>["reserve"]>>;
+
+/**
+ * reserve() com contador de diagnóstico (vazamento = pool esgota com max:5).
+ * Mesmo contrato do postgres.js: chamar release() no finally.
+ */
+export async function reserveSqlConnection(): Promise<ReservedSql> {
+  const reserved = await sql().reserve();
+  _pgReservedOpen += 1;
+  const originalRelease = reserved.release.bind(reserved);
+  let released = false;
+  reserved.release = () => {
+    if (!released) {
+      released = true;
+      _pgReservedOpen = Math.max(0, _pgReservedOpen - 1);
+    }
+    return originalRelease();
+  };
+  return reserved;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1317,7 +1344,7 @@ export function bootstrapDatabaseSchema(): Promise<void> {
     console.log("[DB_BOOTSTRAP_START]", { attempt });
 
     // postgres.js 3.x: reserve() fixa uma sessão do pool para lock/unlock.
-    const reserved = await sql().reserve();
+    const reserved = await reserveSqlConnection();
     try {
       await reserved.unsafe(
         `SELECT pg_advisory_lock(${DB_SCHEMA_BOOT_LOCK_KEY})`,
@@ -1368,6 +1395,30 @@ export function bootstrapDatabaseSchema(): Promise<void> {
 /** Aguarda o bootstrap (idempotente; retentável após falha + cooldown). */
 export function waitForDatabaseReady(): Promise<void> {
   return bootstrapDatabaseSchema();
+}
+
+/**
+ * Snapshot seguro do runtime DB (sem query).
+ * Correlaciona hangs de /api/auth/me com bootstrap/pool (max:5 + reserve).
+ */
+export function getDatabaseRuntimeDiag(): {
+  poolMax: number;
+  clientInitialized: boolean;
+  reservedOpenInProcess: number;
+  bootstrapAttempt: number;
+  bootstrapCooldownUntil: number;
+  bootstrapPromiseActive: boolean;
+  bootstrapInCooldown: boolean;
+} {
+  return {
+    poolMax: PG_POOL_MAX,
+    clientInitialized: !!_sql,
+    reservedOpenInProcess: _pgReservedOpen,
+    bootstrapAttempt: _dbBootstrapAttempt,
+    bootstrapCooldownUntil: _dbBootstrapCooldownUntil,
+    bootstrapPromiseActive: _dbBootstrap != null,
+    bootstrapInCooldown: Date.now() < _dbBootstrapCooldownUntil,
+  };
 }
 
 /** @deprecated use waitForDatabaseReady */

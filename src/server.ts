@@ -88,7 +88,13 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const path = new URL(request.url).pathname;
+      const tWait0 = Date.now();
       await waitForDatabaseReadyOnRequest();
+      const waitMs = Date.now() - tWait0;
+      if (waitMs > 1000) {
+        console.log("[DB_BOOTSTRAP_WAIT]", { path, waitMs });
+      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
