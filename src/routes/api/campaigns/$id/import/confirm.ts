@@ -12,7 +12,8 @@ const Body = z.object({
 export const Route = createFileRoute("/api/campaigns/$id/import/confirm")({
   server: {
     handlers: {
-      POST: async ({ params, request }) => {        const ctx = await getCampaignActor("manage");
+      POST: async ({ params, request }) => {
+        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);

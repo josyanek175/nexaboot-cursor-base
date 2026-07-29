@@ -7,7 +7,8 @@ const WEBHOOK_PATH = "/api/webhooks/meta/whatsapp";
 export const Route = createFileRoute("/api/webhooks/meta/diagnostic")({
   server: {
     handlers: {
-      GET: async ({ request }) => {        const url = new URL(request.url);
+      GET: async ({ request }) => {
+        const url = new URL(request.url);
         const phoneNumberId = url.searchParams.get("phone_number_id")?.trim() || null;
 
         let channel: Record<string, unknown> | null = null;

@@ -8,7 +8,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const Route = createFileRoute("/api/conversations/$id/messages")({
   server: {
     handlers: {
-      GET: async ({ params }) => {        const company = await requireCompanyId();
+      GET: async ({ params }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });

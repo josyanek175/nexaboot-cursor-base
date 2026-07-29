@@ -66,7 +66,8 @@ function sanitizeFileName(name: string, mime: string): string {
 export const Route = createFileRoute("/api/messages/send/media/evolution")({
   server: {
     handlers: {
-      POST: async ({ request }) => {        const company = await requireCompanyId();
+      POST: async ({ request }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

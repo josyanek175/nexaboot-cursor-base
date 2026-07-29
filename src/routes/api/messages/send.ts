@@ -15,7 +15,8 @@ const Body = z.object({
 export const Route = createFileRoute("/api/messages/send")({
   server: {
     handlers: {
-      POST: async ({ request }) => {        const company = await requireCompanyId();
+      POST: async ({ request }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

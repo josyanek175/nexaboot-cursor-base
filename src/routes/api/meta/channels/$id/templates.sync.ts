@@ -8,7 +8,8 @@ import { syncMetaTemplatesForChannel } from "@/lib/meta-message-templates.server
 export const Route = createFileRoute("/api/meta/channels/$id/templates/sync")({
   server: {
     handlers: {
-      POST: async ({ params }) => {        const company = await requireCompanyId();
+      POST: async ({ params }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

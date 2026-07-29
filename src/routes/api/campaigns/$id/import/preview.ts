@@ -11,7 +11,8 @@ const Body = z.object({
 export const Route = createFileRoute("/api/campaigns/$id/import/preview")({
   server: {
     handlers: {
-      POST: async ({ params, request }) => {        const ctx = await getCampaignActor("manage");
+      POST: async ({ params, request }) => {
+        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const campaign = await getCampaignById(ctx.companyId, params.id);

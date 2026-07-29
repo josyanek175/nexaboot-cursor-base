@@ -25,7 +25,8 @@ const CreateBody = z.object({
 export const Route = createFileRoute("/api/campaigns/templates")({
   server: {
     handlers: {
-      GET: async ({ request }) => {        const ctx = await getCampaignActor("view");
+      GET: async ({ request }) => {
+        const ctx = await getCampaignActor("view");
         if (ctx instanceof Response) return ctx;
 
         const url = new URL(request.url);
@@ -40,7 +41,8 @@ export const Route = createFileRoute("/api/campaigns/templates")({
         }
       },
 
-      POST: async ({ request }) => {        const ctx = await getCampaignActor("manage");
+      POST: async ({ request }) => {
+        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);

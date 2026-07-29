@@ -30,7 +30,8 @@ export async function sendConversationText(params: {
 }): Promise<SendConversationTextResult> {
   const { companyId, conversationId, text, sentByUserId, sentByName } = params;
 
-  console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId });  const s = sql();
+  console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId });
+  const s = sql();
 
   const rows = await s<{
     id: string;

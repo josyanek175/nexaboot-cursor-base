@@ -11,7 +11,8 @@ import {
 export const Route = createFileRoute("/api/meta/channels/$id/templates")({
   server: {
     handlers: {
-      GET: async ({ params, request }) => {        const company = await requireCompanyId();
+      GET: async ({ params, request }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

@@ -16,7 +16,8 @@ const Body = z.object({
 export const Route = createFileRoute("/api/campaigns/templates/from-meta")({
   server: {
     handlers: {
-      POST: async ({ request }) => {        const ctx = await getCampaignActor("manage");
+      POST: async ({ request }) => {
+        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);

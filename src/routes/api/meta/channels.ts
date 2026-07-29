@@ -30,14 +30,16 @@ const CreateMetaChannelBody = z.object({
 export const Route = createFileRoute("/api/meta/channels")({
   server: {
     handlers: {
-      GET: async () => {        const company = await requireCompanyId();
+      GET: async () => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
 
         const channels = await listMetaChannelsForCompany(company);
         return Response.json({ channels });
       },
 
-      POST: async ({ request }) => {        const company = await requireCompanyId();
+      POST: async ({ request }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

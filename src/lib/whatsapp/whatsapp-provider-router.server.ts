@@ -77,7 +77,8 @@ export function getProviderByKind(kind: WhatsAppProviderKind): WhatsAppProvider 
 export async function loadChannelForCompany(
   channelId: string,
   companyId: string,
-): Promise<WhatsAppChannelRecord | null> {  const s = sql();
+): Promise<WhatsAppChannelRecord | null> {
+  const s = sql();
   const rows = await s<ChannelRow[]>`
     SELECT
       id, company_id, name, channel_type, evolution_instance_name, status,
@@ -109,7 +110,8 @@ export async function resolveProviderForChannel(
 /** Resolve canal Meta globalmente por phone_number_id (uso futuro no webhook). */
 export async function loadMetaChannelByPhoneNumberId(
   phoneNumberId: string,
-): Promise<WhatsAppChannelRecord | null> {  const s = sql();
+): Promise<WhatsAppChannelRecord | null> {
+  const s = sql();
   const rows = await s<ChannelRow[]>`
     SELECT
       id, company_id, name, channel_type, evolution_instance_name, status,
@@ -132,7 +134,8 @@ export async function loadMetaChannelByPhoneNumberId(
 /** Diagnóstico quando loadMetaChannelByPhoneNumberId falha — não expõe segredos. */
 export async function diagnoseMetaChannelByPhoneNumberId(
   phoneNumberId: string,
-): Promise<Record<string, unknown>> {  const s = sql();
+): Promise<Record<string, unknown>> {
+  const s = sql();
   const rows = await s<{
     id: string;
     company_id: string | null;
@@ -182,7 +185,8 @@ export async function diagnoseMetaChannelByPhoneNumberId(
 export async function metaPhoneNumberIdOwner(
   phoneNumberId: string,
   excludeChannelId?: string,
-): Promise<{ companyId: string; channelId: string } | null> {  const s = sql();
+): Promise<{ companyId: string; channelId: string } | null> {
+  const s = sql();
   const rows = excludeChannelId
     ? await s<{ company_id: string; id: string }[]>`
         SELECT company_id, id FROM public.whatsapp_channels

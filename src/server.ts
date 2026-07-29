@@ -2,7 +2,10 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { bootstrapDatabaseSchema } from "./lib/pg.server";
+import {
+  isDatabaseBootstrapUnavailable,
+  waitForDatabaseReady,
+} from "./lib/pg.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -10,12 +13,13 @@ type ServerEntry = {
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
-/** Schema DDL roda uma vez no boot, antes de atender tráfego. */
-const databaseReady = bootstrapDatabaseSchema().catch((error) => {
-  console.error("[DB_BOOTSTRAP_FAILED_AT_START]", error);
-  // Mantém a promise rejeitada para o fetch falhar de forma controlada.
-  throw error;
-});
+/**
+ * Cada request aguarda o bootstrap. A Promise é reutilizada enquanto
+ * pending/sucesso; após falha + cooldown, uma nova tentativa é permitida.
+ */
+async function waitForDatabaseReadyOnRequest(): Promise<void> {
+  return waitForDatabaseReady();
+}
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -31,6 +35,13 @@ function brandedErrorResponse(): Response {
     status: 500,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
+}
+
+function databaseUnavailableResponse(): Response {
+  return Response.json(
+    { error: "database_initialization_unavailable" },
+    { status: 503 },
+  );
 }
 
 function isCatastrophicSsrErrorBody(body: string, responseStatus: number): boolean {
@@ -77,12 +88,27 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      // Bloqueia tráfego até o DDL idempotente terminar (uma vez por processo).
-      await databaseReady;
+      await waitForDatabaseReadyOnRequest();
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
+      if (isDatabaseBootstrapUnavailable(error)) {
+        console.error("[DB_BOOTSTRAP_REQUEST_BLOCKED]", {
+          path: new URL(request.url).pathname,
+        });
+        return databaseUnavailableResponse();
+      }
+      // Bootstrap pode rejeitar com o wrapper genérico; também trate mensagem.
+      if (
+        error instanceof Error &&
+        error.message === "database_initialization_unavailable"
+      ) {
+        console.error("[DB_BOOTSTRAP_REQUEST_BLOCKED]", {
+          path: new URL(request.url).pathname,
+        });
+        return databaseUnavailableResponse();
+      }
       console.error(error);
       return brandedErrorResponse();
     }

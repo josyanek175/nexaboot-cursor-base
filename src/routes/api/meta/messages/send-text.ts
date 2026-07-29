@@ -20,7 +20,8 @@ const Body = z
 export const Route = createFileRoute("/api/meta/messages/send-text")({
   server: {
     handlers: {
-      POST: async ({ request }) => {        const company = await requireCompanyId();
+      POST: async ({ request }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

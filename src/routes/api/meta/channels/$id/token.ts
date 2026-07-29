@@ -12,7 +12,8 @@ import {
 export const Route = createFileRoute("/api/meta/channels/$id/token")({
   server: {
     handlers: {
-      DELETE: async ({ params }) => {        const company = await requireCompanyId();
+      DELETE: async ({ params }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

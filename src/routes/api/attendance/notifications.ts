@@ -14,7 +14,8 @@ const MarkBody = z.object({
 export const Route = createFileRoute("/api/attendance/notifications")({
   server: {
     handlers: {
-      GET: async ({ request }) => {        const actor = await requireAttendanceActor();
+      GET: async ({ request }) => {
+        const actor = await requireAttendanceActor();
         if (actor instanceof Response) return actor;
 
         const unreadOnly =
@@ -55,7 +56,8 @@ export const Route = createFileRoute("/api/attendance/notifications")({
         });
       },
 
-      POST: async ({ request }) => {        const actor = await requireAttendanceActor();
+      POST: async ({ request }) => {
+        const actor = await requireAttendanceActor();
         if (actor instanceof Response) return actor;
 
         const json = await request.json().catch(() => null);

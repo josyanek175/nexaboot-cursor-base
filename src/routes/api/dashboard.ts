@@ -10,7 +10,8 @@ import {
 export const Route = createFileRoute("/api/dashboard")({
   server: {
     handlers: {
-      GET: async () => {        const actor = await requireAttendanceActor();
+      GET: async () => {
+        const actor = await requireAttendanceActor();
         if (actor instanceof Response) return actor;
 
         const companyId = actor.companyId;

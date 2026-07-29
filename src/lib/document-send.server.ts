@@ -247,7 +247,8 @@ export async function sendConversationDocument(params: {
       }
       throw e;
     }
-  } else {    const s = sql();
+  } else {
+    const s = sql();
     const existing = await s<
       {
         id: string;
@@ -295,7 +296,8 @@ export async function sendConversationDocument(params: {
     mimeType: doc.mimeType,
     fileName: doc.fileName,
     size: doc.size,
-  });  const s = sql();
+  });
+  const s = sql();
 
   const rows = await s<{
     id: string;

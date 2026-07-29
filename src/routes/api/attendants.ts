@@ -14,7 +14,8 @@ import { requireCompanyId } from "@/lib/company.server";
 export const Route = createFileRoute("/api/attendants")({
   server: {
     handlers: {
-      GET: async () => {        const company = await requireCompanyId();
+      GET: async () => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

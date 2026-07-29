@@ -13,7 +13,8 @@ import { loadChannelForCompany } from "@/lib/whatsapp/whatsapp-provider-router.s
 export const Route = createFileRoute("/api/meta/channels/$id/status")({
   server: {
     handlers: {
-      GET: async ({ params }) => {        const company = await requireCompanyId();
+      GET: async ({ params }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

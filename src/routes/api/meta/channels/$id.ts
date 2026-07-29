@@ -40,7 +40,8 @@ const PatchMetaChannelBody = z
 export const Route = createFileRoute("/api/meta/channels/$id")({
   server: {
     handlers: {
-      PATCH: async ({ params, request }) => {        const company = await requireCompanyId();
+      PATCH: async ({ params, request }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 

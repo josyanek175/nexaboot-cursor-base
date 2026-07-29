@@ -57,7 +57,8 @@ export async function loadMetaAccessTokenDetailed(
       reason: "missing_encryption_key",
       errorMessage: "META_TOKEN_ENCRYPTION_KEY não configurada no nexaboot-web",
     };
-  }  const s = sql();
+  }
+  const s = sql();
 
   const rows = await s<
     {

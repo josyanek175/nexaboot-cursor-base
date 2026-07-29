@@ -113,7 +113,8 @@ export async function buildMetaChannelStatusPublic(
   };
 }
 
-export async function listMetaChannelsForCompany(companyId: string): Promise<MetaChannelPublic[]> {  const s = sql();
+export async function listMetaChannelsForCompany(companyId: string): Promise<MetaChannelPublic[]> {
+  const s = sql();
   const rows = await s<MetaChannelRow[]>`
     SELECT
       id, company_id, name, channel_type, status,
@@ -134,7 +135,8 @@ export async function listMetaChannelsForCompany(companyId: string): Promise<Met
 export async function getMetaChannelRowForCompany(
   channelId: string,
   companyId: string,
-): Promise<MetaChannelRow | null> {  const s = sql();
+): Promise<MetaChannelRow | null> {
+  const s = sql();
   const rows = await s<MetaChannelRow[]>`
     SELECT
       id, company_id, name, channel_type, status,
@@ -162,7 +164,8 @@ export async function assertMetaPhoneNumberIdAvailable(
   const owner = await metaPhoneNumberIdOwner(phoneNumberId, excludeChannelId);
   if (owner && owner.companyId !== companyId) {
     return Response.json({ error: "phone_number_id_belongs_to_another_company" }, { status: 409 });
-  }  const s = sql();
+  }
+  const s = sql();
   const duplicate = excludeChannelId
     ? await s<{ id: string; company_id: string }[]>`
         SELECT id, company_id FROM public.whatsapp_channels
@@ -192,7 +195,8 @@ export async function clearMetaChannelToken(
   channelId: string,
   companyId: string,
   reason = "manual_clear",
-): Promise<Response | null> {  const s = sql();
+): Promise<Response | null> {
+  const s = sql();
 
   const rows = await s<{ id: string }[]>`
     SELECT id FROM public.whatsapp_channels
@@ -262,7 +266,8 @@ export async function recordMetaChannelError(
   companyId: string,
   errorCode: string,
   errorMessage: string,
-): Promise<void> {  const s = sql();
+): Promise<void> {
+  const s = sql();
   const safeMessage = errorMessage.length > 500 ? `${errorMessage.slice(0, 500)}…` : errorMessage;
   await s`
     UPDATE public.whatsapp_channels
@@ -275,7 +280,8 @@ export async function recordMetaChannelError(
   `;
 }
 
-export async function clearMetaChannelError(channelId: string, companyId: string): Promise<void> {  const s = sql();
+export async function clearMetaChannelError(channelId: string, companyId: string): Promise<void> {
+  const s = sql();
   await s`
     UPDATE public.whatsapp_channels
     SET last_error_code = NULL,

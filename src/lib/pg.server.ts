@@ -1152,9 +1152,9 @@ export async function ensureSchema() {
       throw e;
     }
 
-    // 2) Tabelas de chat interno — recria se schema antigo estiver incompatível.
-    //    Como ainda não há dados de produção, dropamos e recriamos para garantir
-    //    colunas/chaves corretas (chat_id, sender_id, etc.).
+    // 2) Chat interno — NUNCA DROP automático no boot.
+    //    Schema legado (internal_messages sem chat_id): aborta bootstrap.
+    //    Repair explícito: scripts/repair-internal-chat-legacy-schema.mjs
     try {
       const cols = await s`
         SELECT column_name FROM information_schema.columns
@@ -1162,14 +1162,23 @@ export async function ensureSchema() {
       `;
       const hasChatId = cols.some((c) => c.column_name === "chat_id");
       if (cols.length > 0 && !hasChatId) {
-        await s.unsafe(`
-          DROP TABLE IF EXISTS internal_notifications CASCADE;
-          DROP TABLE IF EXISTS internal_messages CASCADE;
-          DROP TABLE IF EXISTS internal_chat_members CASCADE;
-          DROP TABLE IF EXISTS internal_chats CASCADE;
-        `);
+        console.error("[INTERNAL_CHAT_LEGACY_SCHEMA_DETECTED]", {
+          table: "internal_messages",
+          missingColumn: "chat_id",
+          action: "bootstrap_aborted_no_drop",
+          repair: "scripts/repair-internal-chat-legacy-schema.mjs",
+        });
+        throw new Error(
+          "Internal chat legacy schema detected (internal_messages without chat_id). Automatic DROP is disabled; run the manual repair script after backup.",
+        );
       }
     } catch (e) {
+      if (
+        e instanceof Error &&
+        e.message.includes("Internal chat legacy schema detected")
+      ) {
+        throw e;
+      }
       console.warn("[ensureSchema] introspecção falhou, continuando:", (e as Error).message);
     }
 
@@ -1257,57 +1266,118 @@ export async function ensureSchema() {
 // ───────────────────────────────────────────────────────────────────────────
 // Bootstrap único de schema (boot do processo).
 // Todas as rotas HTTP devem assumir que o schema já foi aplicado aqui.
-// Promise compartilhada + advisory lock evitam DDL concorrente entre réplicas.
+// Promise compartilhada + advisory lock (sessão reservada) serializam réplicas.
 // ───────────────────────────────────────────────────────────────────────────
 
 /** Lock advisory estável (não conflita com locks de tabela). */
 const DB_SCHEMA_BOOT_LOCK_KEY = 872_014_01;
+const BOOTSTRAP_RETRY_COOLDOWN_MS = 5_000;
 
 let _dbBootstrap: Promise<void> | null = null;
+let _dbBootstrapAttempt = 0;
+let _dbBootstrapCooldownUntil = 0;
+
+/** Erro seguro para o cliente HTTP (sem detalhes internos). */
+export class DatabaseBootstrapUnavailableError extends Error {
+  readonly clientCode = "database_initialization_unavailable" as const;
+  constructor(message = "database_initialization_unavailable") {
+    super(message);
+    this.name = "DatabaseBootstrapUnavailableError";
+  }
+}
+
+export function isDatabaseBootstrapUnavailable(
+  error: unknown,
+): error is DatabaseBootstrapUnavailableError {
+  return (
+    error instanceof DatabaseBootstrapUnavailableError ||
+    (error instanceof Error &&
+      (error.message === "database_initialization_unavailable" ||
+        error.name === "DatabaseBootstrapUnavailableError"))
+  );
+}
 
 /**
- * Executa TODO o DDL idempotente uma vez por processo (e serializa entre
- * instâncias via pg_advisory_lock). Não apaga dados de produção além do que
- * as funções ensure* já faziam (ex.: reset defensivo de chat interno legado).
+ * Executa o DDL idempotente uma vez por processo com sucesso.
+ * Em falha: limpa a Promise, aplica cooldown e permite nova tentativa depois.
+ * Concurrent callers compartilham a mesma Promise enquanto pending/sucesso.
  */
 export function bootstrapDatabaseSchema(): Promise<void> {
   if (_dbBootstrap) return _dbBootstrap;
+
+  const now = Date.now();
+  if (now < _dbBootstrapCooldownUntil) {
+    return Promise.reject(new DatabaseBootstrapUnavailableError());
+  }
+
+  const attempt = ++_dbBootstrapAttempt;
+  const t0 = Date.now();
+
   _dbBootstrap = (async () => {
-    const t0 = Date.now();
-    console.log("[DB_BOOTSTRAP_START]");
-    const s = sql();
-    await s.unsafe(`SELECT pg_advisory_lock(${DB_SCHEMA_BOOT_LOCK_KEY})`);
+    console.log("[DB_BOOTSTRAP_START]", { attempt });
+
+    // postgres.js 3.x: reserve() fixa uma sessão do pool para lock/unlock.
+    const reserved = await sql().reserve();
     try {
-      await ensureSchema();
-      await ensureCrmSchema();
-      // users.company_id vive em company.server — import dinâmico evita ciclo.
-      const { ensureUserCompanySchema } = await import("@/lib/company.server");
-      await ensureUserCompanySchema();
-      console.log("[DB_BOOTSTRAP_OK]", { totalMs: Date.now() - t0 });
-    } catch (e) {
-      console.error("[DB_BOOTSTRAP_FAIL]", {
-        message: e instanceof Error ? e.message : String(e),
-        totalMs: Date.now() - t0,
-      });
-      throw e;
-    } finally {
+      await reserved.unsafe(
+        `SELECT pg_advisory_lock(${DB_SCHEMA_BOOT_LOCK_KEY})`,
+      );
       try {
-        await s.unsafe(`SELECT pg_advisory_unlock(${DB_SCHEMA_BOOT_LOCK_KEY})`);
-      } catch (unlockErr) {
-        console.warn(
-          "[DB_BOOTSTRAP_UNLOCK_WARN]",
-          unlockErr instanceof Error ? unlockErr.message : String(unlockErr),
-        );
+        await ensureSchema();
+        await ensureCrmSchema();
+        // users.company_id vive em company.server — import dinâmico evita ciclo.
+        const { ensureUserCompanySchema } = await import("@/lib/company.server");
+        await ensureUserCompanySchema();
+        console.log("[DB_BOOTSTRAP_OK]", {
+          totalMs: Date.now() - t0,
+          attempt,
+        });
+      } finally {
+        try {
+          await reserved.unsafe(
+            `SELECT pg_advisory_unlock(${DB_SCHEMA_BOOT_LOCK_KEY})`,
+          );
+        } catch (unlockErr) {
+          console.warn(
+            "[DB_BOOTSTRAP_UNLOCK_WARN]",
+            unlockErr instanceof Error ? unlockErr.message : String(unlockErr),
+          );
+        }
       }
+    } finally {
+      reserved.release();
     }
   })().catch((e) => {
     _dbBootstrap = null;
-    throw e;
+    _dbBootstrapCooldownUntil = Date.now() + BOOTSTRAP_RETRY_COOLDOWN_MS;
+    console.error("[DB_BOOTSTRAP_ERROR]", {
+      message: e instanceof Error ? e.message : String(e),
+      name: e instanceof Error ? e.name : undefined,
+      totalMs: Date.now() - t0,
+      attempt,
+      cooldownMs: BOOTSTRAP_RETRY_COOLDOWN_MS,
+    });
+    throw e instanceof DatabaseBootstrapUnavailableError
+      ? e
+      : new DatabaseBootstrapUnavailableError();
   });
+
   return _dbBootstrap;
 }
 
-/** Aguarda o bootstrap (idempotente). Use em workers se necessário. */
-export function awaitDatabaseReady(): Promise<void> {
+/** Aguarda o bootstrap (idempotente; retentável após falha + cooldown). */
+export function waitForDatabaseReady(): Promise<void> {
   return bootstrapDatabaseSchema();
+}
+
+/** @deprecated use waitForDatabaseReady */
+export function awaitDatabaseReady(): Promise<void> {
+  return waitForDatabaseReady();
+}
+
+/** Só para testes de coordenação (não usar em produção). */
+export function __resetDatabaseBootstrapStateForTests(): void {
+  _dbBootstrap = null;
+  _dbBootstrapAttempt = 0;
+  _dbBootstrapCooldownUntil = 0;
 }

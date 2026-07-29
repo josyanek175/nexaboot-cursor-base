@@ -10,7 +10,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const Route = createFileRoute("/api/campaigns/$id/resume")({
   server: {
     handlers: {
-      POST: async ({ params }) => {        if (!UUID_RE.test(params.id)) {
+      POST: async ({ params }) => {
+        if (!UUID_RE.test(params.id)) {
           return Response.json({ error: "invalid_id" }, { status: 400 });
         }
 

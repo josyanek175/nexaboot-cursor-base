@@ -38,7 +38,8 @@ const UpdateBody = z.object({
 export const Route = createFileRoute("/api/campaigns/templates/$id")({
   server: {
     handlers: {
-      GET: async ({ params }) => {        const ctx = await getCampaignActor("view");
+      GET: async ({ params }) => {
+        const ctx = await getCampaignActor("view");
         if (ctx instanceof Response) return ctx;
 
         const template = await getCampaignTemplate(ctx.companyId, params.id, {
@@ -48,7 +49,8 @@ export const Route = createFileRoute("/api/campaigns/templates/$id")({
         return Response.json({ template });
       },
 
-      PATCH: async ({ params, request }) => {        const ctx = await getCampaignActor("manage");
+      PATCH: async ({ params, request }) => {
+        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const json = await request.json().catch(() => null);
@@ -65,7 +67,8 @@ export const Route = createFileRoute("/api/campaigns/templates/$id")({
         return Response.json({ template });
       },
 
-      DELETE: async ({ params }) => {        const ctx = await getCampaignActor("manage");
+      DELETE: async ({ params }) => {
+        const ctx = await getCampaignActor("manage");
         if (ctx instanceof Response) return ctx;
 
         const ok = await deactivateCampaignTemplate(ctx.companyId, params.id);

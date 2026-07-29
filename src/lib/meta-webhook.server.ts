@@ -74,7 +74,8 @@ async function insertMetaWebhookLog(params: {
   httpStatus: number;
   payload: unknown;
   error?: string | null;
-}): Promise<void> {  const s = sql();
+}): Promise<void> {
+  const s = sql();
   const safePayload = sanitizeMetaWebhookPayload(params.payload);
 
   await s`
@@ -349,7 +350,8 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     }
 
     if (hasValidCompanyId(companyId) && channelId) {
-      try {        const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
+      try {
+        const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
         const persistResult = await persistMetaInboundMessages(webhookBody);
         if (persistResult.saved > 0) {
           processingStatus = "persisted";

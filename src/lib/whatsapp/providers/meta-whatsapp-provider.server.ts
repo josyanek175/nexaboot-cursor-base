@@ -121,7 +121,8 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     const trimmed = accessToken.trim();
     if (!trimmed) {
       return { ok: false, error: "empty_token" };
-    }    const s = sql();
+    }
+    const s = sql();
 
     const rows = await s<{ id: string; phone_number_id: string | null }[]>`
       SELECT id, phone_number_id FROM public.whatsapp_channels
@@ -205,7 +206,8 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   }
 
   /** Indica se o canal possui token configurado, sem expor o valor. */
-  async hasAccessToken(channelId: string, companyId: string): Promise<boolean> {    const s = sql();
+  async hasAccessToken(channelId: string, companyId: string): Promise<boolean> {
+    const s = sql();
     const rows = await s<{ has_token: boolean }[]>`
       SELECT (sec.access_token_ciphertext IS NOT NULL AND length(sec.access_token_ciphertext) > 0) AS has_token
       FROM public.whatsapp_channels ch
@@ -236,7 +238,8 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     return hasToken ? "valid" : "missing";
   }
 
-  private async hasAccessTokenById(channelId: string): Promise<boolean> {    const s = sql();
+  private async hasAccessTokenById(channelId: string): Promise<boolean> {
+    const s = sql();
     const rows = await s<{ has_token: boolean }[]>`
       SELECT (access_token_ciphertext IS NOT NULL AND length(access_token_ciphertext) > 0) AS has_token
       FROM public.whatsapp_channel_secrets

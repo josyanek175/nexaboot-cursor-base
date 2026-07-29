@@ -30,7 +30,8 @@ function parseFilters(url: URL): ConversationListFilters {
 export const Route = createFileRoute("/api/conversations")({
   server: {
     handlers: {
-      GET: async ({ request }) => {        const company = await requireCompanyId();
+      GET: async ({ request }) => {
+        const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
 
