@@ -10,6 +10,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 export const Route = createFileRoute("/api/attendants")({
   server: {
@@ -19,15 +20,26 @@ export const Route = createFileRoute("/api/attendants")({
         if (company instanceof Response) return company;
         const companyId = company;
 
-        const s = sql();
-        const attendants = await s`
-          SELECT id, name, email, role, active, avatar_url
-          FROM public.users
-          WHERE company_id = ${companyId}::uuid
-            AND COALESCE(active, true) = true
-          ORDER BY name ASC NULLS LAST, email ASC
-        `;
-        return Response.json({ attendants });
+        return withApiTiming(
+          {
+            route: "/api/attendants",
+            method: "GET",
+            companyId,
+            bytesPerResultHint: 200,
+          },
+          async (perf) => {
+            const s = sql();
+            const attendants = await perf.timedDb("list_attendants", () => s`
+              SELECT id, name, email, role, active, avatar_url
+              FROM public.users
+              WHERE company_id = ${companyId}::uuid
+                AND COALESCE(active, true) = true
+              ORDER BY name ASC NULLS LAST, email ASC
+            `);
+            perf.setResultCount(attendants.length);
+            return Response.json({ attendants });
+          },
+        );
       },
     },
   },

@@ -9,6 +9,7 @@ import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(160),
@@ -28,37 +29,48 @@ export const Route = createFileRoute("/api/contacts")({
         if (company instanceof Response) return company;
         const companyId = company;
 
-        const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
-        const s = sql();
+        return withApiTiming(
+          {
+            route: "/api/contacts",
+            method: "GET",
+            companyId,
+            bytesPerResultHint: 350,
+          },
+          async (perf) => {
+            const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
+            const s = sql();
 
-        const contacts = q
-          ? await s`
-              SELECT id, name, phone, email, reference, status, tags,
-                     avatar_color, contact_type, external_jid, name_source,
-                     created_at, updated_at
-              FROM public.contacts
-              WHERE company_id = ${companyId}::uuid
-                AND status IS DISTINCT FROM 'merged'
-                AND (
-                  name ILIKE ${"%" + q + "%"}
-                  OR phone LIKE ${"%" + normalizePhone(q) + "%"}
-                  OR phone_match LIKE ${"%" + normalizePhoneForMatch(q) + "%"}
-                  OR email ILIKE ${"%" + q + "%"}
-                )
-              ORDER BY created_at DESC
-              LIMIT 1000
-            `
-          : await s`
-              SELECT id, name, phone, email, reference, status, tags,
-                     avatar_color, contact_type, external_jid, name_source,
-                     created_at, updated_at
-              FROM public.contacts
-              WHERE company_id = ${companyId}::uuid
-                AND status IS DISTINCT FROM 'merged'
-              ORDER BY created_at DESC
-              LIMIT 1000
-            `;
-        return Response.json({ contacts });
+            const contacts = q
+              ? await perf.timedDb("contact_lookup", () => s`
+                  SELECT id, name, phone, email, reference, status, tags,
+                         avatar_color, contact_type, external_jid, name_source,
+                         created_at, updated_at
+                  FROM public.contacts
+                  WHERE company_id = ${companyId}::uuid
+                    AND status IS DISTINCT FROM 'merged'
+                    AND (
+                      name ILIKE ${"%" + q + "%"}
+                      OR phone LIKE ${"%" + normalizePhone(q) + "%"}
+                      OR phone_match LIKE ${"%" + normalizePhoneForMatch(q) + "%"}
+                      OR email ILIKE ${"%" + q + "%"}
+                    )
+                  ORDER BY created_at DESC
+                  LIMIT 1000
+                `)
+              : await perf.timedDb("contact_lookup", () => s`
+                  SELECT id, name, phone, email, reference, status, tags,
+                         avatar_color, contact_type, external_jid, name_source,
+                         created_at, updated_at
+                  FROM public.contacts
+                  WHERE company_id = ${companyId}::uuid
+                    AND status IS DISTINCT FROM 'merged'
+                  ORDER BY created_at DESC
+                  LIMIT 1000
+                `);
+            perf.setResultCount(contacts.length);
+            return Response.json({ contacts });
+          },
+        );
       },
 
       POST: async ({ request }) => {

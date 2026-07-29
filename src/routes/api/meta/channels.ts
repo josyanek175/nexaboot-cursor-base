@@ -13,6 +13,7 @@ import {
   storeMetaAccessTokenSafe,
 } from "@/lib/meta-channels.server";
 import { META_CHANNEL_STATUSES } from "@/lib/whatsapp/providers/whatsapp-provider.types";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 const MetaStatusSchema = z.enum(META_CHANNEL_STATUSES);
 
@@ -34,8 +35,21 @@ export const Route = createFileRoute("/api/meta/channels")({
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
 
-        const channels = await listMetaChannelsForCompany(company);
-        return Response.json({ channels });
+        return withApiTiming(
+          {
+            route: "/api/meta/channels",
+            method: "GET",
+            companyId: company,
+            bytesPerResultHint: 300,
+          },
+          async (perf) => {
+            const channels = await perf.timedDb("list_meta_channels", () =>
+              listMetaChannelsForCompany(company),
+            );
+            perf.setResultCount(channels.length);
+            return Response.json({ channels });
+          },
+        );
       },
 
       POST: async ({ request }) => {

@@ -10,6 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { getCurrentUserCompanyInfo } from "@/lib/company.server";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 export const Route = createFileRoute("/api/internal-chat/unread-count")({
   server: {
@@ -23,16 +24,28 @@ export const Route = createFileRoute("/api/internal-chat/unread-count")({
           return Response.json({ count: 0 });
         }
 
-        const s = sql();
-        const rows = await s`
-          SELECT COUNT(*)::int AS count
-          FROM internal_notifications n
-          JOIN internal_chats c ON c.id = n.chat_id
-          WHERE n.user_id = ${uid}
-            AND n.read_at IS NULL
-            AND c.company_id = ${info.companyId}::uuid
-        `;
-        return Response.json({ count: rows[0]?.count ?? 0 });
+        return withApiTiming(
+          {
+            route: "/api/internal-chat/unread-count",
+            method: "GET",
+            companyId: info.companyId,
+            userId: uid,
+            bytesPerResultHint: 32,
+          },
+          async (perf) => {
+            const s = sql();
+            const rows = await perf.timedDb("unread_count", () => s`
+              SELECT COUNT(*)::int AS count
+              FROM internal_notifications n
+              JOIN internal_chats c ON c.id = n.chat_id
+              WHERE n.user_id = ${uid}
+                AND n.read_at IS NULL
+                AND c.company_id = ${info.companyId}::uuid
+            `);
+            perf.setResultCount(1);
+            return Response.json({ count: rows[0]?.count ?? 0 });
+          },
+        );
       },
     },
   },

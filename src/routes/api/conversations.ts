@@ -9,6 +9,7 @@ import {
   listConversationsForCompany,
   type ConversationListFilters,
 } from "@/lib/conversations-query.server";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 function parseFilters(url: URL): ConversationListFilters {
   const p = url.searchParams;
@@ -42,29 +43,48 @@ export const Route = createFileRoute("/api/conversations")({
         }
         const currentUserId = uid ?? "00000000-0000-0000-0000-000000000000";
 
-        const filters = parseFilters(new URL(request.url));
+        return withApiTiming(
+          {
+            route: "/api/conversations",
+            method: "GET",
+            companyId,
+            userId: uid,
+            bytesPerResultHint: 900,
+          },
+          async (perf) => {
+            const filters = parseFilters(new URL(request.url));
 
-        if (filters.countsOnly) {
-          const counts = await getCampaignQueueCounts(companyId);
-          return Response.json({ counts });
-        }
+            if (filters.countsOnly) {
+              const counts = await perf.timedDb("campaign_queue_counts", () =>
+                getCampaignQueueCounts(companyId),
+              );
+              perf.setResultCount(1);
+              return Response.json({ counts });
+            }
 
-        const conversations = await listConversationsForCompany({
-          companyId,
-          currentUserId,
-          filters,
-        });
+            const conversations = await perf.timedDb("list_conversations", () =>
+              listConversationsForCompany({
+                companyId,
+                currentUserId,
+                filters,
+              }),
+            );
+            perf.setResultCount(conversations.length);
 
-        const includeCounts =
-          filters.campaignQueue ||
-          new URL(request.url).searchParams.get("include_counts") === "true";
+            const includeCounts =
+              filters.campaignQueue ||
+              new URL(request.url).searchParams.get("include_counts") === "true";
 
-        if (includeCounts) {
-          const counts = await getCampaignQueueCounts(companyId);
-          return Response.json({ conversations, counts });
-        }
+            if (includeCounts) {
+              const counts = await perf.timedDb("campaign_queue_counts", () =>
+                getCampaignQueueCounts(companyId),
+              );
+              return Response.json({ conversations, counts });
+            }
 
-        return Response.json({ conversations });
+            return Response.json({ conversations });
+          },
+        );
       },
     },
   },

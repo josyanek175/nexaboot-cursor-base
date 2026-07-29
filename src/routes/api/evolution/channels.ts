@@ -9,6 +9,7 @@ import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
   instanceState, mapEvoStatus, webhookUrl,
 } from "@/lib/evolution.server";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(120),
@@ -31,17 +32,29 @@ export const Route = createFileRoute("/api/evolution/channels")({
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
-        const s = sql();
-        const channels = await s`
-          SELECT id, company_id, name, display_name, phone_number,
-                 channel_type, evolution_instance_name, status,
-                 last_connected_at, active, created_at, updated_at
-          FROM public.whatsapp_channels
-          WHERE deleted_at IS NULL AND active = true
-            AND company_id = ${companyId}::uuid
-          ORDER BY created_at DESC
-        `;
-        return Response.json({ channels, evolutionConfigured: hasEvoConfig(), webhookUrl: webhookUrl() });
+
+        return withApiTiming(
+          {
+            route: "/api/evolution/channels",
+            method: "GET",
+            companyId,
+            bytesPerResultHint: 280,
+          },
+          async (perf) => {
+            const s = sql();
+            const channels = await perf.timedDb("list_evolution_channels", () => s`
+              SELECT id, company_id, name, display_name, phone_number,
+                     channel_type, evolution_instance_name, status,
+                     last_connected_at, active, created_at, updated_at
+              FROM public.whatsapp_channels
+              WHERE deleted_at IS NULL AND active = true
+                AND company_id = ${companyId}::uuid
+              ORDER BY created_at DESC
+            `);
+            perf.setResultCount(channels.length);
+            return Response.json({ channels, evolutionConfigured: hasEvoConfig(), webhookUrl: webhookUrl() });
+          },
+        );
       },
 
       POST: async ({ request }) => {

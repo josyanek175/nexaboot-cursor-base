@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { requireAttendanceActor } from "@/lib/attendance.server";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 const MarkBody = z.object({
   ids: z.array(z.string().uuid()).optional(),
@@ -18,42 +19,54 @@ export const Route = createFileRoute("/api/attendance/notifications")({
         const actor = await requireAttendanceActor();
         if (actor instanceof Response) return actor;
 
-        const unreadOnly =
-          new URL(request.url).searchParams.get("unread") !== "0" &&
-          new URL(request.url).searchParams.get("unread") !== "false";
+        return withApiTiming(
+          {
+            route: "/api/attendance/notifications",
+            method: "GET",
+            companyId: actor.companyId,
+            userId: actor.userId,
+            bytesPerResultHint: 400,
+          },
+          async (perf) => {
+            const unreadOnly =
+              new URL(request.url).searchParams.get("unread") !== "0" &&
+              new URL(request.url).searchParams.get("unread") !== "false";
 
-        const s = sql();
-        const notifications = unreadOnly
-          ? await s`
-              SELECT
-                n.id, n.conversation_id, n.type, n.title, n.body,
-                n.from_user_id, n.read_at, n.created_at,
-                u.name AS from_user_name
-              FROM public.attendance_notifications n
-              LEFT JOIN public.users u ON u.id = n.from_user_id
-              WHERE n.user_id = ${actor.userId}::uuid
-                AND n.company_id = ${actor.companyId}::uuid
-                AND n.read_at IS NULL
-              ORDER BY n.created_at DESC
-              LIMIT 50
-            `
-          : await s`
-              SELECT
-                n.id, n.conversation_id, n.type, n.title, n.body,
-                n.from_user_id, n.read_at, n.created_at,
-                u.name AS from_user_name
-              FROM public.attendance_notifications n
-              LEFT JOIN public.users u ON u.id = n.from_user_id
-              WHERE n.user_id = ${actor.userId}::uuid
-                AND n.company_id = ${actor.companyId}::uuid
-              ORDER BY n.created_at DESC
-              LIMIT 50
-            `;
+            const s = sql();
+            const notifications = unreadOnly
+              ? await perf.timedDb("attendance_notifications", () => s`
+                  SELECT
+                    n.id, n.conversation_id, n.type, n.title, n.body,
+                    n.from_user_id, n.read_at, n.created_at,
+                    u.name AS from_user_name
+                  FROM public.attendance_notifications n
+                  LEFT JOIN public.users u ON u.id = n.from_user_id
+                  WHERE n.user_id = ${actor.userId}::uuid
+                    AND n.company_id = ${actor.companyId}::uuid
+                    AND n.read_at IS NULL
+                  ORDER BY n.created_at DESC
+                  LIMIT 50
+                `)
+              : await perf.timedDb("attendance_notifications", () => s`
+                  SELECT
+                    n.id, n.conversation_id, n.type, n.title, n.body,
+                    n.from_user_id, n.read_at, n.created_at,
+                    u.name AS from_user_name
+                  FROM public.attendance_notifications n
+                  LEFT JOIN public.users u ON u.id = n.from_user_id
+                  WHERE n.user_id = ${actor.userId}::uuid
+                    AND n.company_id = ${actor.companyId}::uuid
+                  ORDER BY n.created_at DESC
+                  LIMIT 50
+                `);
 
-        return Response.json({
-          notifications,
-          unread_count: notifications.filter((n: { read_at: unknown }) => !n.read_at).length,
-        });
+            perf.setResultCount(notifications.length);
+            return Response.json({
+              notifications,
+              unread_count: notifications.filter((n: { read_at: unknown }) => !n.read_at).length,
+            });
+          },
+        );
       },
 
       POST: async ({ request }) => {

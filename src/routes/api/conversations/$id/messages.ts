@@ -2,6 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { withApiTiming } from "@/lib/perf-diag.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -14,46 +15,57 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
         const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
 
-        const s = sql();
-        const owns = await s`
-          SELECT 1 FROM public.conversations
-          WHERE id = ${params.id}::uuid AND company_id = ${companyId}::uuid
-          LIMIT 1
-        `;
-        if (!owns[0]) return Response.json({ error: "not_found" }, { status: 404 });
+        return withApiTiming(
+          {
+            route: "/api/conversations/:id/messages",
+            method: "GET",
+            companyId,
+            bytesPerResultHint: 1200,
+          },
+          async (perf) => {
+            const s = sql();
+            const owns = await perf.timedDb("conversation_ownership", () => s`
+              SELECT 1 FROM public.conversations
+              WHERE id = ${params.id}::uuid AND company_id = ${companyId}::uuid
+              LIMIT 1
+            `);
+            if (!owns[0]) return Response.json({ error: "not_found" }, { status: 404 });
 
-        const messages = await s`
-          SELECT
-            m.id,
-            m.external_id,
-            m.external_message_id,
-            m.conversation_id,
-            m.direction,
-            m.message_type,
-            m.message_type AS type,
-            m.media_type,
-            m.message_text AS body,
-            m.media_url,
-            m.media_error,
-            COALESCE(m.mime_type, m.media_mimetype) AS mime_type,
-            m.media_filename AS file_name,
-            m.media_seconds  AS duration_seconds,
-            m.media_size,
-            m.media_caption,
-            m.from_me,
-            m.status,
-            m.created_at,
-            m.sent_by_user_id,
-            m.sent_by_name,
-            m.reaction_emoji,
-            m.reaction_to_message_id,
-            m.raw_payload,
-            (m.raw_payload IS NOT NULL) AS has_raw_payload
-          FROM public.messages m
-          WHERE m.conversation_id = ${params.id}::uuid
-          ORDER BY m.created_at ASC
-        `;
-        return Response.json({ messages });
+            const messages = await perf.timedDb("list_messages", () => s`
+              SELECT
+                m.id,
+                m.external_id,
+                m.external_message_id,
+                m.conversation_id,
+                m.direction,
+                m.message_type,
+                m.message_type AS type,
+                m.media_type,
+                m.message_text AS body,
+                m.media_url,
+                m.media_error,
+                COALESCE(m.mime_type, m.media_mimetype) AS mime_type,
+                m.media_filename AS file_name,
+                m.media_seconds  AS duration_seconds,
+                m.media_size,
+                m.media_caption,
+                m.from_me,
+                m.status,
+                m.created_at,
+                m.sent_by_user_id,
+                m.sent_by_name,
+                m.reaction_emoji,
+                m.reaction_to_message_id,
+                m.raw_payload,
+                (m.raw_payload IS NOT NULL) AS has_raw_payload
+              FROM public.messages m
+              WHERE m.conversation_id = ${params.id}::uuid
+              ORDER BY m.created_at ASC
+            `);
+            perf.setResultCount(messages.length);
+            return Response.json({ messages });
+          },
+        );
       },
     },
   },
