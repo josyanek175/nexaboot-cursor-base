@@ -82,12 +82,20 @@ export interface CurrentUserCompanyInfo {
 export const PLATFORM_NO_COMPANY_MESSAGE =
   "Selecione uma empresa para gerenciar campanhas.";
 
+/** Tempos internos de getCurrentUserCompanyInfo (diagnóstico temporário). */
+export type CompanyInfoTiming = {
+  userQueryMs: number;
+  companyQueryMs: number;
+};
+
 /**
  * Resolve a empresa do usuário logado, validando contra public.companies.
  * Passe `userId` quando a sessão já foi lida (evita reler o cookie na mesma request).
+ * `timing` (opcional) preenche tempos de diagnóstico sem alterar o resultado.
  */
 export async function getCurrentUserCompanyInfo(
   userId?: string | null,
+  timing?: CompanyInfoTiming,
 ): Promise<CurrentUserCompanyInfo> {
   const empty: CurrentUserCompanyInfo = {
     authenticated: false,
@@ -115,19 +123,25 @@ export async function getCurrentUserCompanyInfo(
   await ensureCrmSchema();
   const s = sql();
 
+  const tUser0 = Date.now();
   const users = await s<{ id: string; role: string; company_id: string | null }[]>`
     SELECT id, role, company_id FROM public.users WHERE id = ${uid} LIMIT 1
   `;
+  if (timing) timing.userQueryMs = Date.now() - tUser0;
+
   if (!users[0]) {
+    if (timing) timing.companyQueryMs = 0;
     return sessionBase;
   }
 
   const user = users[0];
   const platform = isPlatformRole(user.role);
+  const tCompany0 = Date.now();
 
   if (platform) {
     const selectedId = getOperationalCompanyIdFromCookie(uid);
     if (!selectedId) {
+      if (timing) timing.companyQueryMs = Date.now() - tCompany0;
       return {
         authenticated: true,
         userId: uid,
@@ -142,6 +156,7 @@ export async function getCurrentUserCompanyInfo(
       WHERE id = ${selectedId}::uuid AND active = true
       LIMIT 1
     `;
+    if (timing) timing.companyQueryMs = Date.now() - tCompany0;
     if (!companies[0]) {
       return {
         authenticated: true,
@@ -173,6 +188,8 @@ export async function getCurrentUserCompanyInfo(
     WHERE u.id = ${uid}
     LIMIT 1
   `;
+  if (timing) timing.companyQueryMs = Date.now() - tCompany0;
+
   if (!rows[0]) {
     return {
       authenticated: true,
@@ -216,13 +233,39 @@ export async function getCurrentUserCompanyId(): Promise<string | null> {
  *   const company = await requireCompanyId();
  *   if (company instanceof Response) return company;
  *   const companyId = company;
+ *
+ * `route` é só para log de timing (opcional).
  */
-export async function requireCompanyId(userId?: string | null): Promise<string | Response> {
+export async function requireCompanyId(
+  userId?: string | null,
+  route: string = "requireCompanyId",
+): Promise<string | Response> {
+  const t0 = Date.now();
+  const tSession0 = Date.now();
   const uid = userId ?? getSessionUserId();
+  const sessionMs = Date.now() - tSession0;
+
   if (!uid) {
+    console.log("[COMPANY_CONTEXT_TIMING]", {
+      route,
+      sessionMs,
+      userQueryMs: 0,
+      companyQueryMs: 0,
+      totalMs: Date.now() - t0,
+    });
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
-  const info = await getCurrentUserCompanyInfo(uid);
+
+  const timing: CompanyInfoTiming = { userQueryMs: 0, companyQueryMs: 0 };
+  const info = await getCurrentUserCompanyInfo(uid, timing);
+  console.log("[COMPANY_CONTEXT_TIMING]", {
+    route,
+    sessionMs,
+    userQueryMs: timing.userQueryMs,
+    companyQueryMs: timing.companyQueryMs,
+    totalMs: Date.now() - t0,
+  });
+
   if (!info.companyValid || !info.companyId) {
     const platform = isPlatformRole(info.role);
     return Response.json(
