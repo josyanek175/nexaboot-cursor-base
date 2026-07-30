@@ -8,7 +8,6 @@ import {
 } from "@/lib/session.server";
 import { buildOperationalCompanyClearCookie } from "@/lib/operational-company.server";
 import {
-  getCurrentUserCompanyInfo,
   NO_COMPANY_MESSAGE,
   PLATFORM_NO_COMPANY_MESSAGE,
 } from "@/lib/company.server";
@@ -115,10 +114,10 @@ export const Route = createFileRoute("/api/auth/me")({
             );
           }
 
-          // ── Etapa DB 2: empresa (mesma função; timeout 5s) ──
+          // ── Etapa DB 2: empresa (pool normal; statement_timeout; sem reserve) ──
           const companyStep = await meCompanyStepWithConnectionTiming(
             requestId,
-            () => getCurrentUserCompanyInfo(uid),
+            uid,
           );
           companyConnectionWaitMs = companyStep.connectionWaitMs;
           companyQueryMs = companyStep.queryMs;

@@ -1,11 +1,10 @@
 /**
- * Diagnóstico temporário de hangs em GET /api/auth/me.
- * Não altera SQL, sessão, auth ou permissões — só timeout + métricas.
+ * Diagnóstico de GET /api/auth/me — queries no pool normal (sem reserve).
+ * Timeout real via PostgreSQL SET LOCAL statement_timeout (postgres.js 3.4.9).
  */
-import {
-  getDatabaseRuntimeDiag,
-  reserveSqlConnection,
-} from "@/lib/pg.server";
+import { sql, getDatabaseRuntimeDiag } from "@/lib/pg.server";
+import { setPoolDiagRequestId } from "@/lib/pg-pool-diag.server";
+import { getCurrentUserCompanyInfo } from "@/lib/company.server";
 
 export const ME_DB_STEP_TIMEOUT_MS = 5_000;
 
@@ -40,56 +39,28 @@ export function authContextTimeoutResponse(): Response {
   return Response.json({ error: "auth_context_timeout" }, { status: 503 });
 }
 
-function rejectAfter(
-  ms: number,
-  step: string,
-  meta?: { connectionWaitMs?: number | null; queryMs?: number | null },
-): Promise<never> {
-  return new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new AuthContextTimeoutError(step, meta));
-    }, ms);
-  });
-}
-
-/** Promise.race com timeout de diagnóstico (5s). */
-export async function withMeDbTimeout<T>(
-  step: string,
-  promise: Promise<T>,
-  meta?: { connectionWaitMs?: number | null; queryMs?: number | null },
-): Promise<T> {
-  return Promise.race([
-    promise,
-    rejectAfter(ME_DB_STEP_TIMEOUT_MS, step, meta),
-  ]);
+/** PostgreSQL cancelou a statement (código 57014). */
+export function isPgStatementTimeout(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: string; message?: string };
+  if (e.code === "57014") return true;
+  const msg = String(e.message ?? "").toLowerCase();
+  return msg.includes("statement timeout") || msg.includes("canceling statement");
 }
 
 /**
- * Se Promise.race desistir, a reserve() original ainda pode completar depois.
- * Sem este release, o slot do pool (max:5) vaza para sempre.
- * - resolve tardio → release() exatamente uma vez (por Promise)
- * - reject tardio → sem unhandledRejection
- * - não guarda referência global
+ * Executa fn numa transação curta com statement_timeout local.
+ * Cancela a query no servidor — não abandona Promise.race com conexão presa.
  */
-const _lateReleaseAttached = new WeakSet<Promise<unknown>>();
-
-function releaseReserveWhenReady(
-  reservePromise: Promise<{ release: () => void }>,
-): void {
-  if (_lateReleaseAttached.has(reservePromise)) return;
-  _lateReleaseAttached.add(reservePromise);
-  void reservePromise.then(
-    (r) => {
-      try {
-        r.release();
-      } catch {
-        /* ignore */
-      }
-    },
-    () => {
-      // reject tardio: sem conexão
-    },
-  );
+export async function withMeStatementTimeout<T>(
+  fn: (tx: ReturnType<typeof sql>) => Promise<T>,
+): Promise<T> {
+  const s = sql();
+  return s.begin(async (tx) => {
+    // Inteiro = milissegundos (documentação PostgreSQL / connection parameter).
+    await tx.unsafe(`SET LOCAL statement_timeout = ${ME_DB_STEP_TIMEOUT_MS}`);
+    return fn(tx as unknown as ReturnType<typeof sql>);
+  }) as Promise<T>;
 }
 
 export type MeUserRow = {
@@ -102,16 +73,14 @@ export type MeUserRow = {
 };
 
 /**
- * Mesmo SELECT de /me, com medição separada:
- * connectionWaitMs (reserve) vs queryMs (execução).
- * Libera a conexão no finally — não altera o SQL.
+ * SELECT do usuário via pool normal (sem reserve / sem Promise.race).
  */
 export async function meUserQueryWithConnectionTiming(
   uid: string,
   requestId: string,
 ): Promise<{
   rows: MeUserRow[];
-  connectionWaitMs: number;
+  connectionWaitMs: number | null;
   queryMs: number;
 }> {
   console.log("[ME_STEP_USER_QUERY_START]", {
@@ -119,38 +88,23 @@ export async function meUserQueryWithConnectionTiming(
     ...getDatabaseRuntimeDiag(),
   });
 
-  const tConn0 = Date.now();
-  let connectionWaitMs = 0;
-  let reserved: Awaited<ReturnType<typeof reserveSqlConnection>> | null = null;
-  const reservePromise = reserveSqlConnection();
+  setPoolDiagRequestId(requestId);
+  const t0 = Date.now();
+  // Sem reserve: wait vs query não são separáveis de forma confiável.
+  const connectionWaitMs: number | null = null;
 
   try {
-    try {
-      reserved = await withMeDbTimeout("user_query_connection", reservePromise, {
-        connectionWaitMs: 0,
-        queryMs: null,
-      });
-    } catch (err) {
-      releaseReserveWhenReady(reservePromise);
-      throw err;
-    }
-    connectionWaitMs = Date.now() - tConn0;
-
-    const tQuery0 = Date.now();
-    // Mesmo SQL de me.ts — apenas via sessão reservada para separar wait vs query.
-    const rows = await withMeDbTimeout(
-      "user_query",
-      reserved<MeUserRow[]>`
+    const rows = await withMeStatementTimeout(async (tx) => {
+      return tx<MeUserRow[]>`
         SELECT id, email, name, role, tenant_id, active
         FROM public.users
         WHERE id = ${uid}
         LIMIT 1
-      `,
-      { connectionWaitMs, queryMs: 0 },
-    );
-    const queryMs = Date.now() - tQuery0;
+      `;
+    });
+    const queryMs = Date.now() - t0;
 
-    console.log("[ME_STEP_USER_QUERY_END]", {
+    console.log("[ME_STEP_USER_QUERY_OK]", {
       requestId,
       connectionWaitMs,
       queryMs,
@@ -160,95 +114,81 @@ export async function meUserQueryWithConnectionTiming(
 
     return { rows, connectionWaitMs, queryMs };
   } catch (err) {
-    if (isAuthContextTimeout(err)) {
-      console.error("[ME_STEP_USER_QUERY_TIMEOUT]", {
-        requestId,
-        step: err.step,
-        connectionWaitMs: err.connectionWaitMs ?? connectionWaitMs,
-        queryMs: err.queryMs,
-        elapsedMs: Date.now() - tConn0,
-        ...getDatabaseRuntimeDiag(),
+    const queryMs = Date.now() - t0;
+    console.error("[ME_STEP_USER_QUERY_ERROR]", {
+      requestId,
+      queryMs,
+      connectionWaitMs,
+      isTimeout: isPgStatementTimeout(err),
+      message: err instanceof Error ? err.message : String(err),
+      ...getDatabaseRuntimeDiag(),
+    });
+    if (isPgStatementTimeout(err)) {
+      throw new AuthContextTimeoutError("user_query", {
+        connectionWaitMs,
+        queryMs,
       });
     }
     throw err;
   } finally {
-    if (reserved) {
-      try {
-        reserved.release();
-      } catch (releaseErr) {
-        console.warn(
-          "[ME_STEP_USER_QUERY_RELEASE_WARN]",
-          releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
-        );
-      }
-    }
+    setPoolDiagRequestId(null);
   }
 }
 
 /**
- * Mede espera de conexão (probe reserve/release) e depois executa o trabalho
- * de empresa com timeout próprio — sem alterar o SQL interno.
+ * Empresa via pool normal, sem probe reserve.
+ * Mesmo statement_timeout na mesma sessão da TX.
  */
-export async function meCompanyStepWithConnectionTiming<T>(
+export async function meCompanyStepWithConnectionTiming(
   requestId: string,
-  work: () => Promise<T>,
-): Promise<{ result: T; connectionWaitMs: number; queryMs: number }> {
-  console.log("[ME_STEP_COMPANY_START]", {
+  uid: string,
+): Promise<{
+  result: Awaited<ReturnType<typeof getCurrentUserCompanyInfo>>;
+  connectionWaitMs: number | null;
+  queryMs: number;
+}> {
+  console.log("[ME_STEP_COMPANY_QUERY_START]", {
     requestId,
     ...getDatabaseRuntimeDiag(),
   });
 
-  const tConn0 = Date.now();
-  let connectionWaitMs = 0;
-  const reservePromise = reserveSqlConnection();
+  setPoolDiagRequestId(requestId);
+  const t0 = Date.now();
+  const connectionWaitMs: number | null = null;
 
   try {
-    let probe: Awaited<ReturnType<typeof reserveSqlConnection>>;
-    try {
-      probe = await withMeDbTimeout("company_connection", reservePromise, {
-        connectionWaitMs: 0,
-        queryMs: null,
-      });
-    } catch (err) {
-      releaseReserveWhenReady(reservePromise);
-      throw err;
-    }
-    connectionWaitMs = Date.now() - tConn0;
-    try {
-      probe.release();
-    } catch (releaseErr) {
-      console.warn(
-        "[ME_STEP_COMPANY_PROBE_RELEASE_WARN]",
-        releaseErr instanceof Error ? releaseErr.message : String(releaseErr),
-      );
-    }
-
-    const tQuery0 = Date.now();
-    const result = await withMeDbTimeout("company_query", work(), {
-      connectionWaitMs,
-      queryMs: 0,
+    const result = await withMeStatementTimeout(async (tx) => {
+      return getCurrentUserCompanyInfo(uid, undefined, tx);
     });
-    const queryMs = Date.now() - tQuery0;
+    const queryMs = Date.now() - t0;
 
-    console.log("[ME_STEP_COMPANY_END]", {
+    console.log("[ME_STEP_COMPANY_QUERY_OK]", {
       requestId,
       connectionWaitMs,
       queryMs,
+      companyValid: result.companyValid,
       ...getDatabaseRuntimeDiag(),
     });
 
     return { result, connectionWaitMs, queryMs };
   } catch (err) {
-    if (isAuthContextTimeout(err)) {
-      console.error("[ME_STEP_COMPANY_TIMEOUT]", {
-        requestId,
-        step: err.step,
-        connectionWaitMs: err.connectionWaitMs ?? connectionWaitMs,
-        queryMs: err.queryMs,
-        elapsedMs: Date.now() - tConn0,
-        ...getDatabaseRuntimeDiag(),
+    const queryMs = Date.now() - t0;
+    console.error("[ME_STEP_COMPANY_QUERY_ERROR]", {
+      requestId,
+      queryMs,
+      connectionWaitMs,
+      isTimeout: isPgStatementTimeout(err),
+      message: err instanceof Error ? err.message : String(err),
+      ...getDatabaseRuntimeDiag(),
+    });
+    if (isPgStatementTimeout(err)) {
+      throw new AuthContextTimeoutError("company_query", {
+        connectionWaitMs,
+        queryMs,
       });
     }
     throw err;
+  } finally {
+    setPoolDiagRequestId(null);
   }
 }

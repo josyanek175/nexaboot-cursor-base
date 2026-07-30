@@ -92,10 +92,12 @@ export type CompanyInfoTiming = {
  * Resolve a empresa do usuário logado, validando contra public.companies.
  * Passe `userId` quando a sessão já foi lida (evita reler o cookie na mesma request).
  * `timing` (opcional) preenche tempos de diagnóstico sem alterar o resultado.
+ * `db` (opcional) reutiliza o executor da TX (ex.: statement_timeout local no /me).
  */
 export async function getCurrentUserCompanyInfo(
   userId?: string | null,
   timing?: CompanyInfoTiming,
+  db?: ReturnType<typeof sql>,
 ): Promise<CurrentUserCompanyInfo> {
   const empty: CurrentUserCompanyInfo = {
     authenticated: false,
@@ -120,7 +122,7 @@ export async function getCurrentUserCompanyInfo(
   };
 
   // Schema (users.company_id / CRM) é aplicado no boot — sem DDL por request.
-  const s = sql();
+  const s = db ?? sql();
 
   const tUser0 = Date.now();
   const users = await s<{ id: string; role: string; company_id: string | null }[]>`

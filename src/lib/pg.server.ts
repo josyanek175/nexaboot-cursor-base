@@ -4,22 +4,99 @@ import postgres from "postgres";
 import { normalizePhoneForMatch } from "@/lib/phone";
 import { createBootstrapCoordinator } from "@/lib/db-bootstrap-coordinator";
 import type { DatabaseBootstrapState } from "@/lib/db-bootstrap-coordinator";
+import {
+  getPoolDiagSnapshot,
+  trackPoolAcquisitionAcquired,
+  trackPoolAcquisitionReleased,
+  trackPoolAcquisitionStart,
+} from "@/lib/pg-pool-diag.server";
 
 let _sql: ReturnType<typeof postgres> | null = null;
+let _rawSql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
 
 /** Tamanho do pool postgres.js (diagnóstico de esgotamento). */
 export const PG_POOL_MAX = 5;
 
-/** Contagem de sessões reserve() ainda não liberadas neste processo (diagnóstico). */
+/** Contagem de sessões reserve() já adquiridas e ainda não liberadas. */
 let _pgReservedOpen = 0;
+
+/** Contagem de reserve() aguardando slot (antes de acquire). */
+let _pgReservePending = 0;
+
+function wrapPostgresClient(
+  client: ReturnType<typeof postgres>,
+): ReturnType<typeof postgres> {
+  return new Proxy(client, {
+    apply(target, thisArg, argArray) {
+      const id = trackPoolAcquisitionStart("query");
+      try {
+        const result = Reflect.apply(target, thisArg, argArray) as Promise<unknown>;
+        // Query enfileirada: conta como pending até resolver (ocupa ou espera slot).
+        trackPoolAcquisitionAcquired(id);
+        return Promise.resolve(result).finally(() => {
+          trackPoolAcquisitionReleased(id);
+        });
+      } catch (e) {
+        trackPoolAcquisitionReleased(id);
+        throw e;
+      }
+    },
+    get(target, prop, receiver) {
+      if (prop === "reserve") {
+        return async () => {
+          _pgReservePending += 1;
+          const id = trackPoolAcquisitionStart("reserve");
+          try {
+            const reserved = await target.reserve();
+            _pgReservePending = Math.max(0, _pgReservePending - 1);
+            _pgReservedOpen += 1;
+            trackPoolAcquisitionAcquired(id);
+            const originalRelease = reserved.release.bind(reserved);
+            let released = false;
+            reserved.release = () => {
+              if (released) return;
+              released = true;
+              _pgReservedOpen = Math.max(0, _pgReservedOpen - 1);
+              trackPoolAcquisitionReleased(id);
+              return originalRelease();
+            };
+            return reserved;
+          } catch (e) {
+            _pgReservePending = Math.max(0, _pgReservePending - 1);
+            trackPoolAcquisitionReleased(id);
+            throw e;
+          }
+        };
+      }
+      if (prop === "begin") {
+        return ((...args: unknown[]) => {
+          const id = trackPoolAcquisitionStart("begin");
+          trackPoolAcquisitionAcquired(id);
+          try {
+            const result = (
+              target.begin as (...a: unknown[]) => Promise<unknown>
+            )(...args);
+            return Promise.resolve(result).finally(() => {
+              trackPoolAcquisitionReleased(id);
+            });
+          } catch (e) {
+            trackPoolAcquisitionReleased(id);
+            throw e;
+          }
+        }) as typeof target.begin;
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as ReturnType<typeof postgres>;
+}
 
 /** Cliente postgres.js. Use `sql()`…` ou `const s = sql(); s`…``. */
 export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
   if (!_sql) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL não configurada");
-    _sql = postgres(url, {
+    _rawSql = postgres(url, {
       ssl:
         url.includes("sslmode=require") || url.includes("supabase") || url.includes("neon")
           ? "require"
@@ -27,6 +104,7 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
       max: PG_POOL_MAX,
       prepare: false,
     });
+    _sql = wrapPostgresClient(_rawSql);
   }
   // Chamada como tagged template: sql`SELECT …`
   if (strings && Array.isArray(strings) && "raw" in strings) {
@@ -39,21 +117,22 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
 type ReservedSql = Awaited<ReturnType<ReturnType<typeof postgres>["reserve"]>>;
 
 /**
- * reserve() com contador de diagnóstico (vazamento = pool esgota com max:5).
- * Mesmo contrato do postgres.js: chamar release() no finally.
+ * reserve() com contador de diagnóstico.
+ * IMPORTANTE: reservedOpenInProcess só incrementa APÓS acquire.
+ * Enquanto aguarda slot, use reservePending / trackedPending.
  */
 export async function reserveSqlConnection(): Promise<ReservedSql> {
-  const reserved = await sql().reserve();
-  _pgReservedOpen += 1;
-  const originalRelease = reserved.release.bind(reserved);
-  let released = false;
-  reserved.release = () => {
-    if (released) return;
-    released = true;
-    _pgReservedOpen = Math.max(0, _pgReservedOpen - 1);
-    return originalRelease();
+  // Passa pelo Proxy (pending → active + contadores).
+  return sql().reserve() as Promise<ReservedSql>;
+}
+
+export function getPgPoolStatus() {
+  const snap = getPoolDiagSnapshot(PG_POOL_MAX);
+  return {
+    ...snap,
+    reservedOpenInProcess: _pgReservedOpen,
+    reservePending: _pgReservePending,
   };
-  return reserved;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1551,8 +1630,45 @@ export function bootstrapDatabaseSchema(): Promise<void> {
 }
 
 /** Estado público do bootstrap (health) — sem segredos. */
+export type DatabaseBootstrapHealthState = DatabaseBootstrapState | "disabled";
+
+/**
+ * Bootstrap automático de schema:
+ * - development/test: ligado por padrão;
+ * - production: desligado por padrão;
+ * - DB_SCHEMA_BOOTSTRAP_ENABLED=true força ligado;
+ * - DB_SCHEMA_BOOTSTRAP_ENABLED=false força desligado.
+ */
+export function isDatabaseSchemaBootstrapEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const raw = env.DB_SCHEMA_BOOTSTRAP_ENABLED?.trim().toLowerCase();
+  if (raw === "true" || raw === "1" || raw === "yes") return true;
+  if (raw === "false" || raw === "0" || raw === "no") return false;
+  return env.NODE_ENV !== "production";
+}
+
 export function getDatabaseBootstrapState(): DatabaseBootstrapState {
   return getBootstrapCoordinator().getState();
+}
+
+/** Valor seguro para /api/health (inclui "disabled" em produção sem flag). */
+export function getDatabaseBootstrapHealthState(
+  env: NodeJS.ProcessEnv = process.env,
+): DatabaseBootstrapHealthState {
+  if (!isDatabaseSchemaBootstrapEnabled(env)) return "disabled";
+  return getDatabaseBootstrapState();
+}
+
+/**
+ * Estado para /api/health: inclui "disabled" quando a política impede
+ * bootstrap automático (produção sem DB_SCHEMA_BOOTSTRAP_ENABLED=true).
+ */
+export function getDatabaseBootstrapReportState():
+  | DatabaseBootstrapState
+  | "disabled" {
+  if (!isDatabaseSchemaBootstrapEnabled()) return "disabled";
+  return getDatabaseBootstrapState();
 }
 
 /** Aguarda o bootstrap (idempotente; retentável após falha + cooldown). */
@@ -1568,6 +1684,9 @@ export function getDatabaseRuntimeDiag(): {
   poolMax: number;
   clientInitialized: boolean;
   reservedOpenInProcess: number;
+  reservePending: number;
+  trackedActive: number;
+  trackedPending: number;
   bootstrapAttempt: number;
   bootstrapCooldownUntil: number;
   bootstrapPromiseActive: boolean;
@@ -1579,10 +1698,14 @@ export function getDatabaseRuntimeDiag(): {
 } {
   const c = getBootstrapCoordinator();
   const cooldownUntil = c.getCooldownUntil();
+  const pool = getPgPoolStatus();
   return {
     poolMax: PG_POOL_MAX,
     clientInitialized: !!_sql,
-    reservedOpenInProcess: _pgReservedOpen,
+    reservedOpenInProcess: pool.reservedOpenInProcess,
+    reservePending: pool.reservePending,
+    trackedActive: pool.trackedActive,
+    trackedPending: pool.trackedPending,
     bootstrapAttempt: c.getAttempt(),
     bootstrapCooldownUntil: cooldownUntil,
     bootstrapPromiseActive: c.isActiveRun() || c.getState() === "ready",
