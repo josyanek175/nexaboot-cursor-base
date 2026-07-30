@@ -5,14 +5,12 @@ import { normalizePhoneForMatch } from "@/lib/phone";
 import { createBootstrapCoordinator } from "@/lib/db-bootstrap-coordinator";
 import type { DatabaseBootstrapState } from "@/lib/db-bootstrap-coordinator";
 import {
-  getPoolDiagSnapshot,
   trackPoolAcquisitionAcquired,
   trackPoolAcquisitionReleased,
   trackPoolAcquisitionStart,
 } from "@/lib/pg-pool-diag.server";
 
 let _sql: ReturnType<typeof postgres> | null = null;
-let _rawSql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
 
 /** Tamanho do pool postgres.js (diagnóstico de esgotamento). */
@@ -24,79 +22,15 @@ let _pgReservedOpen = 0;
 /** Contagem de reserve() aguardando slot (antes de acquire). */
 let _pgReservePending = 0;
 
-function wrapPostgresClient(
-  client: ReturnType<typeof postgres>,
-): ReturnType<typeof postgres> {
-  return new Proxy(client, {
-    apply(target, thisArg, argArray) {
-      const id = trackPoolAcquisitionStart("query");
-      try {
-        const result = Reflect.apply(target, thisArg, argArray) as Promise<unknown>;
-        // Query enfileirada: conta como pending até resolver (ocupa ou espera slot).
-        trackPoolAcquisitionAcquired(id);
-        return Promise.resolve(result).finally(() => {
-          trackPoolAcquisitionReleased(id);
-        });
-      } catch (e) {
-        trackPoolAcquisitionReleased(id);
-        throw e;
-      }
-    },
-    get(target, prop, receiver) {
-      if (prop === "reserve") {
-        return async () => {
-          _pgReservePending += 1;
-          const id = trackPoolAcquisitionStart("reserve");
-          try {
-            const reserved = await target.reserve();
-            _pgReservePending = Math.max(0, _pgReservePending - 1);
-            _pgReservedOpen += 1;
-            trackPoolAcquisitionAcquired(id);
-            const originalRelease = reserved.release.bind(reserved);
-            let released = false;
-            reserved.release = () => {
-              if (released) return;
-              released = true;
-              _pgReservedOpen = Math.max(0, _pgReservedOpen - 1);
-              trackPoolAcquisitionReleased(id);
-              return originalRelease();
-            };
-            return reserved;
-          } catch (e) {
-            _pgReservePending = Math.max(0, _pgReservePending - 1);
-            trackPoolAcquisitionReleased(id);
-            throw e;
-          }
-        };
-      }
-      if (prop === "begin") {
-        return ((...args: unknown[]) => {
-          const id = trackPoolAcquisitionStart("begin");
-          trackPoolAcquisitionAcquired(id);
-          try {
-            const result = (
-              target.begin as (...a: unknown[]) => Promise<unknown>
-            )(...args);
-            return Promise.resolve(result).finally(() => {
-              trackPoolAcquisitionReleased(id);
-            });
-          } catch (e) {
-            trackPoolAcquisitionReleased(id);
-            throw e;
-          }
-        }) as typeof target.begin;
-      }
-      return Reflect.get(target, prop, receiver);
-    },
-  }) as ReturnType<typeof postgres>;
-}
-
-/** Cliente postgres.js. Use `sql()`…` ou `const s = sql(); s`…``. */
+/**
+ * Cliente postgres.js original (sem Proxy).
+ * Nunca wrappear tagged templates — fragments/ORDER BY dinâmico quebram.
+ */
 export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
   if (!_sql) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL não configurada");
-    _rawSql = postgres(url, {
+    _sql = postgres(url, {
       ssl:
         url.includes("sslmode=require") || url.includes("supabase") || url.includes("neon")
           ? "require"
@@ -104,7 +38,6 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
       max: PG_POOL_MAX,
       prepare: false,
     });
-    _sql = wrapPostgresClient(_rawSql);
   }
   // Chamada como tagged template: sql`SELECT …`
   if (strings && Array.isArray(strings) && "raw" in strings) {
@@ -114,24 +47,63 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
   return _sql;
 }
 
+/** Alias explícito: sempre o cliente postgres.js original. */
+export function getSql(): ReturnType<typeof postgres> {
+  return sql() as ReturnType<typeof postgres>;
+}
+
 type ReservedSql = Awaited<ReturnType<ReturnType<typeof postgres>["reserve"]>>;
 
 /**
- * reserve() com contador de diagnóstico.
- * IMPORTANTE: reservedOpenInProcess só incrementa APÓS acquire.
- * Enquanto aguarda slot, use reservePending / trackedPending.
+ * reserve() com contadores manuais (sem Proxy no cliente global).
+ * Usar só bootstrap / advisory lock — nunca no hot path de /me.
  */
 export async function reserveSqlConnection(): Promise<ReservedSql> {
-  // Passa pelo Proxy (pending → active + contadores).
-  return sql().reserve() as Promise<ReservedSql>;
+  _pgReservePending += 1;
+  const id = trackPoolAcquisitionStart("reserve");
+  try {
+    const reserved = await getSql().reserve();
+    _pgReservePending = Math.max(0, _pgReservePending - 1);
+    _pgReservedOpen += 1;
+    trackPoolAcquisitionAcquired(id);
+    const originalRelease = reserved.release.bind(reserved);
+    let released = false;
+    reserved.release = () => {
+      if (released) return;
+      released = true;
+      _pgReservedOpen = Math.max(0, _pgReservedOpen - 1);
+      trackPoolAcquisitionReleased(id);
+      return originalRelease();
+    };
+    return reserved;
+  } catch (e) {
+    _pgReservePending = Math.max(0, _pgReservePending - 1);
+    trackPoolAcquisitionReleased(id);
+    throw e;
+  }
 }
 
+/**
+ * Métricas confiáveis pós-remoção do Proxy.
+ * trackedActive/trackedPending globais de query = null (dependiam do Proxy).
+ */
 export function getPgPoolStatus() {
-  const snap = getPoolDiagSnapshot(PG_POOL_MAX);
   return {
-    ...snap,
+    poolMax: PG_POOL_MAX,
+    trackedActive: null as number | null,
+    trackedPending: null as number | null,
     reservedOpenInProcess: _pgReservedOpen,
     reservePending: _pgReservePending,
+    activeAcquisitions: [] as Array<{
+      acquisitionId: string;
+      kind: string;
+      origin: string;
+      status: string;
+      ageMs: number;
+      waitedMs: number | null;
+      heldMs: number | null;
+    }>,
+    processPid: process.pid,
   };
 }
 
@@ -1685,8 +1657,8 @@ export function getDatabaseRuntimeDiag(): {
   clientInitialized: boolean;
   reservedOpenInProcess: number;
   reservePending: number;
-  trackedActive: number;
-  trackedPending: number;
+  trackedActive: number | null;
+  trackedPending: number | null;
   bootstrapAttempt: number;
   bootstrapCooldownUntil: number;
   bootstrapPromiseActive: boolean;
@@ -1704,8 +1676,8 @@ export function getDatabaseRuntimeDiag(): {
     clientInitialized: !!_sql,
     reservedOpenInProcess: pool.reservedOpenInProcess,
     reservePending: pool.reservePending,
-    trackedActive: pool.trackedActive,
-    trackedPending: pool.trackedPending,
+    trackedActive: null,
+    trackedPending: null,
     bootstrapAttempt: c.getAttempt(),
     bootstrapCooldownUntil: cooldownUntil,
     bootstrapPromiseActive: c.isActiveRun() || c.getState() === "ready",

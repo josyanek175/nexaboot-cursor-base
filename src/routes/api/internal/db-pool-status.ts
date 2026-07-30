@@ -2,6 +2,9 @@
  * GET /api/internal/db-pool-status
  * Diagnóstico temporário do pool (sem segredos).
  * Protegido: sessão + SUPER_ADMIN | TI | ADMIN_GERAL.
+ *
+ * Após remoção do Proxy global, trackedActive/trackedPending de queries = null.
+ * Contadores confiáveis: reservedOpenInProcess, reservePending.
  */
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -12,24 +15,6 @@ import {
 } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { isPlatformRole } from "@/lib/platform-roles";
-
-/** Remove path absoluto, querystring e trechos sensíveis da origem. */
-function sanitizeOrigin(origin: string): string {
-  return origin
-    .split(" | ")
-    .map((part) =>
-      part
-        .replace(/\\/g, "/")
-        .replace(/^[A-Za-z]:\/.*?\/(src\/)/, "$1")
-        .replace(/^.*?\/(src\/)/, "$1")
-        .replace(/\?.*?(?=:|$)/g, "")
-        .replace(/https?:\/\/[^\s)]+/gi, "[url]")
-        .slice(0, 180),
-    )
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(" | ");
-}
 
 export const Route = createFileRoute("/api/internal/db-pool-status")({
   server: {
@@ -59,19 +44,12 @@ export const Route = createFileRoute("/api/internal/db-pool-status")({
 
         return Response.json({
           poolMax: pool.poolMax,
-          trackedActive: pool.trackedActive,
-          trackedPending: pool.trackedPending,
+          trackedActive: null,
+          trackedPending: null,
           reservedOpenInProcess: pool.reservedOpenInProcess,
           reservePending: pool.reservePending,
-          activeAcquisitions: pool.activeAcquisitions.map((a) => ({
-            acquisitionId: a.acquisitionId,
-            kind: a.kind,
-            origin: sanitizeOrigin(a.origin),
-            status: a.status,
-            ageMs: a.ageMs,
-            waitedMs: a.waitedMs,
-            heldMs: a.heldMs,
-          })),
+          activeAcquisitions: [],
+          note: "query_tracking_disabled_no_proxy",
           bootstrapState: getDatabaseBootstrapState(),
           bootstrapActiveRun: diag.bootstrapActiveRun,
           processPid: pool.processPid,
