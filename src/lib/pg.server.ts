@@ -12,9 +12,25 @@ import {
 
 let _sql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
+let _pgPoolConfigLogged = false;
+
+/**
+ * Tamanho do pool postgres.js.
+ * Env: PG_POOL_MAX (inteiro 1–30). Default/fallback: 5.
+ * Não altera produção automaticamente — só se a env for definida no Easypanel.
+ */
+function readPgPoolMax(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.PG_POOL_MAX?.trim();
+  if (!raw) return 5;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 5;
+  const floored = Math.floor(n);
+  if (floored < 1 || floored > 30) return 5;
+  return floored;
+}
 
 /** Tamanho do pool postgres.js (diagnóstico de esgotamento). */
-export const PG_POOL_MAX = 5;
+export const PG_POOL_MAX = readPgPoolMax();
 
 /** Contagem de sessões reserve() já adquiridas e ainda não liberadas. */
 let _pgReservedOpen = 0;
@@ -38,6 +54,13 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
       max: PG_POOL_MAX,
       prepare: false,
     });
+    if (!_pgPoolConfigLogged) {
+      _pgPoolConfigLogged = true;
+      console.log("[PG_POOL_CONFIG]", {
+        poolMax: PG_POOL_MAX,
+        source: process.env.PG_POOL_MAX?.trim() ? "env" : "default",
+      });
+    }
   }
   // Chamada como tagged template: sql`SELECT …`
   if (strings && Array.isArray(strings) && "raw" in strings) {
@@ -1590,8 +1613,12 @@ function getBootstrapCoordinator() {
  * Executa o DDL idempotente uma vez por processo com sucesso.
  * Em falha/timeout: limpa Promise, cooldown e permite nova tentativa.
  * Nunca inicia duas tentativas simultâneas (estado running compartilha Promise).
+ * Se DB_SCHEMA_BOOTSTRAP_ENABLED=false (ou produção sem flag): no-op.
  */
 export function bootstrapDatabaseSchema(): Promise<void> {
+  if (!isDatabaseSchemaBootstrapEnabled()) {
+    return Promise.resolve();
+  }
   return getBootstrapCoordinator()
     .bootstrap()
     .catch((e) => {

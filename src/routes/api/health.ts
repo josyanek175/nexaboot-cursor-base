@@ -1,7 +1,11 @@
 // GET /api/health — diagnóstico de runtime (sem DB, auth ou integrações).
 import { createFileRoute } from "@tanstack/react-router";
 import { execSync } from "node:child_process";
-import { getDatabaseBootstrapState } from "@/lib/pg.server";
+import {
+  getDatabaseBootstrapHealthState,
+  isDatabaseSchemaBootstrapEnabled,
+  PG_POOL_MAX,
+} from "@/lib/pg.server";
 
 function readGitCommit(): string | null {
   if (process.env.GIT_COMMIT?.trim()) return process.env.GIT_COMMIT.trim();
@@ -17,19 +21,28 @@ export const Route = createFileRoute("/api/health")({
   server: {
     handlers: {
       GET: async () => {
+        const bootstrapEnabled = isDatabaseSchemaBootstrapEnabled();
+        const databaseBootstrap = getDatabaseBootstrapHealthState();
+
         console.log("[HEALTH_CHECK]", {
           port: process.env.PORT ?? null,
           nodeEnv: process.env.NODE_ENV ?? null,
+          bootstrapEnabled,
+          databaseBootstrap,
+          poolMax: PG_POOL_MAX,
         });
 
         return Response.json({
           ok: true,
+          ready: true,
           service: "nexaboot-api",
           time: new Date().toISOString(),
           env: process.env.NODE_ENV ?? "unknown",
           port: process.env.PORT ?? null,
           commit: readGitCommit(),
-          databaseBootstrap: getDatabaseBootstrapState(),
+          bootstrapEnabled,
+          databaseBootstrap,
+          poolMax: PG_POOL_MAX,
           hasMetaVerifyToken: !!process.env.META_APP_VERIFY_TOKEN?.trim(),
           hasMetaAppSecret: !!process.env.META_APP_SECRET?.trim(),
           hasTokenEncryptionKey: !!process.env.META_TOKEN_ENCRYPTION_KEY?.trim(),

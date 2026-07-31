@@ -2,24 +2,45 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { bootstrapDatabaseSchema } from "./lib/pg.server";
+import {
+  bootstrapDatabaseSchema,
+  isDatabaseSchemaBootstrapEnabled,
+  PG_POOL_MAX,
+} from "./lib/pg.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
-let bootstrapStarted = false;
+let bootstrapKickoffDone = false;
 
 /**
- * Bootstrap de schema em background (uma vez por processo).
- * NÃO bloqueia requests HTTP — auth/health usam o banco diretamente.
- * Coordenação (Promise compartilhada, advisory lock, activeRun, watchdog)
- * permanece em bootstrapDatabaseSchema().
+ * Bootstrap de schema em background — no máximo uma vez por processo.
+ * Respeita DB_SCHEMA_BOOTSTRAP_ENABLED (produção: false por padrão).
+ * NÃO é chamado a cada request HTTP.
  */
 function startDatabaseBootstrapInBackground(): void {
-  if (bootstrapStarted) return;
-  bootstrapStarted = true;
+  if (bootstrapKickoffDone) return;
+  bootstrapKickoffDone = true;
+
+  const enabled = isDatabaseSchemaBootstrapEnabled();
+  if (!enabled) {
+    console.log("[DB_BOOTSTRAP_DISABLED]", {
+      reason: "policy",
+      nodeEnv: process.env.NODE_ENV ?? null,
+      flag: process.env.DB_SCHEMA_BOOTSTRAP_ENABLED ?? null,
+    });
+    console.log("[PG_POOL_CONFIG]", { poolMax: PG_POOL_MAX });
+    return;
+  }
+
+  console.log("[DB_BOOTSTRAP_ENABLED]", {
+    nodeEnv: process.env.NODE_ENV ?? null,
+    flag: process.env.DB_SCHEMA_BOOTSTRAP_ENABLED ?? null,
+  });
+  console.log("[PG_POOL_CONFIG]", { poolMax: PG_POOL_MAX });
+
   void bootstrapDatabaseSchema().catch((error) => {
     console.error("[DB_BOOTSTRAP_BACKGROUND_ERROR]", {
       message: error instanceof Error ? error.message : String(error),
@@ -28,7 +49,7 @@ function startDatabaseBootstrapInBackground(): void {
   });
 }
 
-// Dispara no carregamento do módulo do servidor (startup do processo).
+// Kickoff único no carregamento do módulo (não por request).
 startDatabaseBootstrapInBackground();
 
 async function getServerEntry(): Promise<ServerEntry> {
@@ -90,8 +111,7 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    // Garante kickoff mesmo se o módulo foi carregado sem side-effect (testes).
-    startDatabaseBootstrapInBackground();
+    // Bootstrap NÃO é reiniciado aqui — só no load do módulo (acima).
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
