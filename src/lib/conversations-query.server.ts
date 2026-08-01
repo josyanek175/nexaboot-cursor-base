@@ -119,7 +119,7 @@ export async function listConversationsForCompany(opts: {
 }) {
   const s = sql();
   const f = opts.filters;
-  const limit = opts.limit ?? 500;
+  const limit = Math.min(Math.max(1, opts.limit ?? 100), 100);
   const campaignQueue = f.campaignQueue === true;
 
   const campaignServiceStatus =

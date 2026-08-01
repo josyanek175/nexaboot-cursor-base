@@ -11,6 +11,16 @@ import {
 } from "@/lib/conversations-query.server";
 import { withApiTiming } from "@/lib/perf-diag.server";
 
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 100;
+
+function parseLimit(raw: string | null): number {
+  if (!raw) return DEFAULT_LIMIT;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_LIMIT;
+  return Math.min(Math.max(1, Math.floor(n)), MAX_LIMIT);
+}
+
 function parseFilters(url: URL): ConversationListFilters {
   const p = url.searchParams;
   return {
@@ -52,7 +62,9 @@ export const Route = createFileRoute("/api/conversations")({
             bytesPerResultHint: 900,
           },
           async (perf) => {
-            const filters = parseFilters(new URL(request.url));
+            const url = new URL(request.url);
+            const filters = parseFilters(url);
+            const limit = parseLimit(url.searchParams.get("limit"));
 
             if (filters.countsOnly) {
               const counts = await perf.timedDb("campaign_queue_counts", () =>
@@ -67,22 +79,31 @@ export const Route = createFileRoute("/api/conversations")({
                 companyId,
                 currentUserId,
                 filters,
+                limit,
               }),
             );
             perf.setResultCount(conversations.length);
 
-            const includeCounts =
-              filters.campaignQueue ||
-              new URL(request.url).searchParams.get("include_counts") === "true";
+            // COUNT só quando explicitamente pedido (evita dobrar carga no polling).
+            const includeCounts = url.searchParams.get("include_counts") === "true";
 
             if (includeCounts) {
               const counts = await perf.timedDb("campaign_queue_counts", () =>
                 getCampaignQueueCounts(companyId),
               );
-              return Response.json({ conversations, counts });
+              return Response.json({
+                conversations,
+                counts,
+                limit,
+                hasMore: conversations.length >= limit,
+              });
             }
 
-            return Response.json({ conversations });
+            return Response.json({
+              conversations,
+              limit,
+              hasMore: conversations.length >= limit,
+            });
           },
         );
       },

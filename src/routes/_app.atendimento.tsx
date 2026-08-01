@@ -586,6 +586,9 @@ function AtendimentoPage() {
 
   // Snapshot anterior para detectar mensagens novas no polling.
   const prevConvsRef = useRef<Map<string, string>>(new Map());
+  /** Fingerprint da lista — evita setState quando o poll não mudou nada. */
+  const convsFingerprintRef = useRef<string>("");
+  const msgsFingerprintRef = useRef<Record<string, string>>({});
   // Notificações de transferência: evita toast repetido no polling.
   const seenAttendanceNotifs = useRef<Set<string>>(new Set());
   const attendanceNotifsBootstrapped = useRef(false);
@@ -609,10 +612,12 @@ function AtendimentoPage() {
     }
     try {
       const params = new URLSearchParams();
+      params.set("limit", "100");
       if (listMode === "campaign" || campaignColorFilter !== "all") {
         if (listMode === "campaign") {
           params.set("campaign_queue", "true");
-          params.set("include_counts", "true");
+          // COUNT só no load visível — polling silencioso não dobra a query.
+          if (!opts?.silent) params.set("include_counts", "true");
           if (campaignSubFilter !== "all") {
             params.set("campaign_service_status", campaignSubFilter);
           }
@@ -659,6 +664,15 @@ function AtendimentoPage() {
       });
       prevConvsRef.current = nextMap;
 
+      const fingerprint = mapped
+        .map(
+          (c) =>
+            `${c.id}:${c.lastMessageAt}:${c.unreadCount}:${c.assignedTo ?? ""}:${c.status}:${c.campaignServiceStatus ?? ""}`,
+        )
+        .join("|");
+      const unchanged = opts?.silent && fingerprint === convsFingerprintRef.current;
+      convsFingerprintRef.current = fingerprint;
+
       if (prev.size > 0 && newlyActive.length > 0) {
         playNotificationSound();
         newlyActive.forEach((c) => {
@@ -674,7 +688,10 @@ function AtendimentoPage() {
         });
       }
 
-      setConvs(mapped);
+      // Polling: não re-renderiza a lista inteira se nada mudou.
+      if (!unchanged) {
+        setConvs(mapped);
+      }
     } catch (e) {
       if (!opts?.silent) {
         setConvsError(e instanceof Error ? e.message : "Falha ao carregar conversas");
@@ -686,8 +703,8 @@ function AtendimentoPage() {
   };
   useEffect(() => {
     reloadConversations();
-    // Polling de conversas a cada 5s.
-    const id = setInterval(() => reloadConversations({ silent: true }), 5000);
+    // Polling de conversas a cada 10s (FASE 2 — 45 usuários concorrentes).
+    const id = setInterval(() => reloadConversations({ silent: true }), 10_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.tenantId, listMode, campaignSubFilter, campaignColorFilter, assigneeFilter, channelFilter]);
@@ -734,7 +751,9 @@ function AtendimentoPage() {
       setMsgsError(null);
     }
     try {
-      const data = await apiGet(`/conversations/${encodeURIComponent(convId)}/messages`);
+      const data = await apiGet(
+        `/conversations/${encodeURIComponent(convId)}/messages?limit=100`,
+      );
       if (!opts?.silent) console.log("mensagens retornadas", data);
       const list: any[] = Array.isArray(data?.messages)
         ? data.messages
@@ -742,6 +761,14 @@ function AtendimentoPage() {
         ? data
         : [];
       const incoming = list.map((m) => transformApiMessage(m, convId));
+      const fingerprint =
+        incoming.length === 0
+          ? "0"
+          : `${incoming.length}:${incoming[incoming.length - 1]?.id}:${incoming[incoming.length - 1]?.createdAt}:${incoming[incoming.length - 1]?.status}`;
+      if (opts?.silent && msgsFingerprintRef.current[convId] === fingerprint) {
+        return;
+      }
+      msgsFingerprintRef.current[convId] = fingerprint;
       setMsgs((prev) => {
         const existing = prev[convId] ?? [];
         const incomingIds = new Set(incoming.map((m) => m.id));
@@ -776,12 +803,12 @@ function AtendimentoPage() {
     }
   };
 
-  // Carrega mensagens da conversa selecionada via REST + polling 3s.
+  // Carrega mensagens da conversa selecionada via REST + polling 5s.
   useEffect(() => {
     if (!selectedId) return;
     console.log("conversation selecionada", selectedId);
     reloadMessages(selectedId);
-    const id = setInterval(() => reloadMessages(selectedId, { silent: true }), 3000);
+    const id = setInterval(() => reloadMessages(selectedId, { silent: true }), 5_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
