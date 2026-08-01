@@ -140,6 +140,8 @@ export function handleMetaWebhookGET(request: Request): Response {
   return new Response("Forbidden", { status: 403 });
 }
 
+const KNOWN_META_WEBHOOK_FIELDS = new Set(["messages", "message_template_status_update"]);
+
 function logMetaWebhookChanges(payload: unknown): void {
   for (const change of extractMetaWebhookChanges(payload)) {
     console.log("[META_WEBHOOK_CHANGE]", {
@@ -166,6 +168,17 @@ function logMetaWebhookChanges(payload: unknown): void {
         phoneNumberId: change.phoneNumberId,
         statusIds: change.statusIds,
         count: change.statusCount,
+      });
+    }
+
+    // Coexistence: registrar fields desconhecidos sem processar echo/history por suposição.
+    if (change.field && !KNOWN_META_WEBHOOK_FIELDS.has(change.field)) {
+      console.log("[META_WEBHOOK_UNKNOWN_FIELD]", {
+        field: change.field,
+        phoneNumberId: change.phoneNumberId,
+        messageCount: change.messageCount,
+        statusCount: change.statusCount,
+        note: "Payload não processado além do log seguro; aguardar fixture oficial de DEV.",
       });
     }
   }

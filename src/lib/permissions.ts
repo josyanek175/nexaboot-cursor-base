@@ -76,6 +76,13 @@ export function canSuspendTenant(actor: ActingUser): boolean {
   );
 }
 
+/** Pode iniciar Meta Coexistence (Embedded Signup). Espelha server policy. */
+export function canManageMetaCoexistence(role: string | null | undefined): boolean {
+  const r = String(role ?? "").toUpperCase();
+  if (isPlatformRole(r)) return true;
+  return r === "ADMIN_EMPRESA" || r === "ADMIN" || r === "TI";
+}
+
 // ─── Canais ──────────────────────────────────────────────────────────────────
 export function canManageChannels(actor: ActingUser): boolean {
   return actor.role === "ADMIN_GERAL" || actor.role === "TI" || actor.role === "ADMIN_EMPRESA";

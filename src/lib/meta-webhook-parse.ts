@@ -123,6 +123,18 @@ export function extractMetaWebhookChanges(payload: unknown): MetaWebhookChangeSu
   return summaries;
 }
 
+/** Fields conhecidos processados hoje; demais só logam (sem echo/history por suposição). */
+const KNOWN_META_CHANGE_FIELDS = new Set(["messages", "message_template_status_update"]);
+
+export function summarizeUnknownMetaWebhookFields(payload: unknown): Array<{
+  field: string;
+  phoneNumberId: string | null;
+}> {
+  return extractMetaWebhookChanges(payload)
+    .filter((c): c is typeof c & { field: string } => !!c.field && !KNOWN_META_CHANGE_FIELDS.has(c.field))
+    .map((c) => ({ field: c.field, phoneNumberId: c.phoneNumberId }));
+}
+
 /** Extrai phone_number_id(s) do payload padrão da Meta Cloud API. */
 export function extractMetaPhoneNumberIds(payload: unknown): string[] {
   const ids = new Set<string>();
