@@ -1,6 +1,12 @@
 // Helpers server-only para APIs de canais Meta — nunca expõem access_token.
 
 import { hasTokenEncryptionKey } from "@/lib/crypto/token-crypto.server";
+import {
+  DEFAULT_META_CONNECTION_MODE,
+  resolveMetaConnectionMode,
+  type MetaConnectionMode,
+} from "@/lib/meta-connection-mode";
+import { whatsappChannelsHasMetaConnectionModeColumn } from "@/lib/meta-coexistence.server";
 import { sql } from "@/lib/pg.server";
 import { metaWhatsAppProvider } from "@/lib/whatsapp/providers/meta-whatsapp-provider.server";
 import { META_CHANNEL_STATUSES } from "@/lib/whatsapp/providers/whatsapp-provider.types";
@@ -16,6 +22,8 @@ export type MetaChannelPublic = {
   company_id: string;
   name: string | null;
   channel_type: "meta";
+  /** Aditivo: ausente no DB legado → cloud_api. */
+  meta_connection_mode: MetaConnectionMode;
   status: string;
   waba_id: string | null;
   phone_number_id: string | null;
@@ -59,6 +67,8 @@ type MetaChannelRow = {
   last_webhook_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  /** Presente somente após migration; ausente → cloud_api. */
+  meta_connection_mode?: string | null;
 };
 
 export function isMetaChannelStatus(value: string): boolean {
@@ -81,6 +91,9 @@ export async function buildMetaChannelPublic(row: MetaChannelRow): Promise<MetaC
     company_id: row.company_id,
     name: row.name,
     channel_type: "meta",
+    meta_connection_mode: resolveMetaConnectionMode(
+      row.meta_connection_mode ?? DEFAULT_META_CONNECTION_MODE,
+    ),
     status: row.status,
     waba_id: row.waba_id,
     phone_number_id: row.phone_number_id,
@@ -115,20 +128,36 @@ export async function buildMetaChannelStatusPublic(
 
 export async function listMetaChannelsForCompany(companyId: string): Promise<MetaChannelPublic[]> {
   const s = sql();
-  const rows = await s<MetaChannelRow[]>`
-    SELECT
-      id, company_id, name, channel_type, status,
-      waba_id, phone_number_id, business_id, display_phone_number,
-      token_status, webhook_verify_token,
-      last_error_code, last_error_message, last_webhook_at,
-      created_at, updated_at
-    FROM public.whatsapp_channels
-    WHERE company_id = ${companyId}::uuid
-      AND lower(channel_type) = 'meta'
-      AND deleted_at IS NULL
-      AND active = true
-    ORDER BY created_at DESC
-  `;
+  const hasMode = await whatsappChannelsHasMetaConnectionModeColumn();
+  const rows = hasMode
+    ? await s<MetaChannelRow[]>`
+        SELECT
+          id, company_id, name, channel_type, status,
+          waba_id, phone_number_id, business_id, display_phone_number,
+          token_status, webhook_verify_token,
+          last_error_code, last_error_message, last_webhook_at,
+          created_at, updated_at, meta_connection_mode
+        FROM public.whatsapp_channels
+        WHERE company_id = ${companyId}::uuid
+          AND lower(channel_type) = 'meta'
+          AND deleted_at IS NULL
+          AND active = true
+        ORDER BY created_at DESC
+      `
+    : await s<MetaChannelRow[]>`
+        SELECT
+          id, company_id, name, channel_type, status,
+          waba_id, phone_number_id, business_id, display_phone_number,
+          token_status, webhook_verify_token,
+          last_error_code, last_error_message, last_webhook_at,
+          created_at, updated_at
+        FROM public.whatsapp_channels
+        WHERE company_id = ${companyId}::uuid
+          AND lower(channel_type) = 'meta'
+          AND deleted_at IS NULL
+          AND active = true
+        ORDER BY created_at DESC
+      `;
   return Promise.all(rows.map((row) => buildMetaChannelPublic(row)));
 }
 
@@ -137,21 +166,38 @@ export async function getMetaChannelRowForCompany(
   companyId: string,
 ): Promise<MetaChannelRow | null> {
   const s = sql();
-  const rows = await s<MetaChannelRow[]>`
-    SELECT
-      id, company_id, name, channel_type, status,
-      waba_id, phone_number_id, business_id, display_phone_number,
-      token_status, webhook_verify_token,
-      last_error_code, last_error_message, last_webhook_at,
-      created_at, updated_at
-    FROM public.whatsapp_channels
-    WHERE id = ${channelId}::uuid
-      AND company_id = ${companyId}::uuid
-      AND lower(channel_type) = 'meta'
-      AND deleted_at IS NULL
-      AND active = true
-    LIMIT 1
-  `;
+  const hasMode = await whatsappChannelsHasMetaConnectionModeColumn();
+  const rows = hasMode
+    ? await s<MetaChannelRow[]>`
+        SELECT
+          id, company_id, name, channel_type, status,
+          waba_id, phone_number_id, business_id, display_phone_number,
+          token_status, webhook_verify_token,
+          last_error_code, last_error_message, last_webhook_at,
+          created_at, updated_at, meta_connection_mode
+        FROM public.whatsapp_channels
+        WHERE id = ${channelId}::uuid
+          AND company_id = ${companyId}::uuid
+          AND lower(channel_type) = 'meta'
+          AND deleted_at IS NULL
+          AND active = true
+        LIMIT 1
+      `
+    : await s<MetaChannelRow[]>`
+        SELECT
+          id, company_id, name, channel_type, status,
+          waba_id, phone_number_id, business_id, display_phone_number,
+          token_status, webhook_verify_token,
+          last_error_code, last_error_message, last_webhook_at,
+          created_at, updated_at
+        FROM public.whatsapp_channels
+        WHERE id = ${channelId}::uuid
+          AND company_id = ${companyId}::uuid
+          AND lower(channel_type) = 'meta'
+          AND deleted_at IS NULL
+          AND active = true
+        LIMIT 1
+      `;
   return rows[0] ?? null;
 }
 

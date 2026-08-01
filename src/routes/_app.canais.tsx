@@ -7,6 +7,9 @@ import {
 import { toast } from "sonner";
 import { apiGet, apiPost, apiDelete, apiPatch } from "@/lib/api";
 import { formatChannelPhoneForDisplay } from "@/lib/phone";
+import { useAuth } from "@/lib/auth";
+import { canManageMetaCoexistence } from "@/lib/permissions";
+import { MetaCoexistenceModal } from "@/components/meta-coexistence-modal";
 
 type ChannelStatus = "disconnected" | "connecting" | "qrcode" | "connected" | "error" | string;
 
@@ -25,6 +28,7 @@ interface Channel {
   active: boolean;
   created_at: string;
   updated_at: string;
+  meta_connection_mode?: string | null;
 }
 
 export const Route = createFileRoute("/_app/canais")({
@@ -32,13 +36,18 @@ export const Route = createFileRoute("/_app/canais")({
 });
 
 function CanaisPage() {
+  const { user } = useAuth();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [evolutionConfigured, setEvolutionConfigured] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [qrChannel, setQrChannel] = useState<Channel | null>(null);
   const [metaTokenChannel, setMetaTokenChannel] = useState<Channel | null>(null);
+  const [showCoexistence, setShowCoexistence] = useState(false);
+  const [coexistenceAvailable, setCoexistenceAvailable] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const canCoexistence = canManageMetaCoexistence(user?.role);
 
   const load = useCallback(async () => {
     try {
@@ -49,15 +58,18 @@ function CanaisPage() {
             id: string;
             display_phone_number?: string | null;
             last_webhook_at?: string | null;
+            meta_connection_mode?: string | null;
           }[],
         })),
       ]);
       const metaById = new Map(
         (metaData.channels ?? []).map(
-          (m: { id: string; display_phone_number?: string | null; last_webhook_at?: string | null }) => [
-            m.id,
-            m,
-          ],
+          (m: {
+            id: string;
+            display_phone_number?: string | null;
+            last_webhook_at?: string | null;
+            meta_connection_mode?: string | null;
+          }) => [m.id, m],
         ),
       );
       const merged = (data.channels ?? []).map((c: Channel) => {
@@ -67,6 +79,7 @@ function CanaisPage() {
               ...c,
               display_phone_number: meta.display_phone_number ?? c.display_phone_number,
               last_webhook_at: meta.last_webhook_at ?? null,
+              meta_connection_mode: meta.meta_connection_mode ?? "cloud_api",
             }
           : c;
       });
@@ -80,6 +93,25 @@ function CanaisPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!canCoexistence) {
+      setCoexistenceAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        await apiGet("/meta/coexistence/config");
+        if (!cancelled) setCoexistenceAvailable(true);
+      } catch {
+        if (!cancelled) setCoexistenceAvailable(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canCoexistence]);
 
   async function refreshStatus(c: Channel) {
     const isMeta = c.channel_type?.toLowerCase() === "meta";
@@ -158,12 +190,22 @@ function CanaisPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" /> Adicionar número
-        </button>
+        <div className="flex items-center gap-2">
+          {coexistenceAvailable && (
+            <button
+              onClick={() => setShowCoexistence(true)}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              Meta Coexistence
+            </button>
+          )}
+          <button
+            onClick={() => setShowAdd(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" /> Adicionar número
+          </button>
+        </div>
       </header>
 
       {!evolutionConfigured && (
@@ -199,7 +241,9 @@ function CanaisPage() {
                     </div>
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {isMeta
-                        ? "Meta WhatsApp Cloud API"
+                        ? c.meta_connection_mode === "coexistence"
+                          ? "Meta Coexistence (Embedded Signup)"
+                          : "Meta WhatsApp Cloud API"
                         : `Instância: ${c.evolution_instance_name || "—"}`}
                     </p>
                     {phoneLabel && (
@@ -284,6 +328,16 @@ function CanaisPage() {
           channel={metaTokenChannel}
           onClose={() => { setMetaTokenChannel(null); void load(); }}
           onSaved={() => { toast.success("Token Meta salvo"); setMetaTokenChannel(null); void load(); }}
+        />
+      )}
+
+      {showCoexistence && (
+        <MetaCoexistenceModal
+          onClose={() => setShowCoexistence(false)}
+          onConnected={() => {
+            setShowCoexistence(false);
+            void load();
+          }}
         />
       )}
 

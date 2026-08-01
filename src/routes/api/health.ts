@@ -46,6 +46,10 @@ export const Route = createFileRoute("/api/health")({
           hasMetaVerifyToken: !!process.env.META_APP_VERIFY_TOKEN?.trim(),
           hasMetaAppSecret: !!process.env.META_APP_SECRET?.trim(),
           hasTokenEncryptionKey: !!process.env.META_TOKEN_ENCRYPTION_KEY?.trim(),
+          metaCoexistenceEnabled:
+            process.env.META_COEXISTENCE_ENABLED?.trim().toLowerCase() === "true" ||
+            process.env.META_COEXISTENCE_ENABLED?.trim() === "1" ||
+            process.env.META_COEXISTENCE_ENABLED?.trim().toLowerCase() === "yes",
         });
       },
     },

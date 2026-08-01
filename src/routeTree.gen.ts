@@ -84,6 +84,9 @@ import { Route as ApiWebhooksMetaDiagnosticRouteImport } from './routes/api/webh
 import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
 import { Route as ApiMetaMessagesSendTextRouteImport } from './routes/api/meta/messages/send-text'
+import { Route as ApiMetaCoexistenceExchangeRouteImport } from './routes/api/meta/coexistence/exchange'
+import { Route as ApiMetaCoexistenceConnectRouteImport } from './routes/api/meta/coexistence/connect'
+import { Route as ApiMetaCoexistenceConfigRouteImport } from './routes/api/meta/coexistence/config'
 import { Route as ApiMetaChannelsIdRouteImport } from './routes/api/meta/channels/$id'
 import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
 import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
@@ -498,6 +501,24 @@ const ApiMetaMessagesSendTextRoute = ApiMetaMessagesSendTextRouteImport.update({
   path: '/api/meta/messages/send-text',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMetaCoexistenceExchangeRoute =
+  ApiMetaCoexistenceExchangeRouteImport.update({
+    id: '/api/meta/coexistence/exchange',
+    path: '/api/meta/coexistence/exchange',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMetaCoexistenceConnectRoute =
+  ApiMetaCoexistenceConnectRouteImport.update({
+    id: '/api/meta/coexistence/connect',
+    path: '/api/meta/coexistence/connect',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMetaCoexistenceConfigRoute =
+  ApiMetaCoexistenceConfigRouteImport.update({
+    id: '/api/meta/coexistence/config',
+    path: '/api/meta/coexistence/config',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiMetaChannelsIdRoute = ApiMetaChannelsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -774,6 +795,9 @@ export interface FileRoutesByFullPath {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
+  '/api/meta/coexistence/config': typeof ApiMetaCoexistenceConfigRoute
+  '/api/meta/coexistence/connect': typeof ApiMetaCoexistenceConnectRoute
+  '/api/meta/coexistence/exchange': typeof ApiMetaCoexistenceExchangeRoute
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
@@ -882,6 +906,9 @@ export interface FileRoutesByTo {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
+  '/api/meta/coexistence/config': typeof ApiMetaCoexistenceConfigRoute
+  '/api/meta/coexistence/connect': typeof ApiMetaCoexistenceConnectRoute
+  '/api/meta/coexistence/exchange': typeof ApiMetaCoexistenceExchangeRoute
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
@@ -993,6 +1020,9 @@ export interface FileRoutesById {
   '/api/messages/$messageId/media': typeof ApiMessagesMessageIdMediaRoute
   '/api/messages/send/evolution': typeof ApiMessagesSendEvolutionRoute
   '/api/meta/channels/$id': typeof ApiMetaChannelsIdRouteWithChildren
+  '/api/meta/coexistence/config': typeof ApiMetaCoexistenceConfigRoute
+  '/api/meta/coexistence/connect': typeof ApiMetaCoexistenceConnectRoute
+  '/api/meta/coexistence/exchange': typeof ApiMetaCoexistenceExchangeRoute
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
@@ -1104,6 +1134,9 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/meta/channels/$id'
+    | '/api/meta/coexistence/config'
+    | '/api/meta/coexistence/connect'
+    | '/api/meta/coexistence/exchange'
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
@@ -1212,6 +1245,9 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/meta/channels/$id'
+    | '/api/meta/coexistence/config'
+    | '/api/meta/coexistence/connect'
+    | '/api/meta/coexistence/exchange'
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
@@ -1322,6 +1358,9 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId/media'
     | '/api/messages/send/evolution'
     | '/api/meta/channels/$id'
+    | '/api/meta/coexistence/config'
+    | '/api/meta/coexistence/connect'
+    | '/api/meta/coexistence/exchange'
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
@@ -1388,6 +1427,9 @@ export interface RootRouteChildren {
   ApiMetaChannelsRoute: typeof ApiMetaChannelsRouteWithChildren
   ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
   ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRouteWithChildren
+  ApiMetaCoexistenceConfigRoute: typeof ApiMetaCoexistenceConfigRoute
+  ApiMetaCoexistenceConnectRoute: typeof ApiMetaCoexistenceConnectRoute
+  ApiMetaCoexistenceExchangeRoute: typeof ApiMetaCoexistenceExchangeRoute
   ApiMetaMessagesSendTextRoute: typeof ApiMetaMessagesSendTextRoute
   ApiPublicWebhooksEvolutionRoute: typeof ApiPublicWebhooksEvolutionRoute
   ApiPublicWebhooksMetaRoute: typeof ApiPublicWebhooksMetaRoute
@@ -1918,6 +1960,27 @@ declare module '@tanstack/react-router' {
       path: '/api/meta/messages/send-text'
       fullPath: '/api/meta/messages/send-text'
       preLoaderRoute: typeof ApiMetaMessagesSendTextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/coexistence/exchange': {
+      id: '/api/meta/coexistence/exchange'
+      path: '/api/meta/coexistence/exchange'
+      fullPath: '/api/meta/coexistence/exchange'
+      preLoaderRoute: typeof ApiMetaCoexistenceExchangeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/coexistence/connect': {
+      id: '/api/meta/coexistence/connect'
+      path: '/api/meta/coexistence/connect'
+      fullPath: '/api/meta/coexistence/connect'
+      preLoaderRoute: typeof ApiMetaCoexistenceConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/coexistence/config': {
+      id: '/api/meta/coexistence/config'
+      path: '/api/meta/coexistence/config'
+      fullPath: '/api/meta/coexistence/config'
+      preLoaderRoute: typeof ApiMetaCoexistenceConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/meta/channels/$id': {
@@ -2537,6 +2600,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMetaChannelsRoute: ApiMetaChannelsRouteWithChildren,
   ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
   ApiWebhooksMetaRoute: ApiWebhooksMetaRouteWithChildren,
+  ApiMetaCoexistenceConfigRoute: ApiMetaCoexistenceConfigRoute,
+  ApiMetaCoexistenceConnectRoute: ApiMetaCoexistenceConnectRoute,
+  ApiMetaCoexistenceExchangeRoute: ApiMetaCoexistenceExchangeRoute,
   ApiMetaMessagesSendTextRoute: ApiMetaMessagesSendTextRoute,
   ApiPublicWebhooksEvolutionRoute: ApiPublicWebhooksEvolutionRoute,
   ApiPublicWebhooksMetaRoute: ApiPublicWebhooksMetaRoute,
