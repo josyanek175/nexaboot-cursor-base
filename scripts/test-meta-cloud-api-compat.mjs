@@ -54,7 +54,7 @@ const coexistencePolicy = read("src/lib/meta-coexistence-policy.server.ts");
 check("flag META_COEXISTENCE_ENABLED no policy", coexistencePolicy.includes("META_COEXISTENCE_ENABLED"));
 
 const connectRoute = read("src/routes/api/meta/coexistence/connect.ts");
-check("connect gated pela flag", connectRoute.includes("isMetaCoexistenceEnabled"));
+check("connect gated pela flag", connectRoute.includes("assertMetaCoexistenceAccess"));
 check("connect exige migration", connectRoute.includes("migration_required"));
 check("connect NÃO troca code", !connectRoute.includes("exchangeAuthorizationCode"));
 check("connect rejeita fields proibidos", connectRoute.includes("findForbiddenConnectField"));
@@ -64,6 +64,25 @@ check(
   connectRoute.includes("completeCoexistenceConnectTransactional"),
 );
 check("connect sem Graph fetch", !/fetch\s*\(/.test(connectRoute));
+
+const startSrc = read("src/routes/api/meta/embedded-signup/start.ts");
+const completeSrc = read("src/routes/api/meta/embedded-signup/complete.ts");
+const connStatusSrc = read("src/routes/api/meta/channels/$id/connection-status.ts");
+check("embedded-signup/start gated", startSrc.includes("assertMetaCoexistenceAccess"));
+check("embedded-signup/start cria CSRF", startSrc.includes("createCoexistenceCsrfState"));
+check("embedded-signup/complete gated", completeSrc.includes("assertMetaCoexistenceAccess"));
+check("embedded-signup/complete troca code 1x", completeSrc.includes("exchangeAuthorizationCode"));
+check("embedded-signup/complete assina WABA", completeSrc.includes("subscribeAppToWaba"));
+check("embedded-signup/complete valida inscrição", completeSrc.includes("verifyAppSubscribedToWaba"));
+check("embedded-signup/complete sem devolver token", !/Response\.json\([\s\S]*access_token\s*:/.test(completeSrc) && !completeSrc.includes("access_token: exchanged"));
+check(
+  "embedded-signup/complete não inclui access_token na resposta",
+  !completeSrc.includes("access_token:") ||
+    (completeSrc.includes("createCoexistenceOnboarding") &&
+      !/return Response\.json\([^)]*access_token/.test(completeSrc)),
+);
+check("connection-status sem secrets", !connStatusSrc.includes("access_token_ciphertext"));
+check("connection-status expõe connection_mode", connStatusSrc.includes("connection_mode"));
 
 const channelsCreate = read("src/routes/api/meta/channels.ts");
 check(

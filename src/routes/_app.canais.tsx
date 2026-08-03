@@ -102,8 +102,10 @@ function CanaisPage() {
     let cancelled = false;
     void (async () => {
       try {
-        await apiGet("/meta/coexistence/config");
-        if (!cancelled) setCoexistenceAvailable(true);
+        const health = await apiGet("/health");
+        if (!cancelled) {
+          setCoexistenceAvailable(Boolean(health?.metaCoexistenceEnabled));
+        }
       } catch {
         if (!cancelled) setCoexistenceAvailable(false);
       }
@@ -196,7 +198,7 @@ function CanaisPage() {
               onClick={() => setShowCoexistence(true)}
               className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
             >
-              Meta Coexistence
+              Conectar número existente em coexistência
             </button>
           )}
           <button

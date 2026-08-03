@@ -84,6 +84,8 @@ import { Route as ApiWebhooksMetaDiagnosticRouteImport } from './routes/api/webh
 import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
 import { Route as ApiMetaMessagesSendTextRouteImport } from './routes/api/meta/messages/send-text'
+import { Route as ApiMetaEmbeddedSignupStartRouteImport } from './routes/api/meta/embedded-signup/start'
+import { Route as ApiMetaEmbeddedSignupCompleteRouteImport } from './routes/api/meta/embedded-signup/complete'
 import { Route as ApiMetaCoexistenceExchangeRouteImport } from './routes/api/meta/coexistence/exchange'
 import { Route as ApiMetaCoexistenceConnectRouteImport } from './routes/api/meta/coexistence/connect'
 import { Route as ApiMetaCoexistenceConfigRouteImport } from './routes/api/meta/coexistence/config'
@@ -110,6 +112,7 @@ import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaig
 import { Route as ApiMetaChannelsIdTokenRouteImport } from './routes/api/meta/channels/$id/token'
 import { Route as ApiMetaChannelsIdTemplatesRouteImport } from './routes/api/meta/channels/$id/templates'
 import { Route as ApiMetaChannelsIdStatusRouteImport } from './routes/api/meta/channels/$id/status'
+import { Route as ApiMetaChannelsIdConnectionStatusRouteImport } from './routes/api/meta/channels/$id/connection-status'
 import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
 import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
 import { Route as ApiEvolutionChannelsIdStatusRouteImport } from './routes/api/evolution/channels/$id/status'
@@ -501,6 +504,18 @@ const ApiMetaMessagesSendTextRoute = ApiMetaMessagesSendTextRouteImport.update({
   path: '/api/meta/messages/send-text',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMetaEmbeddedSignupStartRoute =
+  ApiMetaEmbeddedSignupStartRouteImport.update({
+    id: '/api/meta/embedded-signup/start',
+    path: '/api/meta/embedded-signup/start',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMetaEmbeddedSignupCompleteRoute =
+  ApiMetaEmbeddedSignupCompleteRouteImport.update({
+    id: '/api/meta/embedded-signup/complete',
+    path: '/api/meta/embedded-signup/complete',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiMetaCoexistenceExchangeRoute =
   ApiMetaCoexistenceExchangeRouteImport.update({
     id: '/api/meta/coexistence/exchange',
@@ -644,6 +659,12 @@ const ApiMetaChannelsIdStatusRoute = ApiMetaChannelsIdStatusRouteImport.update({
   path: '/status',
   getParentRoute: () => ApiMetaChannelsIdRoute,
 } as any)
+const ApiMetaChannelsIdConnectionStatusRoute =
+  ApiMetaChannelsIdConnectionStatusRouteImport.update({
+    id: '/connection-status',
+    path: '/connection-status',
+    getParentRoute: () => ApiMetaChannelsIdRoute,
+  } as any)
 const ApiMessagesSendMediaEvolutionRoute =
   ApiMessagesSendMediaEvolutionRouteImport.update({
     id: '/media/evolution',
@@ -798,6 +819,8 @@ export interface FileRoutesByFullPath {
   '/api/meta/coexistence/config': typeof ApiMetaCoexistenceConfigRoute
   '/api/meta/coexistence/connect': typeof ApiMetaCoexistenceConnectRoute
   '/api/meta/coexistence/exchange': typeof ApiMetaCoexistenceExchangeRoute
+  '/api/meta/embedded-signup/complete': typeof ApiMetaEmbeddedSignupCompleteRoute
+  '/api/meta/embedded-signup/start': typeof ApiMetaEmbeddedSignupStartRoute
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
@@ -812,6 +835,7 @@ export interface FileRoutesByFullPath {
   '/api/evolution/channels/$id/status': typeof ApiEvolutionChannelsIdStatusRoute
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
+  '/api/meta/channels/$id/connection-status': typeof ApiMetaChannelsIdConnectionStatusRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
   '/api/meta/channels/$id/templates': typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
@@ -909,6 +933,8 @@ export interface FileRoutesByTo {
   '/api/meta/coexistence/config': typeof ApiMetaCoexistenceConfigRoute
   '/api/meta/coexistence/connect': typeof ApiMetaCoexistenceConnectRoute
   '/api/meta/coexistence/exchange': typeof ApiMetaCoexistenceExchangeRoute
+  '/api/meta/embedded-signup/complete': typeof ApiMetaEmbeddedSignupCompleteRoute
+  '/api/meta/embedded-signup/start': typeof ApiMetaEmbeddedSignupStartRoute
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
@@ -923,6 +949,7 @@ export interface FileRoutesByTo {
   '/api/evolution/channels/$id/status': typeof ApiEvolutionChannelsIdStatusRoute
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
+  '/api/meta/channels/$id/connection-status': typeof ApiMetaChannelsIdConnectionStatusRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
   '/api/meta/channels/$id/templates': typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
@@ -1023,6 +1050,8 @@ export interface FileRoutesById {
   '/api/meta/coexistence/config': typeof ApiMetaCoexistenceConfigRoute
   '/api/meta/coexistence/connect': typeof ApiMetaCoexistenceConnectRoute
   '/api/meta/coexistence/exchange': typeof ApiMetaCoexistenceExchangeRoute
+  '/api/meta/embedded-signup/complete': typeof ApiMetaEmbeddedSignupCompleteRoute
+  '/api/meta/embedded-signup/start': typeof ApiMetaEmbeddedSignupStartRoute
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
@@ -1037,6 +1066,7 @@ export interface FileRoutesById {
   '/api/evolution/channels/$id/status': typeof ApiEvolutionChannelsIdStatusRoute
   '/api/internal-chat/messages/$id/attachment': typeof ApiInternalChatMessagesIdAttachmentRoute
   '/api/messages/send/media/evolution': typeof ApiMessagesSendMediaEvolutionRoute
+  '/api/meta/channels/$id/connection-status': typeof ApiMetaChannelsIdConnectionStatusRoute
   '/api/meta/channels/$id/status': typeof ApiMetaChannelsIdStatusRoute
   '/api/meta/channels/$id/templates': typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   '/api/meta/channels/$id/token': typeof ApiMetaChannelsIdTokenRoute
@@ -1137,6 +1167,8 @@ export interface FileRouteTypes {
     | '/api/meta/coexistence/config'
     | '/api/meta/coexistence/connect'
     | '/api/meta/coexistence/exchange'
+    | '/api/meta/embedded-signup/complete'
+    | '/api/meta/embedded-signup/start'
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
@@ -1151,6 +1183,7 @@ export interface FileRouteTypes {
     | '/api/evolution/channels/$id/status'
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
+    | '/api/meta/channels/$id/connection-status'
     | '/api/meta/channels/$id/status'
     | '/api/meta/channels/$id/templates'
     | '/api/meta/channels/$id/token'
@@ -1248,6 +1281,8 @@ export interface FileRouteTypes {
     | '/api/meta/coexistence/config'
     | '/api/meta/coexistence/connect'
     | '/api/meta/coexistence/exchange'
+    | '/api/meta/embedded-signup/complete'
+    | '/api/meta/embedded-signup/start'
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
@@ -1262,6 +1297,7 @@ export interface FileRouteTypes {
     | '/api/evolution/channels/$id/status'
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
+    | '/api/meta/channels/$id/connection-status'
     | '/api/meta/channels/$id/status'
     | '/api/meta/channels/$id/templates'
     | '/api/meta/channels/$id/token'
@@ -1361,6 +1397,8 @@ export interface FileRouteTypes {
     | '/api/meta/coexistence/config'
     | '/api/meta/coexistence/connect'
     | '/api/meta/coexistence/exchange'
+    | '/api/meta/embedded-signup/complete'
+    | '/api/meta/embedded-signup/start'
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
@@ -1375,6 +1413,7 @@ export interface FileRouteTypes {
     | '/api/evolution/channels/$id/status'
     | '/api/internal-chat/messages/$id/attachment'
     | '/api/messages/send/media/evolution'
+    | '/api/meta/channels/$id/connection-status'
     | '/api/meta/channels/$id/status'
     | '/api/meta/channels/$id/templates'
     | '/api/meta/channels/$id/token'
@@ -1430,6 +1469,8 @@ export interface RootRouteChildren {
   ApiMetaCoexistenceConfigRoute: typeof ApiMetaCoexistenceConfigRoute
   ApiMetaCoexistenceConnectRoute: typeof ApiMetaCoexistenceConnectRoute
   ApiMetaCoexistenceExchangeRoute: typeof ApiMetaCoexistenceExchangeRoute
+  ApiMetaEmbeddedSignupCompleteRoute: typeof ApiMetaEmbeddedSignupCompleteRoute
+  ApiMetaEmbeddedSignupStartRoute: typeof ApiMetaEmbeddedSignupStartRoute
   ApiMetaMessagesSendTextRoute: typeof ApiMetaMessagesSendTextRoute
   ApiPublicWebhooksEvolutionRoute: typeof ApiPublicWebhooksEvolutionRoute
   ApiPublicWebhooksMetaRoute: typeof ApiPublicWebhooksMetaRoute
@@ -1962,6 +2003,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMetaMessagesSendTextRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/meta/embedded-signup/start': {
+      id: '/api/meta/embedded-signup/start'
+      path: '/api/meta/embedded-signup/start'
+      fullPath: '/api/meta/embedded-signup/start'
+      preLoaderRoute: typeof ApiMetaEmbeddedSignupStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/embedded-signup/complete': {
+      id: '/api/meta/embedded-signup/complete'
+      path: '/api/meta/embedded-signup/complete'
+      fullPath: '/api/meta/embedded-signup/complete'
+      preLoaderRoute: typeof ApiMetaEmbeddedSignupCompleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/meta/coexistence/exchange': {
       id: '/api/meta/coexistence/exchange'
       path: '/api/meta/coexistence/exchange'
@@ -2142,6 +2197,13 @@ declare module '@tanstack/react-router' {
       path: '/status'
       fullPath: '/api/meta/channels/$id/status'
       preLoaderRoute: typeof ApiMetaChannelsIdStatusRouteImport
+      parentRoute: typeof ApiMetaChannelsIdRoute
+    }
+    '/api/meta/channels/$id/connection-status': {
+      id: '/api/meta/channels/$id/connection-status'
+      path: '/connection-status'
+      fullPath: '/api/meta/channels/$id/connection-status'
+      preLoaderRoute: typeof ApiMetaChannelsIdConnectionStatusRouteImport
       parentRoute: typeof ApiMetaChannelsIdRoute
     }
     '/api/messages/send/media/evolution': {
@@ -2514,12 +2576,15 @@ const ApiMetaChannelsIdTemplatesRouteWithChildren =
   )
 
 interface ApiMetaChannelsIdRouteChildren {
+  ApiMetaChannelsIdConnectionStatusRoute: typeof ApiMetaChannelsIdConnectionStatusRoute
   ApiMetaChannelsIdStatusRoute: typeof ApiMetaChannelsIdStatusRoute
   ApiMetaChannelsIdTemplatesRoute: typeof ApiMetaChannelsIdTemplatesRouteWithChildren
   ApiMetaChannelsIdTokenRoute: typeof ApiMetaChannelsIdTokenRoute
 }
 
 const ApiMetaChannelsIdRouteChildren: ApiMetaChannelsIdRouteChildren = {
+  ApiMetaChannelsIdConnectionStatusRoute:
+    ApiMetaChannelsIdConnectionStatusRoute,
   ApiMetaChannelsIdStatusRoute: ApiMetaChannelsIdStatusRoute,
   ApiMetaChannelsIdTemplatesRoute: ApiMetaChannelsIdTemplatesRouteWithChildren,
   ApiMetaChannelsIdTokenRoute: ApiMetaChannelsIdTokenRoute,
@@ -2603,6 +2668,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMetaCoexistenceConfigRoute: ApiMetaCoexistenceConfigRoute,
   ApiMetaCoexistenceConnectRoute: ApiMetaCoexistenceConnectRoute,
   ApiMetaCoexistenceExchangeRoute: ApiMetaCoexistenceExchangeRoute,
+  ApiMetaEmbeddedSignupCompleteRoute: ApiMetaEmbeddedSignupCompleteRoute,
+  ApiMetaEmbeddedSignupStartRoute: ApiMetaEmbeddedSignupStartRoute,
   ApiMetaMessagesSendTextRoute: ApiMetaMessagesSendTextRoute,
   ApiPublicWebhooksEvolutionRoute: ApiPublicWebhooksEvolutionRoute,
   ApiPublicWebhooksMetaRoute: ApiPublicWebhooksMetaRoute,

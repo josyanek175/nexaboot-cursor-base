@@ -1,5 +1,5 @@
-// GET /api/meta/coexistence/config
-// Config pública + CSRF state. 404 se META_COEXISTENCE_ENABLED off.
+// POST /api/meta/embedded-signup/start
+// Inicia sessão Embedded Signup (CSRF + config pública). Sem secrets.
 import { createFileRoute } from "@tanstack/react-router";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
@@ -14,10 +14,10 @@ import {
   createCoexistenceCsrfState,
 } from "@/lib/meta-coexistence-onboarding.server";
 
-export const Route = createFileRoute("/api/meta/coexistence/config")({
+export const Route = createFileRoute("/api/meta/embedded-signup/start")({
   server: {
     handlers: {
-      GET: async () => {
+      POST: async () => {
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -51,15 +51,15 @@ export const Route = createFileRoute("/api/meta/coexistence/config")({
         const csrfState = await createCoexistenceCsrfState(companyId, uid);
 
         return Response.json({
-          enabled: true,
-          meta_connection_mode: "coexistence",
-          migrationApplied,
-          onboardingTablesReady: true,
+          ok: true,
+          flow: "embedded_signup_coexistence",
+          connection_mode: "coexistence",
+          state: csrfState,
           appId: pub.appId,
           configId: pub.configId,
           graphVersion: pub.graphVersion,
           redirectUri: pub.redirectUri,
-          csrf_state: csrfState,
+          migrationApplied,
           ready: Boolean(pub.appId && pub.configId && migrationApplied),
         });
       },

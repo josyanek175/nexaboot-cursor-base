@@ -172,6 +172,7 @@ function logMetaWebhookChanges(payload: unknown): void {
     }
 
     // Coexistence: registrar fields desconhecidos sem processar echo/history por suposição.
+    // smb_message_echoes / history exigem fixture oficial antes de alterar direction/origin.
     if (change.field && !KNOWN_META_WEBHOOK_FIELDS.has(change.field)) {
       console.log("[META_WEBHOOK_UNKNOWN_FIELD]", {
         field: change.field,

@@ -13,7 +13,10 @@ import {
 import {
   canManageMetaCoexistence,
   getMetaCoexistencePublicConfig,
+  isCompanyAllowedForMetaCoexistence,
   isMetaCoexistenceEnabled,
+  assertMetaCoexistenceAccess,
+  parseMetaCoexistenceAllowedCompanyIds,
 } from "../src/lib/meta-coexistence-policy.server.ts";
 import { summarizeUnknownMetaWebhookFields } from "../src/lib/meta-webhook-parse.ts";
 
@@ -44,8 +47,71 @@ check("reject invalid mode", isMetaConnectionMode("evolution") === false);
 
 // ── Auth roles ──────────────────────────────────────────────────────────────
 check("SUPER_ADMIN can coexistence", canManageMetaCoexistence("SUPER_ADMIN"));
-check("ADMIN_EMPRESA can coexistence", canManageMetaCoexistence("ADMIN_EMPRESA"));
+check("TI can coexistence", canManageMetaCoexistence("TI"));
+check("ADMIN_EMPRESA cannot coexistence", canManageMetaCoexistence("ADMIN_EMPRESA") === false);
+check("ADMIN_GERAL cannot coexistence", canManageMetaCoexistence("ADMIN_GERAL") === false);
 check("ATENDENTE cannot coexistence", canManageMetaCoexistence("ATENDENTE") === false);
+
+const companyA = "11111111-1111-1111-1111-111111111111";
+const companyB = "22222222-2222-2222-2222-222222222222";
+check(
+  "allowlist vazia = ninguém",
+  isCompanyAllowedForMetaCoexistence(companyA, { META_COEXISTENCE_ALLOWED_COMPANY_IDS: "" }) ===
+    false,
+);
+check(
+  "allowlist ausente = ninguém",
+  isCompanyAllowedForMetaCoexistence(companyA, {}) === false,
+);
+check(
+  "allowlist inclui empresa",
+  isCompanyAllowedForMetaCoexistence(companyA, {
+    META_COEXISTENCE_ALLOWED_COMPANY_IDS: `${companyA},${companyB}`,
+  }) === true,
+);
+check(
+  "allowlist exclui outra empresa",
+  isCompanyAllowedForMetaCoexistence(companyB, {
+    META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA,
+  }) === false,
+);
+check(
+  "parse allowlist trim",
+  parseMetaCoexistenceAllowedCompanyIds({
+    META_COEXISTENCE_ALLOWED_COMPANY_IDS: ` ${companyA} , ${companyB} `,
+  }).length === 2,
+);
+
+const gateFlagOff = assertMetaCoexistenceAccess({
+  role: "SUPER_ADMIN",
+  companyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "false", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check("gate flag false = 404", gateFlagOff instanceof Response && gateFlagOff.status === 404);
+
+const gateEmptyAllow = assertMetaCoexistenceAccess({
+  role: "SUPER_ADMIN",
+  companyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: "" },
+});
+check(
+  "gate allowlist vazia = 403 mesmo SUPER_ADMIN",
+  gateEmptyAllow instanceof Response && gateEmptyAllow.status === 403,
+);
+
+const gateRole = assertMetaCoexistenceAccess({
+  role: "ADMIN_EMPRESA",
+  companyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check("gate role ADMIN_EMPRESA = 403", gateRole instanceof Response && gateRole.status === 403);
+
+const gateOk = assertMetaCoexistenceAccess({
+  role: "TI",
+  companyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check("gate TI + allowlist = ok", gateOk === null);
 
 // ── Public config sem secrets ───────────────────────────────────────────────
 const pub = getMetaCoexistencePublicConfig({
