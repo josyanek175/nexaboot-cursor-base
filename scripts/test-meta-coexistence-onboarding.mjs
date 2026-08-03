@@ -224,11 +224,13 @@ check(
   (graphSrc.match(/oauth\/access_token/g) || []).length === 1,
 );
 
-// Modal: não envia code no connect
+// Modal: Embedded Signup start/complete (sem token no browser)
 const modal = read("src/components/meta-coexistence-modal.tsx");
-check("modal exchange com code+state", modal.includes("/meta/coexistence/exchange"));
-check("modal connect só onboarding_id", modal.includes("onboarding_id: onboarding.onboarding_id"));
-check("modal connect sem code:", !modal.includes("code: sessionCode") && !modal.includes("code: code"));
+check("modal usa embedded-signup/start", modal.includes("/meta/embedded-signup/start"));
+check("modal usa embedded-signup/complete", modal.includes("/meta/embedded-signup/complete"));
+check("modal estados oficiais", modal.includes("aguardando_confirmacao") && modal.includes("validando"));
+check("modal sem localStorage de token", !modal.includes("localStorage"));
+check("modal label coexistência", modal.includes("Conectar número existente em coexistência"));
 
 // MetaTokenModal intacto
 const canais = read("src/routes/_app.canais.tsx");
@@ -247,7 +249,8 @@ check("lookup sem meta_connection_mode", !evo.includes("meta_connection_mode"));
 
 // Roles
 check("ATENDENTE blocked", canManageMetaCoexistence("ATENDENTE") === false);
-check("ADMIN_EMPRESA ok", canManageMetaCoexistence("ADMIN_EMPRESA") === true);
+check("ADMIN_EMPRESA blocked", canManageMetaCoexistence("ADMIN_EMPRESA") === false);
+check("TI ok", canManageMetaCoexistence("TI") === true);
 
 // Logs: endpoints não logam code/token variáveis
 check(

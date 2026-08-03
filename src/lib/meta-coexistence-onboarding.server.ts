@@ -154,6 +154,10 @@ export type ConnectTransactionalInput = {
   /** Se omitido, usa display_phone_number do onboarding. */
   channelName?: string | null;
   embeddedSignupConfigId: string | null;
+  /** Resultado da inscrição WABA (Graph fora da TX). */
+  webhookSubscriptionStatus?: string | null;
+  webhookSubscribedAt?: Date | null;
+  verifiedName?: string | null;
 };
 
 export type ConnectTransactionalResult =
@@ -246,8 +250,12 @@ export async function completeCoexistenceConnectTransactional(
 
       const channelName =
         input.channelName?.trim() ||
+        input.verifiedName?.trim() ||
         row.display_phone_number ||
         `Meta Coexistence ${row.phone_number_id}`;
+
+      const webhookStatus = input.webhookSubscriptionStatus ?? null;
+      const webhookAt = input.webhookSubscribedAt ?? null;
 
       let channelId: string;
 
@@ -266,6 +274,9 @@ export async function completeCoexistenceConnectTransactional(
               embedded_signup_config_id = ${input.embeddedSignupConfigId},
               coexistence_status = 'connected',
               onboarding_completed_at = now(),
+              connected_at = COALESCE(connected_at, now()),
+              webhook_subscription_status = ${webhookStatus},
+              webhook_subscribed_at = ${webhookAt},
               token_expires_at = ${tokenExpiresAt},
               token_status = 'pending',
               active = true,
@@ -283,7 +294,8 @@ export async function completeCoexistenceConnectTransactional(
               waba_id, phone_number_id, business_id, display_phone_number,
               webhook_verify_token, token_status, active,
               meta_connection_mode, embedded_signup_config_id, coexistence_status,
-              onboarding_completed_at, token_expires_at
+              onboarding_completed_at, connected_at,
+              webhook_subscription_status, webhook_subscribed_at, token_expires_at
             ) VALUES (
               ${input.companyId}::uuid,
               ${channelName},
@@ -301,6 +313,9 @@ export async function completeCoexistenceConnectTransactional(
               ${input.embeddedSignupConfigId},
               'connected',
               now(),
+              now(),
+              ${webhookStatus},
+              ${webhookAt},
               ${tokenExpiresAt}
             )
             RETURNING id
@@ -310,6 +325,11 @@ export async function completeCoexistenceConnectTransactional(
           const msg = e instanceof Error ? e.message : String(e);
           if (msg.includes("idx_channels_meta_phone_number_id") || msg.includes("duplicate key")) {
             throw new CoexistenceConnectTxError("phone_number_id_already_exists");
+          }
+          // Colunas connected_at / webhook_subscribed_at podem faltar se migration parcial.
+          if (msg.includes("connected_at") || msg.includes("webhook_subscribed_at")) {
+            console.error("[META_COEXISTENCE_CREATE_FAIL]", { error: "migration_columns_missing" });
+            throw new CoexistenceConnectTxError("migration_required");
           }
           console.error("[META_COEXISTENCE_CREATE_FAIL]", { error: "insert_failed" });
           throw new CoexistenceConnectTxError("create_failed");

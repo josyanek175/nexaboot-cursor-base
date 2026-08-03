@@ -14,11 +14,8 @@ import {
   findForbiddenConnectField,
 } from "@/lib/meta-coexistence-connect-body";
 import {
-  canManageMetaCoexistence,
+  assertMetaCoexistenceAccess,
   getMetaCoexistencePublicConfig,
-  isMetaCoexistenceEnabled,
-  metaCoexistenceDisabledResponse,
-  metaCoexistenceForbiddenResponse,
 } from "@/lib/meta-coexistence-policy.server";
 import { whatsappChannelsHasMetaConnectionModeColumn } from "@/lib/meta-coexistence.server";
 import {
@@ -40,6 +37,7 @@ const ERROR_STATUS: Record<string, number> = {
   phone_number_id_already_exists: 409,
   missing_encryption_key: 503,
   create_failed: 500,
+  migration_required: 503,
 };
 
 function connectErrorResponse(code: string): Response {
@@ -59,10 +57,6 @@ export const Route = createFileRoute("/api/meta/coexistence/connect")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        if (!isMetaCoexistenceEnabled()) {
-          return metaCoexistenceDisabledResponse();
-        }
-
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -72,9 +66,11 @@ export const Route = createFileRoute("/api/meta/coexistence/connect")({
           return Response.json({ error: "unauthenticated" }, { status: 401 });
         }
         const info = await getCurrentUserCompanyInfo(uid);
-        if (!canManageMetaCoexistence(info.role)) {
-          return metaCoexistenceForbiddenResponse();
-        }
+        const gate = assertMetaCoexistenceAccess({
+          role: info.role,
+          companyId,
+        });
+        if (gate) return gate;
 
         if (!(await coexistenceOnboardingTablesReady())) {
           return Response.json({ error: "migration_required" }, { status: 503 });

@@ -8,6 +8,7 @@ export type GraphWhatsAppAssets = {
   phoneNumberId: string;
   businessId: string | null;
   displayPhoneNumber: string | null;
+  verifiedName: string | null;
 };
 
 export type SessionInfoHint = {
@@ -56,7 +57,7 @@ async function graphGet(
 async function verifyPhoneNumber(
   phoneNumberId: string,
   accessToken: string,
-): Promise<{ displayPhoneNumber: string | null } | null> {
+): Promise<{ displayPhoneNumber: string | null; verifiedName: string | null } | null> {
   const result = await graphGet(
     `/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name`,
     accessToken,
@@ -66,20 +67,21 @@ async function verifyPhoneNumber(
   if (id && id !== phoneNumberId) return null;
   return {
     displayPhoneNumber: readString(result.json.display_phone_number),
+    verifiedName: readString(result.json.verified_name),
   };
 }
 
 async function listPhoneNumbersForWaba(
   wabaId: string,
   accessToken: string,
-): Promise<Array<{ id: string; displayPhoneNumber: string | null }>> {
+): Promise<Array<{ id: string; displayPhoneNumber: string | null; verifiedName: string | null }>> {
   const result = await graphGet(
-    `/${encodeURIComponent(wabaId)}/phone_numbers?fields=id,display_phone_number`,
+    `/${encodeURIComponent(wabaId)}/phone_numbers?fields=id,display_phone_number,verified_name`,
     accessToken,
   );
   if (!result.ok) return [];
   const data = Array.isArray(result.json.data) ? result.json.data : [];
-  const out: Array<{ id: string; displayPhoneNumber: string | null }> = [];
+  const out: Array<{ id: string; displayPhoneNumber: string | null; verifiedName: string | null }> = [];
   for (const item of data) {
     const rec = asRecord(item);
     const id = rec ? readString(rec.id) : null;
@@ -87,6 +89,7 @@ async function listPhoneNumbersForWaba(
     out.push({
       id,
       displayPhoneNumber: rec ? readString(rec.display_phone_number) : null,
+      verifiedName: rec ? readString(rec.verified_name) : null,
     });
   }
   return out;
@@ -117,6 +120,7 @@ export async function resolveWhatsAppAssetsFromToken(
         phoneNumberId: hintPhone,
         businessId: hintBusiness,
         displayPhoneNumber: match.displayPhoneNumber ?? hintDisplay,
+        verifiedName: match.verifiedName,
       };
     }
     return {
@@ -124,6 +128,7 @@ export async function resolveWhatsAppAssetsFromToken(
       phoneNumberId: hintPhone,
       businessId: hintBusiness,
       displayPhoneNumber: verified.displayPhoneNumber ?? hintDisplay,
+      verifiedName: verified.verifiedName,
     };
   }
 
@@ -139,6 +144,7 @@ export async function resolveWhatsAppAssetsFromToken(
       phoneNumberId: chosen.id,
       businessId: hintBusiness,
       displayPhoneNumber: chosen.displayPhoneNumber ?? hintDisplay,
+      verifiedName: chosen.verifiedName,
     };
   }
 
@@ -168,6 +174,7 @@ export async function resolveWhatsAppAssetsFromToken(
               phoneNumberId: phones[0].id,
               businessId: hintBusiness,
               displayPhoneNumber: phones[0].displayPhoneNumber ?? hintDisplay,
+              verifiedName: phones[0].verifiedName,
             };
           }
         }
@@ -178,6 +185,63 @@ export async function resolveWhatsAppAssetsFromToken(
   }
 
   return { error: "graph_assets_unavailable" };
+}
+
+/**
+ * Assina o app na WABA para receber webhooks (POST /{waba-id}/subscribed_apps).
+ * Não loga token.
+ */
+export async function subscribeAppToWaba(
+  wabaId: string,
+  accessToken: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const pub = getMetaCoexistencePublicConfig();
+  const url = `https://graph.facebook.com/${pub.graphVersion}/${encodeURIComponent(wabaId)}/subscribed_apps`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok || json.error) {
+      console.error("[META_WABA_SUBSCRIBE_FAIL]", {
+        status: res.status,
+        hasError: Boolean(json.error),
+      });
+      return { ok: false, reason: "subscribe_rejected" };
+    }
+    return { ok: true };
+  } catch {
+    console.error("[META_WABA_SUBSCRIBE_FAIL]", { network: true });
+    return { ok: false, reason: "subscribe_network" };
+  }
+}
+
+/**
+ * Valida inscrição do app na WABA (GET /{waba-id}/subscribed_apps).
+ */
+export async function verifyAppSubscribedToWaba(
+  wabaId: string,
+  accessToken: string,
+): Promise<boolean> {
+  const pub = getMetaCoexistencePublicConfig();
+  const appId = pub.appId;
+  const result = await graphGet(
+    `/${encodeURIComponent(wabaId)}/subscribed_apps`,
+    accessToken,
+  );
+  if (!result.ok) return false;
+  const data = Array.isArray(result.json.data) ? result.json.data : [];
+  if (!appId) {
+    // Sem META_APP_ID não conseguimos casar; aceita se a lista não veio vazia após POST ok.
+    return data.length > 0;
+  }
+  for (const item of data) {
+    const rec = asRecord(item);
+    const id = rec ? readString(rec.id) : null;
+    if (id === appId) return true;
+  }
+  return false;
 }
 
 /**
