@@ -98,28 +98,44 @@ export function canViewReports(actor: ActingUser): boolean {
 }
 
 // ─── Campanhas ───────────────────────────────────────────────────────────────
-/** Visualizar módulo Campanhas — exceto ATENDENTE e ATENDENTE_GERAL. */
+/** Visualizar módulo Campanhas — ATENDENTE incluído; ATENDENTE_GERAL permanece excluído. */
 export function canViewCampaigns(actor: ActingUser): boolean {
-  return actor.role !== "ATENDENTE" && actor.role !== "ATENDENTE_GERAL";
+  return actor.role !== "ATENDENTE_GERAL";
 }
 
-/** Criar/editar campanhas e gerenciar público. */
+/** Criar/editar campanhas, público, disparo — inclui ATENDENTE (escopo da própria empresa). */
 export function canManageCampaigns(actor: ActingUser): boolean {
   return (
     isPlatformRole(actor.role as string) ||
     actor.role === "ADMIN_EMPRESA" ||
     actor.role === "GERENTE" ||
-    actor.role === "SUPERVISOR"
+    actor.role === "SUPERVISOR" ||
+    actor.role === "ATENDENTE"
   );
 }
 
-/** Excluir campanha em rascunho — SUPERVISOR não pode. */
+/** Excluir campanha em rascunho — SUPERVISOR e ATENDENTE não podem. */
 export function canDeleteCampaign(actor: ActingUser): boolean {
   return (
     isPlatformRole(actor.role as string) ||
     actor.role === "ADMIN_EMPRESA" ||
     actor.role === "GERENTE"
   );
+}
+
+/**
+ * Pausar/retomar disparo.
+ * ATENDENTE: somente campanhas que ele criou.
+ * Demais perfis com manage: qualquer campanha da empresa (já escopada no backend).
+ */
+export function canPauseResumeCampaign(
+  actor: ActingUser,
+  createdByUserId: string | null | undefined,
+): boolean {
+  if (!canManageCampaigns(actor)) return false;
+  if (actor.role !== "ATENDENTE") return true;
+  const creator = String(createdByUserId ?? "").trim();
+  return creator.length > 0 && creator === actor.id;
 }
 
 /** Menu e módulo Campanhas: perfil autorizado + empresa operacional válida. */

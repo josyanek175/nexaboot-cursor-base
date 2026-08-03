@@ -17,7 +17,12 @@ export const Route = createFileRoute("/api/campaigns/$id/pause")({
         if (ctx instanceof Response) return ctx;
 
         try {
-          const campaign = await pauseCampaignManually(ctx.companyId, params.id, ctx.userId);
+          const campaign = await pauseCampaignManually(
+            ctx.companyId,
+            params.id,
+            ctx.userId,
+            ctx.actor,
+          );
           return Response.json({
             success: true,
             campaignId: campaign.id,
@@ -30,6 +35,7 @@ export const Route = createFileRoute("/api/campaigns/$id/pause")({
           const map: Record<string, number> = {
             not_found: 404,
             not_pausable: 409,
+            forbidden_not_owner: 403,
           };
           if (map[msg]) {
             return Response.json({ success: false, error: msg }, { status: map[msg] });

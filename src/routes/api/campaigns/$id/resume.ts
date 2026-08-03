@@ -19,7 +19,12 @@ export const Route = createFileRoute("/api/campaigns/$id/resume")({
         if (ctx instanceof Response) return ctx;
 
         try {
-          const campaign = await resumeCampaignManually(ctx.companyId, params.id, ctx.userId);
+          const campaign = await resumeCampaignManually(
+            ctx.companyId,
+            params.id,
+            ctx.userId,
+            ctx.actor,
+          );
 
           let tickResult = null;
           try {
@@ -44,6 +49,7 @@ export const Route = createFileRoute("/api/campaigns/$id/resume")({
           const map: Record<string, number> = {
             not_found: 404,
             not_resumable: 409,
+            forbidden_not_owner: 403,
           };
           if (map[msg]) {
             return Response.json({ success: false, error: msg }, { status: map[msg] });
