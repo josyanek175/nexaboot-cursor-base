@@ -7,11 +7,13 @@ Valores **não inventados**. Preencher a partir do painel Meta / EasyPanel DEV.
 | Condição | Efeito |
 |---|---|
 | `META_COEXISTENCE_ENABLED` ≠ true | endpoints → 404 |
-| role ≠ `SUPER_ADMIN` / `TI` | → 403 |
+| role ≠ `SUPER_ADMIN` / `TI` / `ADMIN_EMPRESA` | → 403 |
 | `META_COEXISTENCE_ALLOWED_COMPANY_IDS` vazio/ausente | → 403 (ninguém) |
 | company_id fora da allowlist | → 403 |
+| company_id no request diferente da sessão | → 403 |
 
-Gate no backend: `assertMetaCoexistenceAccess` (start/complete/config/exchange/connect).
+Gate no backend: `assertMetaCoexistenceAccessWithScope` (start/complete/config/exchange/connect/connection-status).
+ADMIN_EMPRESA: company_id somente da sessão.
 
 ## Lacunas (env / painel Meta)
 

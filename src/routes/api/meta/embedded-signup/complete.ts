@@ -11,7 +11,8 @@ import {
   getMetaChannelRowForCompany,
 } from "@/lib/meta-channels.server";
 import {
-  assertMetaCoexistenceAccess,
+  assertMetaCoexistenceAccessWithScope,
+  extractRequestedCompanyId,
   getMetaCoexistencePublicConfig,
 } from "@/lib/meta-coexistence-policy.server";
 import {
@@ -59,9 +60,11 @@ export const Route = createFileRoute("/api/meta/embedded-signup/complete")({
           return Response.json({ error: "unauthenticated" }, { status: 401 });
         }
         const info = await getCurrentUserCompanyInfo(uid);
-        const gate = assertMetaCoexistenceAccess({
+        const json = await request.json().catch(() => null);
+        const gate = assertMetaCoexistenceAccessWithScope({
           role: info.role,
-          companyId,
+          sessionCompanyId: companyId,
+          requestedCompanyId: extractRequestedCompanyId(json),
         });
         if (gate) return gate;
 
@@ -75,7 +78,6 @@ export const Route = createFileRoute("/api/meta/embedded-signup/complete")({
         const encryptionError = ensureMetaTokenEncryptionConfigured();
         if (encryptionError) return encryptionError;
 
-        const json = await request.json().catch(() => null);
         const parsed = Body.safeParse(json);
         if (!parsed.success) {
           return Response.json({ error: "invalid_input", detail: parsed.error.flatten() }, { status: 400 });

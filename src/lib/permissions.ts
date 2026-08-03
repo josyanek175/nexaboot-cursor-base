@@ -76,10 +76,10 @@ export function canSuspendTenant(actor: ActingUser): boolean {
   );
 }
 
-/** Pode iniciar Meta Coexistence (Embedded Signup). Espelha server: só SUPER_ADMIN/TI. */
+/** Pode iniciar Meta Coexistence (Embedded Signup). Espelha server: SUPER_ADMIN/TI/ADMIN_EMPRESA. */
 export function canManageMetaCoexistence(role: string | null | undefined): boolean {
   const r = String(role ?? "").toUpperCase();
-  return r === "SUPER_ADMIN" || r === "TI";
+  return r === "SUPER_ADMIN" || r === "TI" || r === "ADMIN_EMPRESA";
 }
 
 // ─── Canais ──────────────────────────────────────────────────────────────────

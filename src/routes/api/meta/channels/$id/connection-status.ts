@@ -1,7 +1,8 @@
 // GET /api/meta/channels/:id/connection-status
 // Status de conexão Meta (coexistence/cloud_api) sem expor token/secrets.
 import { createFileRoute } from "@tanstack/react-router";
-import { requireCompanyId } from "@/lib/company.server";
+import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
+import { getSessionUserId } from "@/lib/session.server";
 import {
   META_CHANNEL_UUID_RE,
   getMetaChannelRowForCompany,
@@ -9,16 +10,35 @@ import {
 } from "@/lib/meta-channels.server";
 import { resolveMetaConnectionMode } from "@/lib/meta-connection-mode";
 import { whatsappChannelsHasMetaConnectionModeColumn } from "@/lib/meta-coexistence.server";
+import {
+  assertMetaCoexistenceAccessWithScope,
+  extractRequestedCompanyId,
+} from "@/lib/meta-coexistence-policy.server";
 import { metaWhatsAppProvider } from "@/lib/whatsapp/providers/meta-whatsapp-provider.server";
 import { sql } from "@/lib/pg.server";
 
 export const Route = createFileRoute("/api/meta/channels/$id/connection-status")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ params, request }) => {
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
+
+        const uid = getSessionUserId();
+        if (!uid) {
+          return Response.json({ error: "unauthenticated" }, { status: 401 });
+        }
+        const info = await getCurrentUserCompanyInfo(uid);
+        const url = new URL(request.url);
+        const gate = assertMetaCoexistenceAccessWithScope({
+          role: info.role,
+          sessionCompanyId: companyId,
+          requestedCompanyId: extractRequestedCompanyId({
+            company_id: url.searchParams.get("company_id"),
+          }),
+        });
+        if (gate) return gate;
 
         if (!META_CHANNEL_UUID_RE.test(params.id)) {
           return Response.json({ error: "invalid_id" }, { status: 400 });

@@ -6,11 +6,15 @@
 |---|---|
 | `META_COEXISTENCE_ENABLED` ausente / `false` | Sem UI; endpoints → 404; Cloud API idêntica |
 | `META_COEXISTENCE_ENABLED` = `true` | Gate ativo; ainda exige role + allowlist |
-| role ≠ `SUPER_ADMIN` / `TI` | → 403 |
+| role ≠ `SUPER_ADMIN` / `TI` / `ADMIN_EMPRESA` | → 403 |
 | `META_COEXISTENCE_ALLOWED_COMPANY_IDS` vazio | → 403 (ninguém), mesmo com flag true |
 | company fora da allowlist | → 403 |
+| `company_id` no request ≠ empresa da sessão | → 403 (`forbidden_company_scope`) |
 
-Gate backend: `assertMetaCoexistenceAccess` em start/complete/config/exchange/connect.
+Gate backend: `assertMetaCoexistenceAccessWithScope` em start/complete/config/exchange/connect/connection-status.
+
+`ADMIN_EMPRESA` usa exclusivamente o `company_id` da sessão (sem seletor / sem body arbitrário).
+`SUPER_ADMIN`/`TI` usam a empresa do seletor operacional (cookie), já validada como ativa.
 
 Env (somente variáveis de ambiente — nunca no código):
 

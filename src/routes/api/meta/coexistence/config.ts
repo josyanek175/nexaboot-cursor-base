@@ -4,7 +4,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 import {
-  assertMetaCoexistenceAccess,
+  assertMetaCoexistenceAccessWithScope,
+  extractRequestedCompanyId,
   getMetaCoexistencePublicConfig,
 } from "@/lib/meta-coexistence-policy.server";
 import { whatsappChannelsHasMetaConnectionModeColumn } from "@/lib/meta-coexistence.server";
@@ -17,7 +18,7 @@ import {
 export const Route = createFileRoute("/api/meta/coexistence/config")({
   server: {
     handlers: {
-      GET: async () => {
+      GET: async ({ request }) => {
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
@@ -27,9 +28,13 @@ export const Route = createFileRoute("/api/meta/coexistence/config")({
           return Response.json({ error: "unauthenticated" }, { status: 401 });
         }
         const info = await getCurrentUserCompanyInfo(uid);
-        const gate = assertMetaCoexistenceAccess({
+        const url = new URL(request.url);
+        const gate = assertMetaCoexistenceAccessWithScope({
           role: info.role,
-          companyId,
+          sessionCompanyId: companyId,
+          requestedCompanyId: extractRequestedCompanyId({
+            company_id: url.searchParams.get("company_id"),
+          }),
         });
         if (gate) return gate;
 
