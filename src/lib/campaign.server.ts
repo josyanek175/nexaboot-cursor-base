@@ -8,6 +8,7 @@ import {
   canViewCampaigns,
   canManageCampaigns,
   canDeleteCampaign,
+  canPauseResumeCampaign,
   type ActingUser,
 } from "@/lib/permissions";
 import { normalizePhone } from "@/lib/phone";
@@ -925,9 +926,14 @@ export async function pauseCampaignManually(
   companyId: string,
   campaignId: string,
   userId: string | null,
+  actor?: ActingUser | null,
 ): Promise<CampaignDetail> {
   const existing = await getCampaignById(companyId, campaignId);
   if (!existing) throw new Error("not_found");
+
+  if (actor && !canPauseResumeCampaign(actor, existing.created_by_user_id)) {
+    throw new Error("forbidden_not_owner");
+  }
 
   if (!isCampaignManualPauseAllowed(existing.status)) {
     throw new Error("not_pausable");
@@ -969,9 +975,14 @@ export async function resumeCampaignManually(
   companyId: string,
   campaignId: string,
   userId: string | null,
+  actor?: ActingUser | null,
 ): Promise<CampaignDetail> {
   const existing = await getCampaignById(companyId, campaignId);
   if (!existing) throw new Error("not_found");
+
+  if (actor && !canPauseResumeCampaign(actor, existing.created_by_user_id)) {
+    throw new Error("forbidden_not_owner");
+  }
 
   if (!isCampaignManualResumeAllowed(existing.status)) {
     throw new Error("not_resumable");

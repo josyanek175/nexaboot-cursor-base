@@ -3,7 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2, Copy, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { canManageCampaigns, actingUserFromAuth, canAccessCampaignsModule } from "@/lib/permissions";
+import {
+  canManageCampaigns,
+  canPauseResumeCampaign,
+  actingUserFromAuth,
+  canAccessCampaignsModule,
+} from "@/lib/permissions";
 import { apiGet } from "@/lib/api";
 import { CampaignAudienceImport } from "@/components/campaign-audience-import";
 import { parseSpreadsheetRow, previewMessage } from "@/lib/campaign-spreadsheet";
@@ -49,6 +54,7 @@ type Campaign = {
   total_opt_out?: number;
   channel_name: string | null;
   channel_unavailable: boolean;
+  created_by_user_id?: string | null;
   meta_template_id?: string | null;
   meta_template_name?: string | null;
   meta_language_code?: string | null;
@@ -172,6 +178,9 @@ function EditarCampanhaPage() {
   const [pickerLoading, setPickerLoading] = useState(false);
   const [channelUnavailable, setChannelUnavailable] = useState(false);
 
+  const canPauseResume =
+    canManage && canPauseResumeCampaign(actor, campaign?.created_by_user_id ?? null);
+
   const isDraft = campaign?.status === "draft";
   const selectedChannel = useMemo(
     () => channels.find((c) => c.id === channelId) ?? null,
@@ -204,9 +213,9 @@ function EditarCampanhaPage() {
     messageText,
   ]);
   const showPauseButton =
-    !!campaign && canManage && isCampaignManualPauseAllowed(campaign.status);
+    !!campaign && canPauseResume && isCampaignManualPauseAllowed(campaign.status);
   const showResumeButton =
-    !!campaign && canManage && isCampaignManualResumeAllowed(campaign.status);
+    !!campaign && canPauseResume && isCampaignManualResumeAllowed(campaign.status);
 
   const messagePreview = useMemo(() => {
     if (isMetaChannel) return selectedMetaTemplate?.bodyText ?? messageText;
@@ -707,7 +716,7 @@ function EditarCampanhaPage() {
   }
 
   async function handleManualPause() {
-    if (!canManage || dispatchAction || !showPauseButton) return;
+    if (!canPauseResume || dispatchAction || !showPauseButton) return;
     setDispatchAction("pause");
     try {
       const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/pause`, {
@@ -715,7 +724,12 @@ function EditarCampanhaPage() {
         credentials: "include",
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        if (j.error === "forbidden_not_owner") {
+          throw new Error("Só é possível pausar campanhas que você criou.");
+        }
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
       toast.success("Disparo pausado");
       await refreshCampaignStats();
     } catch (e) {
@@ -726,7 +740,7 @@ function EditarCampanhaPage() {
   }
 
   async function handleManualResume() {
-    if (!canManage || dispatchAction || !showResumeButton) return;
+    if (!canPauseResume || dispatchAction || !showResumeButton) return;
     setDispatchAction("resume");
     try {
       const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}/resume`, {
@@ -734,7 +748,12 @@ function EditarCampanhaPage() {
         credentials: "include",
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        if (j.error === "forbidden_not_owner") {
+          throw new Error("Só é possível retomar campanhas que você criou.");
+        }
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
       toast.success("Disparo retomado");
       await refreshCampaignStats();
       await loadAudience({ silent: true });
