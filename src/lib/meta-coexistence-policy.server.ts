@@ -1,8 +1,10 @@
 /**
  * Feature flag + autorização Meta Coexistence — server-only.
  * Ausente ou false = comportamento Meta Cloud API tradicional 100% inalterado.
- * Liberação controlada: flag + SUPER_ADMIN/TI + allowlist de company_id.
+ * Liberação controlada: flag + SUPER_ADMIN/TI/ADMIN_EMPRESA + allowlist de company_id.
  * Allowlist vazia = ninguém inicia onboarding (mesmo com flag true).
+ *
+ * ADMIN_EMPRESA opera somente a empresa da sessão (nunca company_id arbitrário do body).
  */
 
 export function isMetaCoexistenceEnabled(
@@ -12,10 +14,10 @@ export function isMetaCoexistenceEnabled(
   return raw === "true" || raw === "1" || raw === "yes";
 }
 
-/** Somente SUPER_ADMIN ou TI podem operar Embedded Signup / Coexistence. */
+/** SUPER_ADMIN, TI ou ADMIN_EMPRESA podem operar Embedded Signup / Coexistence. */
 export function canManageMetaCoexistence(role: string | null | undefined): boolean {
   const r = String(role ?? "").toUpperCase();
-  return r === "SUPER_ADMIN" || r === "TI";
+  return r === "SUPER_ADMIN" || r === "TI" || r === "ADMIN_EMPRESA";
 }
 
 /**
@@ -48,6 +50,59 @@ export function isCompanyAllowedForMetaCoexistence(
 }
 
 /**
+ * Extrai company_id / companyId de body JSON ou query (se presente).
+ * Não valida existência — só leitura tipada.
+ */
+export function extractRequestedCompanyId(
+  source: unknown,
+): string | null {
+  if (source == null) return null;
+  if (typeof source === "string") {
+    const t = source.trim();
+    return t || null;
+  }
+  if (typeof source !== "object" || Array.isArray(source)) return null;
+  const rec = source as Record<string, unknown>;
+  const raw = rec.company_id ?? rec.companyId;
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  return t || null;
+}
+
+/**
+ * Impede company_id arbitrário no request.
+ * ADMIN_EMPRESA (e demais roles do fluxo): só a empresa da sessão.
+ * Se o cliente enviar outro company_id → 403.
+ * Se omitir ou repetir a sessão → ok (operação usa sempre sessionCompanyId).
+ */
+export function assertMetaCoexistenceCompanyScope(params: {
+  role: string | null | undefined;
+  sessionCompanyId: string;
+  requestedCompanyId?: string | null | undefined;
+}): Response | null {
+  const session = String(params.sessionCompanyId ?? "")
+    .trim()
+    .toLowerCase();
+  if (!session) {
+    return Response.json(
+      {
+        error: "no_company",
+        message: "Empresa da sessão inválida para Meta Coexistence.",
+      },
+      { status: 403 },
+    );
+  }
+
+  const requested = String(params.requestedCompanyId ?? "")
+    .trim()
+    .toLowerCase();
+  if (!requested) return null;
+  if (requested === session) return null;
+
+  return metaCoexistenceCompanyScopeForbiddenResponse();
+}
+
+/**
  * Gate completo de liberação controlada.
  * Ordem: flag → role → allowlist.
  * Retorna Response de erro ou null se autorizado.
@@ -70,6 +125,29 @@ export function assertMetaCoexistenceAccess(params: {
   return null;
 }
 
+/**
+ * Gate + escopo de empresa (sessão vs request).
+ * Sempre opera com sessionCompanyId quando autorizado.
+ */
+export function assertMetaCoexistenceAccessWithScope(params: {
+  role: string | null | undefined;
+  sessionCompanyId: string;
+  requestedCompanyId?: string | null | undefined;
+  env?: NodeJS.ProcessEnv;
+}): Response | null {
+  const scope = assertMetaCoexistenceCompanyScope({
+    role: params.role,
+    sessionCompanyId: params.sessionCompanyId,
+    requestedCompanyId: params.requestedCompanyId,
+  });
+  if (scope) return scope;
+  return assertMetaCoexistenceAccess({
+    role: params.role,
+    companyId: params.sessionCompanyId,
+    env: params.env,
+  });
+}
+
 /** Resposta padrão quando a flag está desligada (não vaza existência do fluxo). */
 export function metaCoexistenceDisabledResponse(): Response {
   return Response.json(
@@ -85,7 +163,8 @@ export function metaCoexistenceForbiddenResponse(): Response {
   return Response.json(
     {
       error: "forbidden",
-      message: "Apenas SUPER_ADMIN ou TI podem usar Meta Coexistence.",
+      message:
+        "Apenas SUPER_ADMIN, TI ou ADMIN_EMPRESA podem usar Meta Coexistence.",
     },
     { status: 403 },
   );
@@ -97,6 +176,17 @@ export function metaCoexistenceCompanyNotAllowlistedResponse(): Response {
       error: "company_not_allowlisted",
       message:
         "Esta empresa não está liberada para Meta Coexistence (META_COEXISTENCE_ALLOWED_COMPANY_IDS).",
+    },
+    { status: 403 },
+  );
+}
+
+export function metaCoexistenceCompanyScopeForbiddenResponse(): Response {
+  return Response.json(
+    {
+      error: "forbidden_company_scope",
+      message:
+        "Não é permitido operar Meta Coexistence para outra empresa. Use a empresa da sessão.",
     },
     { status: 403 },
   );

@@ -249,8 +249,9 @@ check("lookup sem meta_connection_mode", !evo.includes("meta_connection_mode"));
 
 // Roles
 check("ATENDENTE blocked", canManageMetaCoexistence("ATENDENTE") === false);
-check("ADMIN_EMPRESA blocked", canManageMetaCoexistence("ADMIN_EMPRESA") === false);
+check("ADMIN_EMPRESA ok", canManageMetaCoexistence("ADMIN_EMPRESA") === true);
 check("TI ok", canManageMetaCoexistence("TI") === true);
+check("SUPER_ADMIN ok", canManageMetaCoexistence("SUPER_ADMIN") === true);
 
 // Logs: endpoints não logam code/token variáveis
 check(

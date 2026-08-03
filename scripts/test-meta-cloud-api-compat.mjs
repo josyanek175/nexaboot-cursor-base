@@ -54,7 +54,8 @@ const coexistencePolicy = read("src/lib/meta-coexistence-policy.server.ts");
 check("flag META_COEXISTENCE_ENABLED no policy", coexistencePolicy.includes("META_COEXISTENCE_ENABLED"));
 
 const connectRoute = read("src/routes/api/meta/coexistence/connect.ts");
-check("connect gated pela flag", connectRoute.includes("assertMetaCoexistenceAccess"));
+check("connect gated pela flag", connectRoute.includes("assertMetaCoexistenceAccessWithScope"));
+check("connect rejeita company_id estrangeiro", connectRoute.includes("extractRequestedCompanyId"));
 check("connect exige migration", connectRoute.includes("migration_required"));
 check("connect NÃO troca code", !connectRoute.includes("exchangeAuthorizationCode"));
 check("connect rejeita fields proibidos", connectRoute.includes("findForbiddenConnectField"));
@@ -68,9 +69,9 @@ check("connect sem Graph fetch", !/fetch\s*\(/.test(connectRoute));
 const startSrc = read("src/routes/api/meta/embedded-signup/start.ts");
 const completeSrc = read("src/routes/api/meta/embedded-signup/complete.ts");
 const connStatusSrc = read("src/routes/api/meta/channels/$id/connection-status.ts");
-check("embedded-signup/start gated", startSrc.includes("assertMetaCoexistenceAccess"));
+check("embedded-signup/start gated", startSrc.includes("assertMetaCoexistenceAccessWithScope"));
 check("embedded-signup/start cria CSRF", startSrc.includes("createCoexistenceCsrfState"));
-check("embedded-signup/complete gated", completeSrc.includes("assertMetaCoexistenceAccess"));
+check("embedded-signup/complete gated", completeSrc.includes("assertMetaCoexistenceAccessWithScope"));
 check("embedded-signup/complete troca code 1x", completeSrc.includes("exchangeAuthorizationCode"));
 check("embedded-signup/complete assina WABA", completeSrc.includes("subscribeAppToWaba"));
 check("embedded-signup/complete valida inscrição", completeSrc.includes("verifyAppSubscribedToWaba"));
@@ -81,6 +82,7 @@ check(
     (completeSrc.includes("createCoexistenceOnboarding") &&
       !/return Response\.json\([^)]*access_token/.test(completeSrc)),
 );
+check("connection-status gated", connStatusSrc.includes("assertMetaCoexistenceAccessWithScope"));
 check("connection-status sem secrets", !connStatusSrc.includes("access_token_ciphertext"));
 check("connection-status expõe connection_mode", connStatusSrc.includes("connection_mode"));
 
@@ -89,6 +91,10 @@ check(
   "POST /meta/channels (cloud_api) NÃO seta coexistence",
   channelsCreate.includes("channel_type") && !channelsCreate.includes("'coexistence'"),
 );
+const canaisSrc = read("src/routes/_app.canais.tsx");
+check("canais usa canManageMetaCoexistence", canaisSrc.includes("canManageMetaCoexistence"));
+const permsSrc = read("src/lib/permissions.ts");
+check("permissions inclui ADMIN_EMPRESA", /canManageMetaCoexistence[\s\S]*ADMIN_EMPRESA/.test(permsSrc));
 
 if (failed > 0) {
   console.error(`\n${failed} falha(s)`);

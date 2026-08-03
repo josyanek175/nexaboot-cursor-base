@@ -16,9 +16,14 @@ import {
   isCompanyAllowedForMetaCoexistence,
   isMetaCoexistenceEnabled,
   assertMetaCoexistenceAccess,
+  assertMetaCoexistenceAccessWithScope,
+  assertMetaCoexistenceCompanyScope,
+  extractRequestedCompanyId,
   parseMetaCoexistenceAllowedCompanyIds,
 } from "../src/lib/meta-coexistence-policy.server.ts";
 import { summarizeUnknownMetaWebhookFields } from "../src/lib/meta-webhook-parse.ts";
+import fs from "node:fs";
+import path from "node:path";
 
 let failed = 0;
 
@@ -31,6 +36,15 @@ function check(label, condition) {
     console.error(`FAIL ${label}`, e instanceof Error ? e.message : e);
   }
 }
+
+const permsSrc = fs.readFileSync(
+  path.resolve(import.meta.dirname, "../src/lib/permissions.ts"),
+  "utf8",
+);
+check(
+  "UI permissions inclui ADMIN_EMPRESA no coexistence",
+  /canManageMetaCoexistence[\s\S]*ADMIN_EMPRESA/.test(permsSrc),
+);
 
 // ── Feature flag ────────────────────────────────────────────────────────────
 check("flag ausente = false", isMetaCoexistenceEnabled({}) === false);
@@ -48,9 +62,11 @@ check("reject invalid mode", isMetaConnectionMode("evolution") === false);
 // ── Auth roles ──────────────────────────────────────────────────────────────
 check("SUPER_ADMIN can coexistence", canManageMetaCoexistence("SUPER_ADMIN"));
 check("TI can coexistence", canManageMetaCoexistence("TI"));
-check("ADMIN_EMPRESA cannot coexistence", canManageMetaCoexistence("ADMIN_EMPRESA") === false);
+check("ADMIN_EMPRESA can coexistence", canManageMetaCoexistence("ADMIN_EMPRESA"));
 check("ADMIN_GERAL cannot coexistence", canManageMetaCoexistence("ADMIN_GERAL") === false);
 check("ATENDENTE cannot coexistence", canManageMetaCoexistence("ATENDENTE") === false);
+check("SUPERVISOR cannot coexistence", canManageMetaCoexistence("SUPERVISOR") === false);
+check("GERENTE cannot coexistence", canManageMetaCoexistence("GERENTE") === false);
 
 const companyA = "11111111-1111-1111-1111-111111111111";
 const companyB = "22222222-2222-2222-2222-222222222222";
@@ -99,12 +115,29 @@ check(
   gateEmptyAllow instanceof Response && gateEmptyAllow.status === 403,
 );
 
-const gateRole = assertMetaCoexistenceAccess({
+const gateAdminOk = assertMetaCoexistenceAccess({
   role: "ADMIN_EMPRESA",
   companyId: companyA,
   env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
 });
-check("gate role ADMIN_EMPRESA = 403", gateRole instanceof Response && gateRole.status === 403);
+check("gate ADMIN_EMPRESA + allowlist = ok", gateAdminOk === null);
+
+const gateAdminOut = assertMetaCoexistenceAccess({
+  role: "ADMIN_EMPRESA",
+  companyId: companyB,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check(
+  "gate ADMIN_EMPRESA fora allowlist = 403",
+  gateAdminOut instanceof Response && gateAdminOut.status === 403,
+);
+
+const gateAtendente = assertMetaCoexistenceAccess({
+  role: "ATENDENTE",
+  companyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check("gate role ATENDENTE = 403", gateAtendente instanceof Response && gateAtendente.status === 403);
 
 const gateOk = assertMetaCoexistenceAccess({
   role: "TI",
@@ -112,6 +145,79 @@ const gateOk = assertMetaCoexistenceAccess({
   env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
 });
 check("gate TI + allowlist = ok", gateOk === null);
+
+const gateSuper = assertMetaCoexistenceAccess({
+  role: "SUPER_ADMIN",
+  companyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check("gate SUPER_ADMIN + allowlist = ok", gateSuper === null);
+
+check(
+  "extract company_id body",
+  extractRequestedCompanyId({ company_id: companyB, onboarding_id: "x" }) === companyB,
+);
+check(
+  "extract companyId alias",
+  extractRequestedCompanyId({ companyId: companyA }) === companyA,
+);
+check("extract ausente = null", extractRequestedCompanyId({ onboarding_id: "x" }) === null);
+
+check(
+  "scope mesmo company_id = ok",
+  assertMetaCoexistenceCompanyScope({
+    role: "ADMIN_EMPRESA",
+    sessionCompanyId: companyA,
+    requestedCompanyId: companyA,
+  }) === null,
+);
+check(
+  "scope omitido = ok (usa sessão)",
+  assertMetaCoexistenceCompanyScope({
+    role: "ADMIN_EMPRESA",
+    sessionCompanyId: companyA,
+    requestedCompanyId: null,
+  }) === null,
+);
+
+const scopeForeign = assertMetaCoexistenceCompanyScope({
+  role: "ADMIN_EMPRESA",
+  sessionCompanyId: companyA,
+  requestedCompanyId: companyB,
+});
+check(
+  "ADMIN_EMPRESA outro company_id = 403",
+  scopeForeign instanceof Response && scopeForeign.status === 403,
+);
+
+const scopeWithAccess = assertMetaCoexistenceAccessWithScope({
+  role: "ADMIN_EMPRESA",
+  sessionCompanyId: companyA,
+  requestedCompanyId: companyB,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check(
+  "ADMIN_EMPRESA + company_id estrangeiro bloqueia antes do allowlist OK",
+  scopeWithAccess instanceof Response && scopeWithAccess.status === 403,
+);
+
+const scopeAdminAllowed = assertMetaCoexistenceAccessWithScope({
+  role: "ADMIN_EMPRESA",
+  sessionCompanyId: companyA,
+  requestedCompanyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: companyA },
+});
+check("ADMIN_EMPRESA sessão allowlisted = ok", scopeAdminAllowed === null);
+
+const scopeEmptyAllowAdmin = assertMetaCoexistenceAccessWithScope({
+  role: "ADMIN_EMPRESA",
+  sessionCompanyId: companyA,
+  env: { META_COEXISTENCE_ENABLED: "true", META_COEXISTENCE_ALLOWED_COMPANY_IDS: "" },
+});
+check(
+  "allowlist vazia bloqueia ADMIN_EMPRESA",
+  scopeEmptyAllowAdmin instanceof Response && scopeEmptyAllowAdmin.status === 403,
+);
 
 // ── Public config sem secrets ───────────────────────────────────────────────
 const pub = getMetaCoexistencePublicConfig({

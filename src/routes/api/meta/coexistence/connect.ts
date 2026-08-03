@@ -14,7 +14,8 @@ import {
   findForbiddenConnectField,
 } from "@/lib/meta-coexistence-connect-body";
 import {
-  assertMetaCoexistenceAccess,
+  assertMetaCoexistenceAccessWithScope,
+  extractRequestedCompanyId,
   getMetaCoexistencePublicConfig,
 } from "@/lib/meta-coexistence-policy.server";
 import { whatsappChannelsHasMetaConnectionModeColumn } from "@/lib/meta-coexistence.server";
@@ -66,9 +67,11 @@ export const Route = createFileRoute("/api/meta/coexistence/connect")({
           return Response.json({ error: "unauthenticated" }, { status: 401 });
         }
         const info = await getCurrentUserCompanyInfo(uid);
-        const gate = assertMetaCoexistenceAccess({
+        const json = await request.json().catch(() => null);
+        const gate = assertMetaCoexistenceAccessWithScope({
           role: info.role,
-          companyId,
+          sessionCompanyId: companyId,
+          requestedCompanyId: extractRequestedCompanyId(json),
         });
         if (gate) return gate;
 
@@ -90,7 +93,6 @@ export const Route = createFileRoute("/api/meta/coexistence/connect")({
         const encryptionError = ensureMetaTokenEncryptionConfigured();
         if (encryptionError) return encryptionError;
 
-        const json = await request.json().catch(() => null);
         const forbidden = findForbiddenConnectField(json);
         if (forbidden) {
           return Response.json({ error: "forbidden_field", field: forbidden }, { status: 400 });
