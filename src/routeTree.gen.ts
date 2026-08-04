@@ -108,6 +108,7 @@ import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaig
 import { Route as ApiCampaignsIdReuseRouteImport } from './routes/api/campaigns/$id/reuse'
 import { Route as ApiCampaignsIdResumeRouteImport } from './routes/api/campaigns/$id/resume'
 import { Route as ApiCampaignsIdPauseRouteImport } from './routes/api/campaigns/$id/pause'
+import { Route as ApiCampaignsIdExportDotcsvRouteImport } from './routes/api/campaigns/$id/export[.]csv'
 import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
 import { Route as ApiMetaChannelsIdTokenRouteImport } from './routes/api/meta/channels/$id/token'
 import { Route as ApiMetaChannelsIdTemplatesRouteImport } from './routes/api/meta/channels/$id/templates'
@@ -638,6 +639,12 @@ const ApiCampaignsIdPauseRoute = ApiCampaignsIdPauseRouteImport.update({
   path: '/pause',
   getParentRoute: () => ApiCampaignsIdRoute,
 } as any)
+const ApiCampaignsIdExportDotcsvRoute =
+  ApiCampaignsIdExportDotcsvRouteImport.update({
+    id: '/export.csv',
+    path: '/export.csv',
+    getParentRoute: () => ApiCampaignsIdRoute,
+  } as any)
 const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
   id: '/contacts',
   path: '/contacts',
@@ -797,6 +804,7 @@ export interface FileRoutesByFullPath {
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/export.csv': typeof ApiCampaignsIdExportDotcsvRoute
   '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
   '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
@@ -911,6 +919,7 @@ export interface FileRoutesByTo {
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/export.csv': typeof ApiCampaignsIdExportDotcsvRoute
   '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
   '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
@@ -1028,6 +1037,7 @@ export interface FileRoutesById {
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/_app/campanhas/': typeof AppCampanhasIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
+  '/api/campaigns/$id/export.csv': typeof ApiCampaignsIdExportDotcsvRoute
   '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
   '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
   '/api/campaigns/$id/reuse': typeof ApiCampaignsIdReuseRoute
@@ -1145,6 +1155,7 @@ export interface FileRouteTypes {
     | '/api/webhooks/meta'
     | '/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/export.csv'
     | '/api/campaigns/$id/pause'
     | '/api/campaigns/$id/resume'
     | '/api/campaigns/$id/reuse'
@@ -1259,6 +1270,7 @@ export interface FileRouteTypes {
     | '/api/webhooks/meta'
     | '/campanhas'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/export.csv'
     | '/api/campaigns/$id/pause'
     | '/api/campaigns/$id/resume'
     | '/api/campaigns/$id/reuse'
@@ -1375,6 +1387,7 @@ export interface FileRouteTypes {
     | '/api/webhooks/meta'
     | '/_app/campanhas/'
     | '/api/campaigns/$id/contacts'
+    | '/api/campaigns/$id/export.csv'
     | '/api/campaigns/$id/pause'
     | '/api/campaigns/$id/resume'
     | '/api/campaigns/$id/reuse'
@@ -2171,6 +2184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCampaignsIdPauseRouteImport
       parentRoute: typeof ApiCampaignsIdRoute
     }
+    '/api/campaigns/$id/export.csv': {
+      id: '/api/campaigns/$id/export.csv'
+      path: '/export.csv'
+      fullPath: '/api/campaigns/$id/export.csv'
+      preLoaderRoute: typeof ApiCampaignsIdExportDotcsvRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
     '/api/campaigns/$id/contacts': {
       id: '/api/campaigns/$id/contacts'
       path: '/contacts'
@@ -2346,6 +2366,7 @@ const ApiCampaignsIdContactsRouteWithChildren =
 
 interface ApiCampaignsIdRouteChildren {
   ApiCampaignsIdContactsRoute: typeof ApiCampaignsIdContactsRouteWithChildren
+  ApiCampaignsIdExportDotcsvRoute: typeof ApiCampaignsIdExportDotcsvRoute
   ApiCampaignsIdPauseRoute: typeof ApiCampaignsIdPauseRoute
   ApiCampaignsIdResumeRoute: typeof ApiCampaignsIdResumeRoute
   ApiCampaignsIdReuseRoute: typeof ApiCampaignsIdReuseRoute
@@ -2357,6 +2378,7 @@ interface ApiCampaignsIdRouteChildren {
 
 const ApiCampaignsIdRouteChildren: ApiCampaignsIdRouteChildren = {
   ApiCampaignsIdContactsRoute: ApiCampaignsIdContactsRouteWithChildren,
+  ApiCampaignsIdExportDotcsvRoute: ApiCampaignsIdExportDotcsvRoute,
   ApiCampaignsIdPauseRoute: ApiCampaignsIdPauseRoute,
   ApiCampaignsIdResumeRoute: ApiCampaignsIdResumeRoute,
   ApiCampaignsIdReuseRoute: ApiCampaignsIdReuseRoute,

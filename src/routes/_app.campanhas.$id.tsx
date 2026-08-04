@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2, Copy, Play, Pause } from "lucide-react";
+import { Megaphone, ArrowLeft, Loader2, Save, Users, Search, Plus, Trash2, Copy, Play, Pause, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import {
@@ -151,6 +151,8 @@ function EditarCampanhaPage() {
   const [saving, setSaving] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [dispatchAction, setDispatchAction] = useState<"start" | "pause" | "resume" | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const [name, setName] = useState("");
   const [campaignColor, setCampaignColor] = useState(DEFAULT_CAMPAIGN_COLOR);
@@ -764,6 +766,50 @@ function EditarCampanhaPage() {
     }
   }
 
+  async function handleExportCsv(response: "all" | "responded" | "not_responded") {
+    if (!canAccess || exporting) return;
+    setExporting(true);
+    setExportMenuOpen(false);
+    try {
+      const qs = new URLSearchParams({ response, status: "all" });
+      const res = await fetch(
+        `/api/campaigns/${encodeURIComponent(id)}/export.csv?${qs.toString()}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+        if (res.status === 401) throw new Error("Sessão expirada. Faça login novamente.");
+        if (res.status === 403) {
+          throw new Error(j.message ?? "Sem permissão para exportar esta campanha.");
+        }
+        if (res.status === 404) throw new Error("Campanha não encontrada.");
+        throw new Error(j.message ?? j.error ?? "Não foi possível baixar o relatório.");
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const plainMatch = disposition.match(/filename="([^"]+)"/i);
+      const filename = utfMatch
+        ? decodeURIComponent(utfMatch[1])
+        : plainMatch?.[1] ?? `campanha-${id}.csv`;
+
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+      toast.success("Relatório baixado");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (!canAccess) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -824,6 +870,56 @@ function EditarCampanhaPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+        {canAccess && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setExportMenuOpen((o) => !o)}
+              disabled={exporting}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Baixar relatório
+            </button>
+            {exportMenuOpen && !exporting && (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-10 cursor-default"
+                  aria-label="Fechar menu de exportação"
+                  onClick={() => setExportMenuOpen(false)}
+                />
+                <div className="absolute right-0 z-20 mt-1 w-56 rounded-md border border-border bg-card py-1 shadow-md">
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => handleExportCsv("all")}
+                  >
+                    Lista completa
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => handleExportCsv("responded")}
+                  >
+                    Somente respondidos
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => handleExportCsv("not_responded")}
+                  >
+                    Somente não respondidos
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {canManage && (
           <button
             type="button"
