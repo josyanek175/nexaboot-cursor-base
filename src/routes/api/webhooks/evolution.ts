@@ -4,12 +4,14 @@
 // handleEvolutionWebhookPOST, então nenhum caminho ingere sem token válido.
 import { createFileRoute } from "@tanstack/react-router";
 import { handleEvolutionWebhookPOST } from "@/routes/api/public/webhooks/evolution";
+import { runWebhookWithConcurrencyLimit } from "@/lib/pg-pool-gate.server";
 
 export const Route = createFileRoute("/api/webhooks/evolution")({
   server: {
     handlers: {
       GET: async () => Response.json({ ok: true, service: "evolution-webhook" }),
-      POST: async ({ request }) => handleEvolutionWebhookPOST(request),
+      POST: async ({ request }) =>
+        runWebhookWithConcurrencyLimit("evolution", () => handleEvolutionWebhookPOST(request)),
     },
   },
 });

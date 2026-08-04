@@ -9,6 +9,7 @@ import {
   trackPoolAcquisitionReleased,
   trackPoolAcquisitionStart,
 } from "@/lib/pg-pool-diag.server";
+import { getPoolGateMetrics, logPoolGateStatus, withPoolGateSlot, isPoolAcquireTimeout } from "@/lib/pg-pool-gate.server";
 
 let _sql: ReturnType<typeof postgres> | null = null;
 let _schemaReady: Promise<void> | null = null;
@@ -29,8 +30,28 @@ function readPgPoolMax(env: NodeJS.ProcessEnv = process.env): number {
   return floored;
 }
 
+/** Timeout TCP/connect (segundos). Env: PG_CONNECT_TIMEOUT_SEC. Default 10. */
+function readConnectTimeoutSec(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.PG_CONNECT_TIMEOUT_SEC?.trim();
+  if (!raw) return 10;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1 || n > 60) return 10;
+  return Math.floor(n);
+}
+
+/** Idle timeout (segundos). Env: PG_IDLE_TIMEOUT_SEC. Default 20. */
+function readIdleTimeoutSec(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.PG_IDLE_TIMEOUT_SEC?.trim();
+  if (!raw) return 20;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1 || n > 600) return 20;
+  return Math.floor(n);
+}
+
 /** Tamanho do pool postgres.js (diagnóstico de esgotamento). */
 export const PG_POOL_MAX = readPgPoolMax();
+export const PG_CONNECT_TIMEOUT_SEC = readConnectTimeoutSec();
+export const PG_IDLE_TIMEOUT_SEC = readIdleTimeoutSec();
 
 /** Contagem de sessões reserve() já adquiridas e ainda não liberadas. */
 let _pgReservedOpen = 0;
@@ -53,13 +74,20 @@ export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
           : undefined,
       max: PG_POOL_MAX,
       prepare: false,
+      connect_timeout: PG_CONNECT_TIMEOUT_SEC,
+      idle_timeout: PG_IDLE_TIMEOUT_SEC,
+      max_lifetime: 60 * 30,
     });
     if (!_pgPoolConfigLogged) {
       _pgPoolConfigLogged = true;
       console.log("[PG_POOL_CONFIG]", {
         poolMax: PG_POOL_MAX,
+        connectTimeoutSec: PG_CONNECT_TIMEOUT_SEC,
+        idleTimeoutSec: PG_IDLE_TIMEOUT_SEC,
+        maxLifetimeSec: 60 * 30,
         source: process.env.PG_POOL_MAX?.trim() ? "env" : "default",
       });
+      logPoolGateStatus("PG_POOL_STATUS");
     }
   }
   // Chamada como tagged template: sql`SELECT …`
@@ -107,16 +135,25 @@ export async function reserveSqlConnection(): Promise<ReservedSql> {
 }
 
 /**
- * Métricas confiáveis pós-remoção do Proxy.
- * trackedActive/trackedPending globais de query = null (dependiam do Proxy).
+ * Métricas do pool + gate de aplicação (aproxima total/idle/waiting).
+ * postgres.js não expõe totalCount/idleCount/waitingCount como node-pg.
  */
 export function getPgPoolStatus() {
+  const gate = getPoolGateMetrics();
   return {
     poolMax: PG_POOL_MAX,
-    trackedActive: null as number | null,
-    trackedPending: null as number | null,
+    connectTimeoutSec: PG_CONNECT_TIMEOUT_SEC,
+    idleTimeoutSec: PG_IDLE_TIMEOUT_SEC,
+    totalCount: gate.totalCount,
+    idleCount: gate.idleCount,
+    waitingCount: gate.waitingCount,
+    trackedActive: gate.activeCount as number | null,
+    trackedPending: gate.waitingCount as number | null,
     reservedOpenInProcess: _pgReservedOpen,
     reservePending: _pgReservePending,
+    webhookActive: gate.webhookActive,
+    webhookWaiting: gate.webhookWaiting,
+    webhookMax: gate.webhookMax,
     activeAcquisitions: [] as Array<{
       acquisitionId: string;
       kind: string;
@@ -128,6 +165,41 @@ export function getPgPoolStatus() {
     }>,
     processPid: process.pid,
   };
+}
+
+/** Timeout (ms) para SELECT 1 de readiness. */
+export const DB_HEALTH_PROBE_TIMEOUT_MS = 2_000;
+export const DB_HEALTH_POOL_ACQUIRE_MS = 1_500;
+
+/**
+ * Probe leve: gate + SELECT 1 com statement_timeout.
+ * Não altera dados. Fail → ready=false (processo pode permanecer ok=true).
+ */
+export async function probeDatabaseReadiness(): Promise<{
+  ok: boolean;
+  ms: number;
+  error?: string;
+}> {
+  const t0 = Date.now();
+  try {
+    await withPoolGateSlot("health", DB_HEALTH_POOL_ACQUIRE_MS, async () => {
+      const s = getSql();
+      await s.begin(async (tx) => {
+        await tx.unsafe(`SET LOCAL statement_timeout = ${DB_HEALTH_PROBE_TIMEOUT_MS}`);
+        await tx`SELECT 1 AS ok`;
+      });
+    });
+    return { ok: true, ms: Date.now() - t0 };
+  } catch (e) {
+    const ms = Date.now() - t0;
+    const error = isPoolAcquireTimeout(e)
+      ? "pool_acquire_timeout"
+      : e instanceof Error
+        ? e.message
+        : String(e);
+    console.error("[HEALTH_DB_PROBE_FAIL]", { ms, error, ...getPgPoolStatus() });
+    return { ok: false, ms, error };
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1686,6 +1758,9 @@ export function getDatabaseRuntimeDiag(): {
   reservePending: number;
   trackedActive: number | null;
   trackedPending: number | null;
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
   bootstrapAttempt: number;
   bootstrapCooldownUntil: number;
   bootstrapPromiseActive: boolean;
@@ -1703,8 +1778,11 @@ export function getDatabaseRuntimeDiag(): {
     clientInitialized: !!_sql,
     reservedOpenInProcess: pool.reservedOpenInProcess,
     reservePending: pool.reservePending,
-    trackedActive: null,
-    trackedPending: null,
+    trackedActive: pool.trackedActive,
+    trackedPending: pool.trackedPending,
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
     bootstrapAttempt: c.getAttempt(),
     bootstrapCooldownUntil: cooldownUntil,
     bootstrapPromiseActive: c.isActiveRun() || c.getState() === "ready",
