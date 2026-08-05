@@ -93,8 +93,26 @@ export function canManageIntegrations(actor: ActingUser): boolean {
 }
 
 // ─── Relatórios ─────────────────────────────────────────────────────────────
+/** Relatórios genéricos (legado) — exclui apenas atendentes. */
 export function canViewReports(actor: ActingUser): boolean {
   return actor.role !== "ATENDENTE" && actor.role !== "ATENDENTE_GERAL";
+}
+
+/**
+ * Relatório/auditoria de conversas — exclusivo ADMIN_EMPRESA e GERENTE.
+ * SUPERVISOR, TI, SUPER_ADMIN e demais perfis: sem acesso.
+ */
+export function canViewConversationReports(actor: ActingUser): boolean {
+  return actor.role === "ADMIN_EMPRESA" || actor.role === "GERENTE";
+}
+
+/** Menu e módulo: perfil autorizado + empresa operacional válida. */
+export function canAccessConversationReportsModule(
+  actor: ActingUser,
+  companyValid: boolean,
+): boolean {
+  if (!canViewConversationReports(actor)) return false;
+  return companyValid;
 }
 
 // ─── Campanhas ───────────────────────────────────────────────────────────────

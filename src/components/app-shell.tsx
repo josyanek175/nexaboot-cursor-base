@@ -15,10 +15,12 @@ import {
   Menu,
   UsersRound,
   Megaphone,
+  FileBarChart2,
 } from "lucide-react";
 import { canManageInternalGroups } from "@/lib/current-user";
 import {
   canAccessCampaignsModule,
+  canAccessConversationReportsModule,
   actingUserFromAuth,
 } from "@/lib/permissions";
 import { useEffect, useState } from "react";
@@ -44,7 +46,13 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 const roleLabel = (r: Role) => ROLE_LABELS[r] ?? r;
 
-const OPERATIONAL_PREFIXES = ["/atendimento", "/contatos", "/canais", "/campanhas"];
+const OPERATIONAL_PREFIXES = [
+  "/atendimento",
+  "/contatos",
+  "/canais",
+  "/campanhas",
+  "/relatorios",
+];
 function isOperationalPath(pathname: string): boolean {
   return OPERATIONAL_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
@@ -56,6 +64,7 @@ type NavItem = {
   badgeKey?: UnreadKey;
   adminOnly?: boolean;
   campaignsOnly?: boolean;
+  conversationReportsOnly?: boolean;
 };
 
 type CompanyOption = { id: string; name: string };
@@ -77,6 +86,12 @@ const nav: NavItem[] = [
   { to: "/grupos-internos", label: "Grupos Internos", icon: UsersRound, adminOnly: true },
   { to: "/contatos", label: "Contatos", icon: Contact2 },
   { to: "/campanhas", label: "Campanhas", icon: Megaphone, campaignsOnly: true },
+  {
+    to: "/relatorios/conversas",
+    label: "Relatórios",
+    icon: FileBarChart2,
+    conversationReportsOnly: true,
+  },
   { to: "/empresas", label: "Empresas", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/canais", label: "Canais WhatsApp", icon: Smartphone },
@@ -235,6 +250,11 @@ function Shell() {
               if (!item.campaignsOnly) return true;
               if (!actor) return false;
               return canAccessCampaignsModule(actor, companyValid);
+            })
+            .filter((item) => {
+              if (!item.conversationReportsOnly) return true;
+              if (!actor) return false;
+              return canAccessConversationReportsModule(actor, companyValid);
             })
             .map((item) => {
               const { to, label, icon: Icon, badgeKey } = item;

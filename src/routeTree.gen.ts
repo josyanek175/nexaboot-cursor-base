@@ -28,6 +28,7 @@ import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
 import { Route as ApiCampaignsRouteImport } from './routes/api/campaigns'
 import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
 import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
+import { Route as AppRelatoriosRouteImport } from './routes/_app.relatorios'
 import { Route as AppLogsRouteImport } from './routes/_app.logs'
 import { Route as AppGruposInternosRouteImport } from './routes/_app.grupos-internos'
 import { Route as AppEmpresasRouteImport } from './routes/_app.empresas'
@@ -43,6 +44,7 @@ import { Route as AppCampanhasIndexRouteImport } from './routes/_app.campanhas.i
 import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
+import { Route as ApiReportsConversationsRouteImport } from './routes/api/reports/conversations'
 import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
 import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
 import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
@@ -76,11 +78,13 @@ import { Route as ApiAttendanceNotificationsRouteImport } from './routes/api/att
 import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
 import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
+import { Route as AppRelatoriosConversasRouteImport } from './routes/_app.relatorios.conversas'
 import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
 import { Route as AppCampanhasModelosRouteImport } from './routes/_app.campanhas.modelos'
 import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
 import { Route as ApiWebhooksMetaWhatsappRouteImport } from './routes/api/webhooks/meta/whatsapp'
 import { Route as ApiWebhooksMetaDiagnosticRouteImport } from './routes/api/webhooks/meta/diagnostic'
+import { Route as ApiReportsConversationsExportDotcsvRouteImport } from './routes/api/reports/conversations/export[.]csv'
 import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
 import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
 import { Route as ApiMetaMessagesSendTextRouteImport } from './routes/api/meta/messages/send-text'
@@ -218,6 +222,11 @@ const AppUsuariosRoute = AppUsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppLogsRoute = AppLogsRouteImport.update({
   id: '/logs',
   path: '/logs',
@@ -292,6 +301,11 @@ const ApiUsersIdRoute = ApiUsersIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => ApiUsersRoute,
+} as any)
+const ApiReportsConversationsRoute = ApiReportsConversationsRouteImport.update({
+  id: '/api/reports/conversations',
+  path: '/api/reports/conversations',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMetaChannelsRoute = ApiMetaChannelsRouteImport.update({
   id: '/api/meta/channels',
@@ -462,6 +476,11 @@ const ApiAdminAuthCheckRoute = ApiAdminAuthCheckRouteImport.update({
   path: '/api/admin/auth-check',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRelatoriosConversasRoute = AppRelatoriosConversasRouteImport.update({
+  id: '/conversas',
+  path: '/conversas',
+  getParentRoute: () => AppRelatoriosRoute,
+} as any)
 const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
   id: '/nova',
   path: '/nova',
@@ -487,6 +506,12 @@ const ApiWebhooksMetaDiagnosticRoute =
     id: '/diagnostic',
     path: '/diagnostic',
     getParentRoute: () => ApiWebhooksMetaRoute,
+  } as any)
+const ApiReportsConversationsExportDotcsvRoute =
+  ApiReportsConversationsExportDotcsvRouteImport.update({
+    id: '/export.csv',
+    path: '/export.csv',
+    getParentRoute: () => ApiReportsConversationsRoute,
   } as any)
 const ApiPublicWebhooksMetaRoute = ApiPublicWebhooksMetaRouteImport.update({
   id: '/api/public/webhooks/meta',
@@ -744,6 +769,7 @@ export interface FileRoutesByFullPath {
   '/empresas': typeof AppEmpresasRoute
   '/grupos-internos': typeof AppGruposInternosRoute
   '/logs': typeof AppLogsRoute
+  '/relatorios': typeof AppRelatoriosRouteWithChildren
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
@@ -759,6 +785,7 @@ export interface FileRoutesByFullPath {
   '/campanhas/$id': typeof AppCampanhasIdRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/relatorios/conversas': typeof AppRelatoriosConversasRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
@@ -792,6 +819,7 @@ export interface FileRoutesByFullPath {
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
+  '/api/reports/conversations': typeof ApiReportsConversationsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
@@ -824,6 +852,7 @@ export interface FileRoutesByFullPath {
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
+  '/api/reports/conversations/export.csv': typeof ApiReportsConversationsExportDotcsvRoute
   '/api/webhooks/meta/diagnostic': typeof ApiWebhooksMetaDiagnosticRoute
   '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
@@ -858,6 +887,7 @@ export interface FileRoutesByTo {
   '/empresas': typeof AppEmpresasRoute
   '/grupos-internos': typeof AppGruposInternosRoute
   '/logs': typeof AppLogsRoute
+  '/relatorios': typeof AppRelatoriosRouteWithChildren
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
@@ -873,6 +903,7 @@ export interface FileRoutesByTo {
   '/campanhas/$id': typeof AppCampanhasIdRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/relatorios/conversas': typeof AppRelatoriosConversasRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
@@ -906,6 +937,7 @@ export interface FileRoutesByTo {
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
+  '/api/reports/conversations': typeof ApiReportsConversationsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
@@ -938,6 +970,7 @@ export interface FileRoutesByTo {
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
+  '/api/reports/conversations/export.csv': typeof ApiReportsConversationsExportDotcsvRoute
   '/api/webhooks/meta/diagnostic': typeof ApiWebhooksMetaDiagnosticRoute
   '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
@@ -975,6 +1008,7 @@ export interface FileRoutesById {
   '/_app/empresas': typeof AppEmpresasRoute
   '/_app/grupos-internos': typeof AppGruposInternosRoute
   '/_app/logs': typeof AppLogsRoute
+  '/_app/relatorios': typeof AppRelatoriosRouteWithChildren
   '/_app/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
@@ -990,6 +1024,7 @@ export interface FileRoutesById {
   '/_app/campanhas/$id': typeof AppCampanhasIdRoute
   '/_app/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/_app/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/_app/relatorios/conversas': typeof AppRelatoriosConversasRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
@@ -1023,6 +1058,7 @@ export interface FileRoutesById {
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
+  '/api/reports/conversations': typeof ApiReportsConversationsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
@@ -1055,6 +1091,7 @@ export interface FileRoutesById {
   '/api/meta/messages/send-text': typeof ApiMetaMessagesSendTextRoute
   '/api/public/webhooks/evolution': typeof ApiPublicWebhooksEvolutionRoute
   '/api/public/webhooks/meta': typeof ApiPublicWebhooksMetaRoute
+  '/api/reports/conversations/export.csv': typeof ApiReportsConversationsExportDotcsvRoute
   '/api/webhooks/meta/diagnostic': typeof ApiWebhooksMetaDiagnosticRoute
   '/api/webhooks/meta/whatsapp': typeof ApiWebhooksMetaWhatsappRoute
   '/api/campaigns/$id/contacts/$contactRowId': typeof ApiCampaignsIdContactsContactRowIdRoute
@@ -1092,6 +1129,7 @@ export interface FileRouteTypes {
     | '/empresas'
     | '/grupos-internos'
     | '/logs'
+    | '/relatorios'
     | '/usuarios'
     | '/api/attendants'
     | '/api/campaigns'
@@ -1107,6 +1145,7 @@ export interface FileRouteTypes {
     | '/campanhas/$id'
     | '/campanhas/modelos'
     | '/campanhas/nova'
+    | '/relatorios/conversas'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
@@ -1140,6 +1179,7 @@ export interface FileRouteTypes {
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/meta/channels'
+    | '/api/reports/conversations'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
     | '/api/webhooks/meta'
@@ -1172,6 +1212,7 @@ export interface FileRouteTypes {
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
+    | '/api/reports/conversations/export.csv'
     | '/api/webhooks/meta/diagnostic'
     | '/api/webhooks/meta/whatsapp'
     | '/api/campaigns/$id/contacts/$contactRowId'
@@ -1206,6 +1247,7 @@ export interface FileRouteTypes {
     | '/empresas'
     | '/grupos-internos'
     | '/logs'
+    | '/relatorios'
     | '/usuarios'
     | '/api/attendants'
     | '/api/campaigns'
@@ -1221,6 +1263,7 @@ export interface FileRouteTypes {
     | '/campanhas/$id'
     | '/campanhas/modelos'
     | '/campanhas/nova'
+    | '/relatorios/conversas'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
@@ -1254,6 +1297,7 @@ export interface FileRouteTypes {
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/meta/channels'
+    | '/api/reports/conversations'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
     | '/api/webhooks/meta'
@@ -1286,6 +1330,7 @@ export interface FileRouteTypes {
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
+    | '/api/reports/conversations/export.csv'
     | '/api/webhooks/meta/diagnostic'
     | '/api/webhooks/meta/whatsapp'
     | '/api/campaigns/$id/contacts/$contactRowId'
@@ -1322,6 +1367,7 @@ export interface FileRouteTypes {
     | '/_app/empresas'
     | '/_app/grupos-internos'
     | '/_app/logs'
+    | '/_app/relatorios'
     | '/_app/usuarios'
     | '/api/attendants'
     | '/api/campaigns'
@@ -1337,6 +1383,7 @@ export interface FileRouteTypes {
     | '/_app/campanhas/$id'
     | '/_app/campanhas/modelos'
     | '/_app/campanhas/nova'
+    | '/_app/relatorios/conversas'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
@@ -1370,6 +1417,7 @@ export interface FileRouteTypes {
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/meta/channels'
+    | '/api/reports/conversations'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
     | '/api/webhooks/meta'
@@ -1402,6 +1450,7 @@ export interface FileRouteTypes {
     | '/api/meta/messages/send-text'
     | '/api/public/webhooks/evolution'
     | '/api/public/webhooks/meta'
+    | '/api/reports/conversations/export.csv'
     | '/api/webhooks/meta/diagnostic'
     | '/api/webhooks/meta/whatsapp'
     | '/api/campaigns/$id/contacts/$contactRowId'
@@ -1464,6 +1513,7 @@ export interface RootRouteChildren {
   ApiInternalChatUsersRoute: typeof ApiInternalChatUsersRoute
   ApiInternalDbPoolStatusRoute: typeof ApiInternalDbPoolStatusRoute
   ApiMetaChannelsRoute: typeof ApiMetaChannelsRouteWithChildren
+  ApiReportsConversationsRoute: typeof ApiReportsConversationsRouteWithChildren
   ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
   ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRouteWithChildren
   ApiMetaCoexistenceConfigRoute: typeof ApiMetaCoexistenceConfigRoute
@@ -1611,6 +1661,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUsuariosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/relatorios': {
+      id: '/_app/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof AppRelatoriosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/logs': {
       id: '/_app/logs'
       path: '/logs'
@@ -1715,6 +1772,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/users/$id'
       preLoaderRoute: typeof ApiUsersIdRouteImport
       parentRoute: typeof ApiUsersRoute
+    }
+    '/api/reports/conversations': {
+      id: '/api/reports/conversations'
+      path: '/api/reports/conversations'
+      fullPath: '/api/reports/conversations'
+      preLoaderRoute: typeof ApiReportsConversationsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/meta/channels': {
       id: '/api/meta/channels'
@@ -1947,6 +2011,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminAuthCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/relatorios/conversas': {
+      id: '/_app/relatorios/conversas'
+      path: '/conversas'
+      fullPath: '/relatorios/conversas'
+      preLoaderRoute: typeof AppRelatoriosConversasRouteImport
+      parentRoute: typeof AppRelatoriosRoute
+    }
     '/_app/campanhas/nova': {
       id: '/_app/campanhas/nova'
       path: '/nova'
@@ -1981,6 +2052,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/webhooks/meta/diagnostic'
       preLoaderRoute: typeof ApiWebhooksMetaDiagnosticRouteImport
       parentRoute: typeof ApiWebhooksMetaRoute
+    }
+    '/api/reports/conversations/export.csv': {
+      id: '/api/reports/conversations/export.csv'
+      path: '/export.csv'
+      fullPath: '/api/reports/conversations/export.csv'
+      preLoaderRoute: typeof ApiReportsConversationsExportDotcsvRouteImport
+      parentRoute: typeof ApiReportsConversationsRoute
     }
     '/api/public/webhooks/meta': {
       id: '/api/public/webhooks/meta'
@@ -2297,6 +2375,18 @@ const AppCampanhasRouteWithChildren = AppCampanhasRoute._addFileChildren(
   AppCampanhasRouteChildren,
 )
 
+interface AppRelatoriosRouteChildren {
+  AppRelatoriosConversasRoute: typeof AppRelatoriosConversasRoute
+}
+
+const AppRelatoriosRouteChildren: AppRelatoriosRouteChildren = {
+  AppRelatoriosConversasRoute: AppRelatoriosConversasRoute,
+}
+
+const AppRelatoriosRouteWithChildren = AppRelatoriosRoute._addFileChildren(
+  AppRelatoriosRouteChildren,
+)
+
 interface AppRouteChildren {
   AppAtendimentoRoute: typeof AppAtendimentoRoute
   AppAutomacoesRoute: typeof AppAutomacoesRoute
@@ -2309,6 +2399,7 @@ interface AppRouteChildren {
   AppEmpresasRoute: typeof AppEmpresasRoute
   AppGruposInternosRoute: typeof AppGruposInternosRoute
   AppLogsRoute: typeof AppLogsRoute
+  AppRelatoriosRoute: typeof AppRelatoriosRouteWithChildren
   AppUsuariosRoute: typeof AppUsuariosRoute
 }
 
@@ -2324,6 +2415,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppEmpresasRoute: AppEmpresasRoute,
   AppGruposInternosRoute: AppGruposInternosRoute,
   AppLogsRoute: AppLogsRoute,
+  AppRelatoriosRoute: AppRelatoriosRouteWithChildren,
   AppUsuariosRoute: AppUsuariosRoute,
 }
 
@@ -2605,6 +2697,21 @@ const ApiMetaChannelsRouteWithChildren = ApiMetaChannelsRoute._addFileChildren(
   ApiMetaChannelsRouteChildren,
 )
 
+interface ApiReportsConversationsRouteChildren {
+  ApiReportsConversationsExportDotcsvRoute: typeof ApiReportsConversationsExportDotcsvRoute
+}
+
+const ApiReportsConversationsRouteChildren: ApiReportsConversationsRouteChildren =
+  {
+    ApiReportsConversationsExportDotcsvRoute:
+      ApiReportsConversationsExportDotcsvRoute,
+  }
+
+const ApiReportsConversationsRouteWithChildren =
+  ApiReportsConversationsRoute._addFileChildren(
+    ApiReportsConversationsRouteChildren,
+  )
+
 interface ApiWebhooksMetaRouteChildren {
   ApiWebhooksMetaDiagnosticRoute: typeof ApiWebhooksMetaDiagnosticRoute
   ApiWebhooksMetaWhatsappRoute: typeof ApiWebhooksMetaWhatsappRoute
@@ -2663,6 +2770,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalChatUsersRoute: ApiInternalChatUsersRoute,
   ApiInternalDbPoolStatusRoute: ApiInternalDbPoolStatusRoute,
   ApiMetaChannelsRoute: ApiMetaChannelsRouteWithChildren,
+  ApiReportsConversationsRoute: ApiReportsConversationsRouteWithChildren,
   ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
   ApiWebhooksMetaRoute: ApiWebhooksMetaRouteWithChildren,
   ApiMetaCoexistenceConfigRoute: ApiMetaCoexistenceConfigRoute,
