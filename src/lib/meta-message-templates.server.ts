@@ -2,6 +2,7 @@
 // Token via loadMetaAccessToken — nunca logar/expor access token.
 
 import { sql } from "@/lib/pg.server";
+import type { PgSql } from "@/lib/pg-types";
 import { loadMetaAccessToken } from "@/lib/meta-access-token.server";
 import {
   extractBodyText,
@@ -409,6 +410,7 @@ export async function assertApprovedMetaTemplate(opts: {
   channelId: string;
   templateName: string;
   languageCode: string;
+  db?: PgSql;
 }): Promise<
   | { ok: true; row: MetaMessageTemplateRow }
   | { ok: false; error: "invalid_meta_template" | "meta_template_not_approved" }
@@ -417,7 +419,8 @@ export async function assertApprovedMetaTemplate(opts: {
   const language = opts.languageCode.trim();
   if (!name || !language) return { ok: false, error: "invalid_meta_template" };
 
-  const rows = await sql<MetaMessageTemplateRow[]>`
+  const s = opts.db ?? sql();
+  const rows = await s<MetaMessageTemplateRow[]>`
     SELECT id, company_id, channel_id, meta_template_id, template_name, language_code,
            category, status, components, active, last_synced_at, created_at, updated_at
     FROM public.meta_message_templates
