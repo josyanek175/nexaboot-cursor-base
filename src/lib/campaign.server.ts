@@ -11,7 +11,6 @@ import {
   canPauseResumeCampaign,
   type ActingUser,
 } from "@/lib/permissions";
-import { isPlatformRole } from "@/lib/platform-roles";
 import { normalizePhone } from "@/lib/phone";
 import {
   assertApprovedMetaTemplate,

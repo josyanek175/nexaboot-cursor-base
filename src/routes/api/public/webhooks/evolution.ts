@@ -10,6 +10,7 @@ import { sql } from "@/lib/pg.server";
 import { isValidE164Digits, normalizePhoneE164, normalizePhoneForMatch } from "@/lib/phone";
 import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
+import { runWebhookWithConcurrencyLimit } from "@/lib/pg-pool-gate.server";
 
 const PayloadSchema = z
   .object({
@@ -534,7 +535,10 @@ export const Route = createFileRoute("/api/public/webhooks/evolution")({
         new Response(JSON.stringify({ ok: true, service: "evolution-webhook" }), {
           headers: { "Content-Type": "application/json" },
         }),
-      POST: async ({ request }) => handleEvolutionWebhookPOST(request),
+      POST: async ({ request }) =>
+        runWebhookWithConcurrencyLimit("evolution_public", () =>
+          handleEvolutionWebhookPOST(request),
+        ),
     },
   },
 });
