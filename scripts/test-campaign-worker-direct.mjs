@@ -220,6 +220,34 @@ assert("entrypoint imports campaign-worker.server", entry.includes("campaign-wor
 assert("entrypoint does not import pg.server", !entry.includes("pg.server"));
 assert("entrypoint uses processCampaignWorkerTick({ sql })", entry.includes("processCampaignWorkerTick({ sql })"));
 
+// Statement timeout só no pg-worker (não no web pool)
+{
+  const { readCampaignWorkerStatementTimeoutMs } = await import(
+    "../src/lib/pg-worker.server.ts"
+  );
+  assert(
+    "statement timeout default 15000 (direct suite)",
+    readCampaignWorkerStatementTimeoutMs({}) === 15_000,
+  );
+  assert(
+    "statement timeout custom (direct suite)",
+    readCampaignWorkerStatementTimeoutMs({ CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS: "30000" }) ===
+      30_000,
+  );
+  assert(
+    "statement timeout invalid → default (direct suite)",
+    readCampaignWorkerStatementTimeoutMs({ CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS: "nope" }) ===
+      15_000,
+  );
+  const pgWorkerSrc = readFileSync(join(root, "src/lib/pg-worker.server.ts"), "utf8");
+  const pgWebSrc = readFileSync(join(root, "src/lib/pg.server.ts"), "utf8");
+  assert(
+    "statement timeout wired only in pg-worker",
+    pgWorkerSrc.includes("CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS") &&
+      !pgWebSrc.includes("CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS"),
+  );
+}
+
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 assert(
   "npm script campaign:worker:direct",

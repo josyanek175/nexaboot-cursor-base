@@ -34,6 +34,24 @@ function readIdleTimeoutSec(env: NodeJS.ProcessEnv = process.env): number {
   return Math.floor(n);
 }
 
+const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
+
+/**
+ * Timeout de execução de consultas (PostgreSQL statement_timeout), em ms.
+ * Env: CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS. Default / inválido: 15000.
+ */
+export function readCampaignWorkerStatementTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS?.trim();
+  if (!raw) return DEFAULT_STATEMENT_TIMEOUT_MS;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_STATEMENT_TIMEOUT_MS;
+  const floored = Math.floor(n);
+  if (floored < 1) return DEFAULT_STATEMENT_TIMEOUT_MS;
+  return floored;
+}
+
 /**
  * URL do banco do worker.
  * Preferir CAMPAIGN_WORKER_DATABASE_URL.
@@ -62,6 +80,7 @@ export function getWorkerSql(env: NodeJS.ProcessEnv = process.env): PgSql {
   const max = readPoolMax(env);
   const connectTimeoutSec = readConnectTimeoutSec(env);
   const idleTimeoutSec = readIdleTimeoutSec(env);
+  const statementTimeoutMs = readCampaignWorkerStatementTimeoutMs(env);
 
   _workerSql = postgres(url, {
     ssl:
@@ -73,6 +92,10 @@ export function getWorkerSql(env: NodeJS.ProcessEnv = process.env): PgSql {
     connect_timeout: connectTimeoutSec,
     idle_timeout: idleTimeoutSec,
     max_lifetime: 60 * 30,
+    // Aplica statement_timeout em cada conexão do pool (somente worker).
+    connection: {
+      statement_timeout: String(statementTimeoutMs),
+    },
   });
 
   if (!_configLogged) {
@@ -83,6 +106,7 @@ export function getWorkerSql(env: NodeJS.ProcessEnv = process.env): PgSql {
         poolMax: max,
         connectTimeoutSec,
         idleTimeoutSec,
+        statementTimeoutMs,
         maxLifetimeSec: 1800,
         hasDedicatedUrl: Boolean(env.CAMPAIGN_WORKER_DATABASE_URL?.trim()),
         // nunca logar a URL
