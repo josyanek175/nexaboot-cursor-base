@@ -104,6 +104,54 @@ assert(
 assert("pg-worker pool max default 2", pgWorkerSrc.includes("return 2"));
 assert("pg-worker prepare false", pgWorkerSrc.includes("prepare: false"));
 assert("pg-worker max_lifetime 1800", pgWorkerSrc.includes("60 * 30"));
+assert(
+  "pg-worker applies statement_timeout via connection",
+  pgWorkerSrc.includes("statement_timeout: String(statementTimeoutMs)"),
+);
+assert(
+  "pg-worker reads CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS",
+  pgWorkerSrc.includes("CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS"),
+);
+
+const { readCampaignWorkerStatementTimeoutMs } = await import(
+  "../src/lib/pg-worker.server.ts"
+);
+assert(
+  "statement timeout default 15000",
+  readCampaignWorkerStatementTimeoutMs({}) === 15_000,
+);
+assert(
+  "statement timeout absent uses default",
+  readCampaignWorkerStatementTimeoutMs({ CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS: "" }) === 15_000,
+);
+assert(
+  "statement timeout custom",
+  readCampaignWorkerStatementTimeoutMs({ CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS: "25000" }) === 25_000,
+);
+assert(
+  "statement timeout invalid uses default",
+  readCampaignWorkerStatementTimeoutMs({ CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS: "abc" }) === 15_000,
+);
+assert(
+  "statement timeout zero uses default",
+  readCampaignWorkerStatementTimeoutMs({ CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS: "0" }) === 15_000,
+);
+assert(
+  "statement timeout negative uses default",
+  readCampaignWorkerStatementTimeoutMs({ CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS: "-5" }) === 15_000,
+);
+
+const pgWebSrc = readFileSync(join(root, "src/lib/pg.server.ts"), "utf8");
+assert(
+  "pg.server does not read CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS",
+  !pgWebSrc.includes("CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS"),
+);
+
+const docsSrc = readFileSync(join(root, "docs/campaign-worker-direct.md"), "utf8");
+assert(
+  "docs list CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS=15000",
+  docsSrc.includes("CAMPAIGN_WORKER_PG_STATEMENT_TIMEOUT_MS=15000"),
+);
 
 // Sem commits de relatórios nesta branch
 const { execSync } = await import("node:child_process");
