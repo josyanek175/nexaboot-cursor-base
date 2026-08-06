@@ -8,6 +8,7 @@ import {
 } from "@/lib/meta-connection-mode";
 import { whatsappChannelsHasMetaConnectionModeColumn } from "@/lib/meta-coexistence.server";
 import { sql } from "@/lib/pg.server";
+import type { PgSql } from "@/lib/pg-types";
 import { metaWhatsAppProvider } from "@/lib/whatsapp/providers/meta-whatsapp-provider.server";
 import { META_CHANNEL_STATUSES } from "@/lib/whatsapp/providers/whatsapp-provider.types";
 import { metaPhoneNumberIdOwner } from "@/lib/whatsapp/whatsapp-provider-router.server";
@@ -312,8 +313,9 @@ export async function recordMetaChannelError(
   companyId: string,
   errorCode: string,
   errorMessage: string,
+  db?: PgSql,
 ): Promise<void> {
-  const s = sql();
+  const s = db ?? sql();
   const safeMessage = errorMessage.length > 500 ? `${errorMessage.slice(0, 500)}…` : errorMessage;
   await s`
     UPDATE public.whatsapp_channels
@@ -326,8 +328,12 @@ export async function recordMetaChannelError(
   `;
 }
 
-export async function clearMetaChannelError(channelId: string, companyId: string): Promise<void> {
-  const s = sql();
+export async function clearMetaChannelError(
+  channelId: string,
+  companyId: string,
+  db?: PgSql,
+): Promise<void> {
+  const s = db ?? sql();
   await s`
     UPDATE public.whatsapp_channels
     SET last_error_code = NULL,

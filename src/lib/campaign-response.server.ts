@@ -3,6 +3,7 @@
  * Chamado pelos webhooks Meta/Evolution após gravar a mensagem recebida.
  */
 import { sql } from "@/lib/pg.server";
+import type { PgSql } from "@/lib/pg-types";
 import { getPhoneVariants, normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import { insertCampaignEvent, syncCampaignContactCounters } from "@/lib/campaign.server";
 import { MANUAL_PAUSED_STATUS } from "@/lib/campaign-manual-control";
@@ -88,8 +89,12 @@ export function classifyCampaignResponse(text: string | null | undefined): Respo
   return "unknown";
 }
 
-export async function isPhoneInOptOutList(companyId: string, phone: string): Promise<boolean> {
-  const s = sql();
+export async function isPhoneInOptOutList(
+  companyId: string,
+  phone: string,
+  db?: PgSql,
+): Promise<boolean> {
+  const s = db ?? sql();
   const variants = getPhoneVariants(phone);
   const phoneMatch = normalizePhoneForMatch(phone);
   const rows = await s<{ id: string }[]>`

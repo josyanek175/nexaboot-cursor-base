@@ -2,6 +2,7 @@
 
 import { decryptToken, hasTokenEncryptionKey } from "@/lib/crypto/token-crypto.server";
 import { sql } from "@/lib/pg.server";
+import type { PgSql } from "@/lib/pg-types";
 
 export type MetaTokenMissingReason =
   | "missing_encryption_key"
@@ -17,6 +18,7 @@ export type MetaTokenLoadResult =
 export type MetaTokenLookupContext = {
   phoneNumberId?: string | null;
   source?: string;
+  db?: PgSql;
 };
 
 function logTokenMissing(
@@ -58,7 +60,7 @@ export async function loadMetaAccessTokenDetailed(
       errorMessage: "META_TOKEN_ENCRYPTION_KEY não configurada no nexaboot-web",
     };
   }
-  const s = sql();
+  const s = context.db ?? sql();
 
   const rows = await s<
     {
