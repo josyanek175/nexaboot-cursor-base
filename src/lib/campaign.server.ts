@@ -2,6 +2,7 @@
 // Ritmo de envio é interno (auto_safe). Cliente não configura intervalo/pausa.
 // Isolamento estrito por company_id.
 import { sql } from "@/lib/pg.server";
+import type { PgSql } from "@/lib/pg-types";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 import {
@@ -153,10 +154,14 @@ function buildStoredVariableMappings(
   });
 }
 
-async function loadCompanyEvolutionContext(companyId: string): Promise<{
+async function loadCompanyEvolutionContext(
+  companyId: string,
+  db?: PgSql,
+): Promise<{
   name: string | null;
 }> {
-  const rows = await sql<{ name: string | null }[]>`
+  const s = db ?? sql();
+  const rows = await s<{ name: string | null }[]>`
     SELECT name
     FROM public.companies
     WHERE id = ${companyId}::uuid
@@ -167,9 +172,11 @@ async function loadCompanyEvolutionContext(companyId: string): Promise<{
 
 async function loadAttendantName(
   userId: string | null | undefined,
+  db?: PgSql,
 ): Promise<string | null> {
   if (!userId) return null;
-  const rows = await sql<{ name: string | null }[]>`
+  const s = db ?? sql();
+  const rows = await s<{ name: string | null }[]>`
     SELECT name FROM public.users WHERE id = ${userId}::uuid LIMIT 1
   `;
   return rows[0]?.name?.trim() ?? null;
@@ -598,8 +605,10 @@ export async function insertCampaignEvent(
   userId: string | null,
   payload: Record<string, unknown> = {},
   campaignContactId?: string | null,
+  db?: PgSql,
 ): Promise<void> {
-  await sql()`
+  const s = db ?? sql();
+  await s`
     INSERT INTO public.campaign_events
       (campaign_id, company_id, campaign_contact_id, event_type, payload, created_by_user_id)
     VALUES (
@@ -614,8 +623,9 @@ export async function insertCampaignEvent(
 export async function syncCampaignContactCounters(
   campaignId: string,
   companyId: string,
+  db?: PgSql,
 ): Promise<void> {
-  const s = sql();
+  const s = db ?? sql();
   await s`
     UPDATE public.campaigns c
     SET total_contacts = (
@@ -1026,8 +1036,10 @@ export async function resumeCampaignManually(
 export async function getCampaignById(
   companyId: string,
   campaignId: string,
+  db?: PgSql,
 ): Promise<CampaignRow | null> {
-  const rows = await sql<CampaignRow[]>`
+  const s = db ?? sql();
+  const rows = await s<CampaignRow[]>`
     SELECT
       c.id, c.company_id, c.whatsapp_channel_id, c.name,
       COALESCE(c.color, '#6B7280') AS color,
@@ -1367,15 +1379,17 @@ export async function prepareCampaignContactMessage(
   companyId: string,
   campaignId: string,
   contactRowId: string,
+  db?: PgSql,
 ): Promise<{ rendered_message: string; greeting_variant: string; closing_variant: string } | null> {
-  const campaign = await getCampaignById(companyId, campaignId);
+  const s = db ?? sql();
+  const campaign = await getCampaignById(companyId, campaignId, db);
   if (!campaign) return null;
 
   let messageTemplate = campaign.message_text?.trim() ?? "";
   let templateMeta: Awaited<ReturnType<typeof getCampaignTemplate>> | null = null;
 
   if (campaign.template_id) {
-    templateMeta = await getCampaignTemplate(companyId, campaign.template_id);
+    templateMeta = await getCampaignTemplate(companyId, campaign.template_id, undefined, db);
     if (templateMeta) {
       messageTemplate = templateMeta.visible_body;
     }
@@ -1383,7 +1397,7 @@ export async function prepareCampaignContactMessage(
 
   if (!messageTemplate) return null;
 
-  const rows = await sql<
+  const rows = await s<
     {
       id: string;
       phone: string;
@@ -1417,8 +1431,8 @@ export async function prepareCampaignContactMessage(
   if (templateVars.length > 0 || templateMeta) {
     const mappings = getEvolutionMappingsFromCampaign(campaign, messageTemplate);
     const [companyCtx, attendantName] = await Promise.all([
-      loadCompanyEvolutionContext(companyId),
-      loadAttendantName(campaign.created_by_user_id),
+      loadCompanyEvolutionContext(companyId, db),
+      loadAttendantName(campaign.created_by_user_id, db),
     ]);
     const resolved = resolveAndRenderEvolutionTemplate(
       messageTemplate,
@@ -1444,7 +1458,7 @@ export async function prepareCampaignContactMessage(
     closing_variant = variation.closing_variant;
   }
 
-  await sql`
+  await s`
     UPDATE public.campaign_contacts
     SET greeting_variant = ${greeting_variant || null},
         closing_variant = ${closing_variant || null},

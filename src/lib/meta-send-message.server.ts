@@ -1,6 +1,7 @@
 // Envio manual de texto outbound Meta WhatsApp Cloud API.
 
 import { sql } from "@/lib/pg.server";
+import type { PgSql } from "@/lib/pg-types";
 import {
   bumpConversationAfterOutboundMessage,
   insertOutboundTextMessage,
@@ -464,6 +465,8 @@ export type MetaTemplateSendInput = {
   templateName: string;
   languageCode: string;
   bodyParameters: string[];
+  /** SQL injetável (worker directo). */
+  db?: PgSql;
 };
 
 export type MetaTemplateSendResult =
@@ -479,6 +482,7 @@ export async function sendMetaTemplateMessage(
   input: MetaTemplateSendInput,
 ): Promise<MetaTemplateSendResult> {
   const toDigits = input.toPhone.replace(/\D/g, "");
+  const s = input.db ?? sql();
   console.log("[META_TEMPLATE_SEND_START]", {
     companyId: input.companyId,
     channelId: input.channelId,
@@ -487,7 +491,7 @@ export async function sendMetaTemplateMessage(
     bodyParamCount: input.bodyParameters.length,
   });
 
-  const rows = await sql<
+  const rows = await s<
     {
       id: string;
       phone_number_id: string | null;
@@ -518,6 +522,7 @@ export async function sendMetaTemplateMessage(
   const token = await loadMetaAccessToken(input.channelId, input.companyId, {
     phoneNumberId,
     source: "template_send",
+    db: input.db,
   });
   if (!token) {
     console.error("[META_TEMPLATE_SEND_ERROR]", { error: "missing_token" });
@@ -589,13 +594,19 @@ export async function sendMetaTemplateMessage(
         errorMessage,
         channelId: input.channelId,
       });
-      await recordMetaChannelError(input.channelId, input.companyId, errorCode, errorMessage);
+      await recordMetaChannelError(
+        input.channelId,
+        input.companyId,
+        errorCode,
+        errorMessage,
+        input.db,
+      );
       return { ok: false, error: "meta_api_error", errorCode, errorMessage };
     }
 
     const messages = parsed.messages as Array<{ id?: string }> | undefined;
     const wamid = messages?.[0]?.id ?? null;
-    await clearMetaChannelError(input.channelId, input.companyId);
+    await clearMetaChannelError(input.channelId, input.companyId, input.db);
     console.log("[META_TEMPLATE_SEND_SUCCESS]", {
       channelId: input.channelId,
       wamid,
