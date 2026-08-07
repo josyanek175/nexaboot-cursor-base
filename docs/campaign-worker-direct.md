@@ -63,7 +63,8 @@ Também necessárias para envio (iguais ao web, sem secrets em logs):
 
 ```bash
 npm run campaign:worker:direct
-# equivalente: npx tsx scripts/campaign-worker-direct.mjs
+# equivalente: tsx scripts/campaign-worker-direct.mjs
+# (tsx está em dependencies — sem npx / download em runtime)
 ```
 
 Réplicas: **1** apenas. `CAMPAIGN_WORKER_CONCURRENCY` > 1 falha no startup.
