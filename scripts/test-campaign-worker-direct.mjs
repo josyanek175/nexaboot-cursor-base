@@ -250,8 +250,25 @@ assert("entrypoint uses processCampaignWorkerTick({ sql })", entry.includes("pro
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 assert(
-  "npm script campaign:worker:direct",
-  pkg.scripts["campaign:worker:direct"]?.includes("campaign-worker-direct.mjs"),
+  "npm script campaign:worker:direct uses local tsx",
+  pkg.scripts["campaign:worker:direct"] === "tsx scripts/campaign-worker-direct.mjs",
+);
+assert(
+  "npm script does not use npx",
+  !String(pkg.scripts["campaign:worker:direct"]).includes("npx"),
+);
+assert(
+  "tsx is a production dependency",
+  Boolean(pkg.dependencies?.tsx) && !pkg.devDependencies?.tsx,
+);
+
+assert(
+  "entrypoint logs campaign_worker_disabled",
+  entry.includes('event: "campaign_worker_disabled"'),
+);
+assert(
+  "entrypoint exits 0 on worker_disabled",
+  /worker_disabled[\s\S]*process\.exit\(0\)/.test(entry),
 );
 
 // Sem migrations nesta entrega

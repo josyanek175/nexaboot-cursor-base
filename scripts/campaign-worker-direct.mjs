@@ -6,8 +6,8 @@
  * - Usa pool dedicado (pg-worker.server) via processCampaignWorkerTick({ sql })
  *
  * Uso (EasyPanel / local):
- *   npx tsx scripts/campaign-worker-direct.mjs
  *   npm run campaign:worker:direct
+ *   tsx scripts/campaign-worker-direct.mjs
  *
  * Env:
  *   CAMPAIGN_WORKER_MODE=direct
@@ -32,6 +32,17 @@ try {
   assertDirectWorkerConfig(config);
 } catch (e) {
   const code = e?.code;
+  if (code === "worker_disabled") {
+    // Desativação intencional — não é erro de configuração.
+    console.log(
+      JSON.stringify({
+        event: "campaign_worker_disabled",
+        code: "worker_disabled",
+        message: "CAMPAIGN_WORKER_ENABLED=false — worker directo não inicia.",
+      }),
+    );
+    process.exit(0);
+  }
   console.error(
     JSON.stringify({
       event: "campaign_worker_direct_config_error",
@@ -39,7 +50,7 @@ try {
       error: maskExternalError(e),
     }),
   );
-  process.exit(code === "worker_disabled" ? 0 : 1);
+  process.exit(1);
 }
 
 // Imports TypeScript (requer tsx). Sem src/server.ts / bootstrap web.
