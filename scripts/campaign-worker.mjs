@@ -13,9 +13,30 @@
  *   WORKER_INTERVAL_MS           (alias de CAMPAIGN_WORKER_IDLE_MS)
  *   CAMPAIGN_WORKER_TIMEOUT_MS   (default 60000)
  *   CAMPAIGN_WORKER_ERROR_DELAY_MS (default 10000)
+ *   CAMPAIGN_WORKER_MODE         (http | direct | disabled; default http)
+ *   CAMPAIGN_WORKER_ENABLED      (default true)
+ *
+ * Em mode=direct, mode=disabled ou CAMPAIGN_WORKER_ENABLED=false o poller não
+ * envia nenhum tick. O processo permanece ocioso em vez de sair, para não
+ * provocar restart-loop no orquestrador.
  */
 import { readWorkerConfig, runWorkerLoop } from "./campaign-worker-lib.mjs";
 
+/** Mantém o processo vivo sem trabalho e sem log adicional, até SIGTERM/SIGINT. */
+function parkUntilSignal() {
+  const keepAlive = setInterval(() => {}, 1 << 30);
+  const stop = () => {
+    clearInterval(keepAlive);
+    process.exit(0);
+  };
+  process.once("SIGTERM", stop);
+  process.once("SIGINT", stop);
+}
+
 const config = readWorkerConfig();
 
-await runWorkerLoop({ config });
+const outcome = await runWorkerLoop({ config });
+
+if (outcome && outcome.started === false) {
+  parkUntilSignal();
+}

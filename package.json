@@ -10,6 +10,7 @@
     "start": "node .output/server/index.mjs",
     "preview": "vite preview",
     "campaign:worker": "node scripts/campaign-worker.mjs",
+    "campaign:worker:direct": "tsx scripts/campaign-worker-direct.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -67,6 +68,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
+    "tsx": "^4.23.9",
     "tw-animate-css": "^1.3.4",
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^6.0.2",

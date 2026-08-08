@@ -1,5 +1,6 @@
 // Modelos de mensagem reutilizáveis por empresa (Evolution).
 import { sql } from "@/lib/pg.server";
+import type { PgSql } from "@/lib/pg-types";
 import {
   parseTemplateMessageBody,
   serializeTemplateMessageBody,
@@ -64,8 +65,10 @@ export async function getCampaignTemplate(
   companyId: string,
   templateId: string,
   opts?: { includeInactive?: boolean },
+  db?: PgSql,
 ): Promise<CampaignTemplatePublic | null> {
-  const rows = await sql<CampaignTemplateRow[]>`
+  const s = db ?? sql();
+  const rows = await s<CampaignTemplateRow[]>`
     SELECT id, company_id, name, message_body, active,
            created_by_user_id, created_at, updated_at
     FROM public.campaign_templates
