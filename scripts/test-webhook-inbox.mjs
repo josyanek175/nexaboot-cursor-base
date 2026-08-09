@@ -59,6 +59,7 @@ import {
   withWebhookConcurrencyLimit,
 } from "../src/lib/pg-pool-gate.server.ts";
 import { runWebhookIngress } from "../src/lib/webhook-ingress.server.ts";
+import { createStore, makeSql } from "./test-webhook-db-fake.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const readSource = (rel) => readFileSync(path.join(repoRoot, rel), "utf8");
@@ -74,89 +75,6 @@ function assert(label, condition) {
 }
 
 const silent = { log: () => {}, logError: () => {} };
-
-// ---------------------------------------------------------------------------
-// Banco falso: guarda linhas fora do processo de teste, como o PostgreSQL faria
-// ---------------------------------------------------------------------------
-
-function createStore() {
-  return { rows: [] };
-}
-
-function makeSql(store, options = {}) {
-  const state = { unsafeCalls: [], commits: 0, committedAt: 0, insertValues: null };
-
-  const tx = (strings, ...values) => {
-    const text = strings.join("|");
-
-    if (text.includes("INSERT INTO public.webhook_inbox")) {
-      if (options.failOnInsert) return Promise.reject(new Error(options.failMessage ?? "db down"));
-      state.insertValues = values;
-      const [
-        provider,
-        eventType,
-        companyId,
-        channelId,
-        instanceName,
-        externalEventId,
-        externalMessageId,
-        deduplicationKey,
-        payload,
-        requestHeaders,
-      ] = values;
-      const exists = store.rows.find(
-        (r) => r.provider === provider && r.deduplication_key === deduplicationKey,
-      );
-      if (exists) return Promise.resolve([]);
-      const row = {
-        id: `inbox-${store.rows.length + 1}`,
-        provider,
-        event_type: eventType,
-        company_id: companyId,
-        channel_id: channelId,
-        instance_name: instanceName,
-        external_event_id: externalEventId,
-        external_message_id: externalMessageId,
-        deduplication_key: deduplicationKey,
-        payload,
-        request_headers: requestHeaders,
-        status: "pending",
-      };
-      store.rows.push(row);
-      return Promise.resolve([{ id: row.id }]);
-    }
-
-    if (text.includes("SELECT id FROM public.webhook_inbox")) {
-      const [provider, deduplicationKey] = values;
-      const found = store.rows.find(
-        (r) => r.provider === provider && r.deduplication_key === deduplicationKey,
-      );
-      return Promise.resolve(found ? [{ id: found.id }] : []);
-    }
-
-    return Promise.resolve([]);
-  };
-
-  tx.unsafe = (q) => {
-    state.unsafeCalls.push(q);
-    return Promise.resolve([]);
-  };
-
-  const sql = {
-    begin: async (fn) => {
-      if (options.failOnBegin) throw new Error(options.failMessage ?? "connection terminated");
-      const result = await fn(tx);
-      if (options.commitDelayMs) {
-        await new Promise((r) => setTimeout(r, options.commitDelayMs));
-      }
-      state.commits += 1;
-      state.committedAt = Date.now();
-      return result;
-    },
-  };
-
-  return { sql, state };
-}
 
 const evolutionPayload = {
   event: "messages.upsert",
@@ -863,8 +781,11 @@ assert("read_error -> 400", bodyReadFailureStatus("read_error") === 400);
     externalEventId: null,
     externalMessageId: "WAMID-A",
     deduplicationKey: "evolution:nexa-01:messages.upsert:WAMID-A",
+    conversationKey: "5511999999999@s.whatsapp.net",
     rawPayload: JSON.stringify(evolutionPayload),
     requestHeaders: { "content-type": "application/json" },
+    exchangeName: "nexaboot.dev.webhooks",
+    routingKey: "evolution.messages.upsert",
     statementTimeoutMs: 4321,
   });
 
@@ -888,8 +809,11 @@ assert("read_error -> 400", bodyReadFailureStatus("read_error") === 400);
     externalEventId: null,
     externalMessageId: "WAMID-A",
     deduplicationKey: "evolution:nexa-01:messages.upsert:WAMID-A",
+    conversationKey: "5511999999999@s.whatsapp.net",
     rawPayload: JSON.stringify(evolutionPayload),
     requestHeaders: { "content-type": "application/json" },
+    exchangeName: "nexaboot.dev.webhooks",
+    routingKey: "evolution.messages.upsert",
   });
 
   assert("reentrega e duplicada", second.status === "duplicate");
@@ -1116,8 +1040,11 @@ assert("read_error -> 400", bodyReadFailureStatus("read_error") === 400);
     externalEventId: null,
     externalMessageId: "WAMID-SLOT",
     deduplicationKey: "evolution:slot",
+    conversationKey: null,
     rawPayload: JSON.stringify(evolutionPayload),
     requestHeaders: {},
+    exchangeName: "nexaboot.dev.webhooks",
+    routingKey: "evolution.messages.upsert",
     acquireSlot: async (fn) => {
       events.push("acquire");
       const result = await fn();

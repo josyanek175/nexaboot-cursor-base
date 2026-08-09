@@ -36,10 +36,29 @@ import {
   type WebhookIdentifiers,
   type WebhookProvider,
 } from "@/lib/webhook-inbox-core";
+import {
+  buildOutboxMessagePayload,
+  buildOutboxRoutingKey,
+  readWebhookOutboxExchange,
+} from "@/lib/webhook-outbox-core";
+import { ensureOutboxForInbox } from "@/lib/webhook-outbox.server";
+
+/** `received_at` chega como Date do postgres.js e como string dos fakes. */
+function toIsoString(value: string | Date | null): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return new Date().toISOString();
+}
 
 export type PersistWebhookEventResult = {
   status: "persisted" | "duplicate";
   inboxId: string | null;
+  /** Estado da mensagem de saída correspondente, sempre confirmado no COMMIT. */
+  outboxId: string | null;
+  outboxCreated: boolean;
   persistenceMs: number;
 };
 
@@ -53,9 +72,13 @@ export type PersistWebhookEventParams = {
   externalEventId: string | null;
   externalMessageId: string | null;
   deduplicationKey: string;
+  conversationKey: string | null;
   /** Corpo bruto já validado como JSON. Inserido via `::jsonb`, sem re-serializar. */
   rawPayload: string;
   requestHeaders: Record<string, string | boolean>;
+  /** Destino da mensagem de saída, gravada na mesma transação da inbox. */
+  exchangeName: string;
+  routingKey: string;
   statementTimeoutMs?: number;
   /**
    * Reserva de conexão. Default: semáforo do pool dedicado da inbox, que
@@ -65,8 +88,9 @@ export type PersistWebhookEventParams = {
 };
 
 /**
- * INSERT idempotente com timeout de aquisição de conexão e statement_timeout
- * próprios. Resolve somente após o COMMIT da transação.
+ * Grava inbox + outbox na MESMA transação, com timeout de aquisição de conexão
+ * e statement_timeout próprios. Resolve somente após o COMMIT dos dois
+ * registros — nunca existe evento na inbox sem mensagem de saída registrada.
  */
 export async function persistWebhookEvent(
   params: PersistWebhookEventParams,
@@ -79,7 +103,7 @@ export async function persistWebhookEvent(
   const result = await acquireSlot(async () => params.sql.begin(async (tx) => {
     await tx.unsafe(`SET LOCAL statement_timeout = ${Math.max(1, Math.floor(statementTimeoutMs))}`);
 
-    const inserted = await tx<{ id: string }[]>`
+    const inserted = await tx<{ id: string; received_at: string | Date }[]>`
       INSERT INTO public.webhook_inbox (
         provider, event_type, company_id, channel_id, instance_name,
         external_event_id, external_message_id, deduplication_key,
@@ -98,20 +122,53 @@ export async function persistWebhookEvent(
         'pending'
       )
       ON CONFLICT (provider, deduplication_key) DO NOTHING
-      RETURNING id
+      RETURNING id, received_at
     `;
 
-    if (inserted[0]) {
-      return { status: "persisted" as const, inboxId: inserted[0].id };
+    let status: "persisted" | "duplicate" = "persisted";
+    let inboxId = inserted[0]?.id ?? null;
+    let receivedAt = inserted[0]?.received_at ?? null;
+
+    if (!inboxId) {
+      status = "duplicate";
+      const existing = await tx<{ id: string; received_at: string | Date }[]>`
+        SELECT id, received_at FROM public.webhook_inbox
+        WHERE provider = ${params.provider}
+          AND deduplication_key = ${params.deduplicationKey}
+        LIMIT 1
+      `;
+      inboxId = existing[0]?.id ?? null;
+      receivedAt = existing[0]?.received_at ?? null;
     }
 
-    const existing = await tx<{ id: string }[]>`
-      SELECT id FROM public.webhook_inbox
-      WHERE provider = ${params.provider}
-        AND deduplication_key = ${params.deduplicationKey}
-      LIMIT 1
-    `;
-    return { status: "duplicate" as const, inboxId: existing[0]?.id ?? null };
+    // Conflito sem linha visível: outra transação está inserindo o mesmo
+    // evento e ainda não commitou. Não dá para garantir a outbox agora, então
+    // a requisição falha e o provedor reenvia — nunca 200 sem estado durável.
+    if (!inboxId) {
+      throw new Error("inbox_row_not_visible");
+    }
+
+    const outbox = await ensureOutboxForInbox(tx, {
+      inboxId,
+      exchangeName: params.exchangeName,
+      routingKey: params.routingKey,
+      messagePayload: buildOutboxMessagePayload({
+        inboxId,
+        provider: params.provider,
+        identifiers: {
+          eventType: params.eventType,
+          instanceName: params.instanceName,
+          externalEventId: params.externalEventId,
+          externalMessageId: params.externalMessageId,
+          conversationKey: params.conversationKey,
+        },
+        companyId: params.companyId,
+        channelId: params.channelId,
+        receivedAt: toIsoString(receivedAt),
+      }),
+    });
+
+    return { status, inboxId, outboxId: outbox.outboxId, outboxCreated: outbox.created };
   }));
 
   return { ...result, persistenceMs: Date.now() - startedAt };
@@ -125,6 +182,7 @@ export type WebhookIngestOutcome =
   | {
       status: "persisted" | "duplicate";
       inboxId: string | null;
+      outboxId: string | null;
       deduplicationKey: string;
       persistenceMs: number;
       identifiers: WebhookIdentifiers;
@@ -168,6 +226,7 @@ export type IngestWebhookEventParams = {
   channelId?: string | null;
   statementTimeoutMs?: number;
   acquireSlot?: <T>(fn: () => Promise<T>) => Promise<T>;
+  env?: NodeJS.ProcessEnv;
   log?: LogFn;
   logError?: LogFn;
 };
@@ -203,6 +262,9 @@ export async function ingestWebhookEvent(
     rawBody: params.rawBody,
   });
 
+  const routingKey = buildOutboxRoutingKey(params.provider, identifiers.eventType);
+  const exchangeName = readWebhookOutboxExchange(params.env ?? process.env);
+
   const baseLog = {
     provider: params.provider,
     instanceName: identifiers.instanceName,
@@ -226,8 +288,11 @@ export async function ingestWebhookEvent(
       externalEventId: identifiers.externalEventId,
       externalMessageId: identifiers.externalMessageId,
       deduplicationKey,
+      conversationKey: identifiers.conversationKey,
       rawPayload: params.rawBody,
       requestHeaders: sanitizeWebhookHeaders(params.headers),
+      exchangeName,
+      routingKey,
       statementTimeoutMs: params.statementTimeoutMs,
       acquireSlot: params.acquireSlot,
     });
@@ -239,9 +304,22 @@ export async function ingestWebhookEvent(
       persistenceMs: result.persistenceMs,
     });
 
+    // Confirmado no mesmo COMMIT da inbox. `repaired` é evento duplicado cuja
+    // outbox faltava — típico de evento gravado antes desta etapa existir.
+    log(result.outboxCreated ? "WEBHOOK_OUTBOX_CREATED" : "WEBHOOK_OUTBOX_DUPLICATE", {
+      inboxId: result.inboxId,
+      outboxId: result.outboxId,
+      provider: params.provider,
+      eventType: identifiers.eventType,
+      exchange: exchangeName,
+      routingKey,
+      repaired: result.outboxCreated && result.status === "duplicate",
+    });
+
     return {
       status: result.status,
       inboxId: result.inboxId,
+      outboxId: result.outboxId,
       deduplicationKey,
       persistenceMs: result.persistenceMs,
       identifiers,
@@ -458,6 +536,7 @@ export async function ingestWebhookRequestToInbox(
       headers: params.request.headers,
       statementTimeoutMs: readWebhookInboxStatementTimeoutMs(env),
       acquireSlot: params.acquireSlot,
+      env,
       log: params.log,
       logError: params.logError,
     });

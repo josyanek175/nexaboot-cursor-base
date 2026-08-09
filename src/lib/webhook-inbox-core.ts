@@ -208,6 +208,8 @@ export type WebhookIdentifiers = {
   externalEventId: string | null;
   externalMessageId: string | null;
   externalIds: string[];
+  /** Identifica a conversa de origem; usado como roteamento pelo worker. */
+  conversationKey: string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -236,9 +238,12 @@ export function extractEvolutionIdentifiers(payload: unknown): WebhookIdentifier
 
   const items = Array.isArray(data) ? data : data != null ? [data] : [];
   const externalIds: string[] = [];
+  let conversationKey: string | null = null;
   for (const item of items) {
-    const id = asNonEmptyString(asRecord(asRecord(item).key).id);
+    const key = asRecord(asRecord(item).key);
+    const id = asNonEmptyString(key.id);
     if (id) externalIds.push(id);
+    conversationKey = conversationKey ?? asNonEmptyString(key.remoteJid);
   }
 
   return {
@@ -247,6 +252,7 @@ export function extractEvolutionIdentifiers(payload: unknown): WebhookIdentifier
     externalEventId: null,
     externalMessageId: externalIds[0] ?? null,
     externalIds,
+    conversationKey,
   };
 }
 
@@ -264,6 +270,7 @@ export function extractMetaIdentifiers(payload: unknown): WebhookIdentifiers {
   let instanceName: string | null = null;
   let externalEventId: string | null = null;
   let firstMessageId: string | null = null;
+  let conversationKey: string | null = null;
 
   for (const rawEntry of entries) {
     const entry = asRecord(rawEntry);
@@ -278,8 +285,14 @@ export function extractMetaIdentifiers(payload: unknown): WebhookIdentifiers {
       const value = asRecord(change.value);
       instanceName = instanceName ?? asNonEmptyString(asRecord(value.metadata).phone_number_id);
 
+      for (const rawContact of Array.isArray(value.contacts) ? value.contacts : []) {
+        conversationKey = conversationKey ?? asNonEmptyString(asRecord(rawContact).wa_id);
+      }
+
       for (const rawMessage of Array.isArray(value.messages) ? value.messages : []) {
-        const id = asNonEmptyString(asRecord(rawMessage).id);
+        const message = asRecord(rawMessage);
+        const id = asNonEmptyString(message.id);
+        conversationKey = conversationKey ?? asNonEmptyString(message.from);
         if (!id) continue;
         externalIds.push(id);
         firstMessageId = firstMessageId ?? id;
@@ -288,6 +301,7 @@ export function extractMetaIdentifiers(payload: unknown): WebhookIdentifiers {
       for (const rawStatus of Array.isArray(value.statuses) ? value.statuses : []) {
         const status = asRecord(rawStatus);
         const id = asNonEmptyString(status.id);
+        conversationKey = conversationKey ?? asNonEmptyString(status.recipient_id);
         if (!id) continue;
         externalIds.push(`${id}#${asNonEmptyString(status.status) ?? "unknown"}`);
         firstMessageId = firstMessageId ?? id;
@@ -301,6 +315,7 @@ export function extractMetaIdentifiers(payload: unknown): WebhookIdentifiers {
     externalEventId,
     externalMessageId: firstMessageId,
     externalIds,
+    conversationKey,
   };
 }
 

@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "campaign:worker": "node scripts/campaign-worker.mjs",
     "campaign:worker:direct": "tsx scripts/campaign-worker-direct.mjs",
+    "webhook:outbox-publisher": "tsx scripts/webhook-outbox-publisher.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -49,6 +50,7 @@
     "@tanstack/react-router": "^1.168.25",
     "@tanstack/react-start": "^1.167.50",
     "@tanstack/router-plugin": "^1.167.28",
+    "amqplib": "^0.10.9",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

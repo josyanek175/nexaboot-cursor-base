@@ -1,12 +1,15 @@
-# Inbox durável de webhooks — Etapa 1 (ingestão)
+# Inbox durável de webhooks — Etapas 1 e 2
 
-Garantia central desta etapa: **o HTTP 200 só é devolvido depois do COMMIT** do
-evento em `public.webhook_inbox`. Nenhuma operação de contato, conversa,
-mensagem, mídia ou campanha acontece dentro da requisição HTTP.
+Garantia central: **o HTTP 200 só é devolvido depois do COMMIT** do evento em
+`public.webhook_inbox` **e** da mensagem correspondente em
+`public.webhook_outbox`. Nenhuma operação de contato, conversa, mensagem, mídia
+ou campanha acontece dentro da requisição HTTP.
 
-O worker de processamento é a Etapa 2 e **não** existe ainda. Com
-`WEBHOOK_DURABLE_INBOX_ENABLED=true` e `WEBHOOK_DURABLE_INBOX_PROCESSING_ENABLED=false`,
-os eventos ficam acumulando em `status = 'pending'`.
+O worker que processa contatos, conversas e mensagens é a Etapa 3 e **não**
+existe ainda. Com `WEBHOOK_DURABLE_INBOX_ENABLED=true` e
+`WEBHOOK_DURABLE_INBOX_PROCESSING_ENABLED=false`, os eventos ficam acumulando em
+`webhook_inbox.status = 'pending'`. A Etapa 2 apenas transporta a referência do
+evento até o RabbitMQ.
 
 ## Fluxo
 
@@ -14,9 +17,10 @@ os eventos ficam acumulando em `status = 'pending'`.
 2. Reserva de memória para o corpo (ver "Payloads grandes").
 3. Leitura do corpo com teto de bytes, corte por inatividade e teto absoluto.
 4. Extração dos identificadores mínimos e da `deduplication_key`.
-5. `INSERT ... ON CONFLICT (provider, deduplication_key) DO NOTHING` no pool
-   dedicado, dentro de transação com `statement_timeout`.
-6. Só depois do COMMIT, resposta 200.
+5. Numa única transação no pool dedicado, com `statement_timeout`:
+   `INSERT` na inbox com `ON CONFLICT (provider, deduplication_key) DO NOTHING`
+   e `INSERT` na outbox com `ON CONFLICT (inbox_id, routing_key) DO NOTHING`.
+6. Só depois do COMMIT dos dois registros, resposta 200.
 
 Falha em qualquer ponto entre 2 e 5 devolve erro retentável — nunca 200.
 
@@ -103,7 +107,7 @@ Em qualquer corte o reader é cancelado, então a requisição não fica pendura
 | Variável | Default | Efeito |
 | --- | --- | --- |
 | `WEBHOOK_DURABLE_INBOX_ENABLED` | `false` | Liga a ingestão durável. Desligada, o fluxo legado continua igual. |
-| `WEBHOOK_DURABLE_INBOX_PROCESSING_ENABLED` | `false` | Reservada para a Etapa 2. Sem efeito hoje. |
+| `WEBHOOK_DURABLE_INBOX_PROCESSING_ENABLED` | `false` | Reservada para a Etapa 3 (worker de mensagens). Sem efeito hoje. |
 | `WEBHOOK_INBOX_DATABASE_URL` | `DATABASE_URL` | Banco do pool dedicado. |
 | `WEBHOOK_INBOX_PG_POOL_MAX` | `3` | Conexões do pool da inbox. |
 | `WEBHOOK_INBOX_PG_CONNECT_TIMEOUT_SEC` | `10` | Timeout de conexão TCP/handshake. |
@@ -116,33 +120,151 @@ Em qualquer corte o reader é cancelado, então a requisição não fica pendura
 | `WEBHOOK_INBOX_BODY_STALL_TIMEOUT_MS` | `15000` | Tempo máximo sem bytes novos. |
 | `WEBHOOK_INBOX_BODY_TIMEOUT_MS` | `120000` | Teto absoluto da leitura do corpo. |
 
+## Outbox transacional (Etapa 2)
+
+Publicar direto no RabbitMQ dentro do handler HTTP reintroduziria exatamente o
+problema que a inbox resolveu: broker fora do ar viraria erro no endpoint. Por
+isso a ingestão grava a mensagem numa tabela (`public.webhook_outbox`) na mesma
+transação da inbox, e um serviço separado publica depois.
+
+Consequências práticas:
+
+- **Nunca existe inbox sem outbox.** Se o `INSERT` da outbox falhar, a
+  transação inteira sofre rollback e o endpoint devolve 503.
+- **Evento duplicado também é reparado.** A reentrega localiza a inbox
+  existente e garante a outbox correspondente. Isso conserta eventos gravados
+  pela Etapa 1, antes desta tabela existir.
+- **RabbitMQ indisponível não afeta o endpoint.** Nem `src/routes` nem
+  `webhook-inbox.server.ts` importam a camada do broker.
+
+### Mensagem publicada
+
+Só referências e metadados — o payload bruto (que pode ter mais de 100 MB de
+mídia em base64) fica apenas na inbox e será carregado pelo worker da Etapa 3
+através do `inboxId`:
+
+```json
+{
+  "schemaVersion": 1,
+  "inboxId": "…", "provider": "evolution", "eventType": "messages.upsert",
+  "companyId": null, "channelId": null, "instanceName": "nexa-01",
+  "externalEventId": null, "externalMessageId": "WAMID-A",
+  "conversationKey": "5511…@s.whatsapp.net", "receivedAt": "…"
+}
+```
+
+A routing key é `<provider>.<evento>` normalizada (`evolution.messages.upsert`).
+
+### Serviço publicador
+
+```
+npm run webhook:outbox-publisher
+```
+
+Ciclo: recupera leases vencidos → reivindica um lote com
+`FOR UPDATE SKIP LOCKED` marcando `publishing` e criando lease → publica →
+**espera o publisher confirm** → só então grava `published`.
+
+- `published` nunca é gravado sem confirmação do broker.
+- Falha antes do confirm vira `retry` com backoff exponencial e jitter.
+- Estourado `WEBHOOK_OUTBOX_MAX_ATTEMPTS`, vira `dead_letter` preservando
+  payload, tentativas e `last_error`. Nada é apagado, nunca.
+- Lease vencido é recuperado por outra réplica; `SKIP LOCKED` permite várias
+  réplicas sem que duas peguem a mesma linha.
+- `SIGTERM`/`SIGINT` param de iniciar publicações novas e devolvem à fila as
+  linhas reservadas que não chegaram a ser publicadas (a tentativa é
+  estornada).
+- Com `RABBITMQ_ENABLED=false` o processo fica **estacionado**: não abre pool,
+  não consulta a outbox e dorme em intervalo longo. Ele continua vivo de
+  propósito, para o orquestrador não entrar em laço de restart.
+
+`amqplib` é carregado por import dinâmico, então o bundle do web não o contém e
+build e testes não precisam de broker.
+
+### Variáveis da Etapa 2
+
+| Variável | Default | Efeito |
+| --- | --- | --- |
+| `RABBITMQ_ENABLED` | `false` | Liga o publicador. Desligada, ele fica estacionado. |
+| `RABBITMQ_URL` | — | Obrigatória quando habilitado. Nunca aparece em log. |
+| `RABBITMQ_EXCHANGE` | `nexaboot.dev.webhooks` | Exchange topic durable. Lida também na ingestão. |
+| `RABBITMQ_WEBHOOK_QUEUE` | `nexaboot.dev.webhook.queue` | Fila durable com dead letter para a DLQ. |
+| `RABBITMQ_WEBHOOK_DLQ` | `nexaboot.dev.webhook.dlq` | Fila durable de dead letter. |
+| `RABBITMQ_PREFETCH` | `10` | Prefetch do canal. |
+| `RABBITMQ_CONNECT_TIMEOUT_MS` | `10000` | Timeout de conexão com o broker. |
+| `RABBITMQ_RECONNECT_MIN_MS` | `1000` | Piso do backoff de reconexão. |
+| `RABBITMQ_RECONNECT_MAX_MS` | `30000` | Teto do backoff de reconexão. |
+| `WEBHOOK_OUTBOX_MAX_ATTEMPTS` | `10` | Tentativas antes do `dead_letter`. |
+| `WEBHOOK_OUTBOX_BASE_RETRY_MS` | `1000` | Base do backoff exponencial. |
+| `WEBHOOK_OUTBOX_MAX_RETRY_MS` | `300000` | Teto do backoff. Nunca menor que a base. |
+| `WEBHOOK_OUTBOX_LEASE_MS` | `60000` | Validade da reserva de uma linha. |
+| `WEBHOOK_OUTBOX_BATCH_SIZE` | `50` | Linhas por ciclo. |
+| `WEBHOOK_OUTBOX_POLL_INTERVAL_MS` | `1000` | Intervalo entre ciclos. |
+
+Os nomes default são de DEV de propósito. **DEV e produção precisam de nomes
+(ou vhosts) diferentes**: publicar evento de teste numa fila de produção entrega
+mensagem a cliente real.
+
 ## Logs
 
-`WEBHOOK_INBOX_RECEIVED`, `WEBHOOK_INBOX_PERSISTED`, `WEBHOOK_INBOX_DUPLICATE`,
-`WEBHOOK_INBOX_PERSIST_FAILED`, `WEBHOOK_INBOX_PAYLOAD_REJECTED`,
-`WEBHOOK_INBOX_THROTTLED`, `WEBHOOK_INBOX_POOL_CONFIG`.
+Ingestão: `WEBHOOK_INBOX_RECEIVED`, `WEBHOOK_INBOX_PERSISTED`,
+`WEBHOOK_INBOX_DUPLICATE`, `WEBHOOK_INBOX_PERSIST_FAILED`,
+`WEBHOOK_INBOX_PAYLOAD_REJECTED`, `WEBHOOK_INBOX_THROTTLED`,
+`WEBHOOK_INBOX_POOL_CONFIG`, `WEBHOOK_OUTBOX_CREATED`,
+`WEBHOOK_OUTBOX_DUPLICATE`.
 
-Nenhum registra token, segredo, DSN ou payload completo. Os headers salvos em
-`request_headers` passam por allowlist; headers sensíveis viram apenas um
-booleano de presença (`has_apikey`, `has_x_hub_signature_256`, `has_cookie`).
+Publicador: `WEBHOOK_OUTBOX_CLAIMED`, `WEBHOOK_OUTBOX_PUBLISH_START`,
+`WEBHOOK_OUTBOX_PUBLISHED`, `WEBHOOK_OUTBOX_PUBLISH_RETRY`,
+`WEBHOOK_OUTBOX_DEAD_LETTER`, `WEBHOOK_OUTBOX_LEASE_RECOVERED`,
+`WEBHOOK_OUTBOX_PUBLISHER_STARTED`, `WEBHOOK_OUTBOX_PUBLISHER_PARKED`,
+`WEBHOOK_OUTBOX_PUBLISHER_STOPPING`, `WEBHOOK_OUTBOX_PUBLISHER_STOPPED`,
+`WEBHOOK_OUTBOX_PUBLISHER_FAILED`.
 
-## Migration
+Broker: `RABBITMQ_CONNECTED`, `RABBITMQ_DISCONNECTED`,
+`RABBITMQ_RECONNECT_SCHEDULED`.
 
-- Aplicar: `docs/migrations/20260808_webhook_inbox.sql`
-- Reverter: `docs/migrations/20260808_webhook_inbox_rollback.sql`
+Nenhum registra token, segredo, DSN, `RABBITMQ_URL`, senha, payload bruto ou
+base64. Erros externos passam por máscara antes de virar log ou `last_error`.
+Os headers salvos em `request_headers` passam por allowlist; headers sensíveis
+viram apenas um booleano de presença (`has_apikey`, `has_x_hub_signature_256`,
+`has_cookie`).
 
-A migration é transacional e não apaga payload automaticamente. Ela precisa ser
-aplicada **antes** de ligar `WEBHOOK_DURABLE_INBOX_ENABLED`.
+## Migrations
+
+Aplicar nesta ordem (a outbox tem FK para a inbox):
+
+1. `docs/migrations/20260808_webhook_inbox.sql`
+2. `docs/migrations/20260808_webhook_outbox.sql`
+
+Reverter na ordem inversa:
+
+1. `docs/migrations/20260808_webhook_outbox_rollback.sql`
+2. `docs/migrations/20260808_webhook_inbox_rollback.sql`
+
+As duas são transacionais e não apagam payload automaticamente. Ambas precisam
+estar aplicadas **antes** de ligar `WEBHOOK_DURABLE_INBOX_ENABLED`: com a flag
+ligada e a outbox ausente, a transação falha e a ingestão responde 503.
+
+O rollback da outbox **não** toca em `webhook_inbox`.
 
 ## Rollback
 
 `WEBHOOK_DURABLE_INBOX_ENABLED=false` devolve o comportamento anterior na hora,
 sem deploy: as rotas voltam a chamar o processador legado pelo gate de
-concorrência. A tabela pode ficar no lugar; derrubá-la só é necessário se a
-migration for revertida.
+concorrência. `RABBITMQ_ENABLED=false` estaciona o publicador sem perder nada —
+as mensagens continuam `pending` na outbox. As tabelas podem ficar no lugar;
+derrubá-las só é necessário se as migrations forem revertidas.
 
 ## Testes
 
 ```
 npx tsx scripts/test-webhook-inbox.mjs
+npx tsx scripts/test-webhook-outbox.mjs
+```
+
+Integração opcional com um broker de DEV (ignorada por padrão, nunca no CI):
+
+```
+WEBHOOK_OUTBOX_INTEGRATION=true RABBITMQ_ENABLED=true RABBITMQ_URL=amqp://… \
+  npx tsx scripts/test-webhook-outbox-integration.mjs
 ```
