@@ -106,7 +106,7 @@ export async function persistWebhookEvent(
     const inserted = await tx<{ id: string; received_at: string | Date }[]>`
       INSERT INTO public.webhook_inbox (
         provider, event_type, company_id, channel_id, instance_name,
-        external_event_id, external_message_id, deduplication_key,
+        external_event_id, external_message_id, conversation_key, deduplication_key,
         payload, request_headers, status
       ) VALUES (
         ${params.provider},
@@ -116,6 +116,7 @@ export async function persistWebhookEvent(
         ${params.instanceName},
         ${params.externalEventId},
         ${params.externalMessageId},
+        ${params.conversationKey},
         ${params.deduplicationKey},
         ${params.rawPayload}::jsonb,
         ${JSON.stringify(params.requestHeaders)}::jsonb,

@@ -1,19 +1,31 @@
-// Webhook público da Evolution API — PostgreSQL externo (DATABASE_URL).
-//
-// Sem Supabase. Toda gravação usa postgres.js via src/lib/pg.server.ts.
-// Armazenamento de mídia: base64 direto na coluna messages.media_base64
-// (servido depois por /api/messages/:id/media).
+/**
+ * Webhook público da Evolution.
+ *
+ * Duas rotas de execução, escolhidas por WEBHOOK_DURABLE_INBOX_ENABLED:
+ *   - ingestão durável: persiste o payload e responde 200 depois do COMMIT;
+ *   - legado: processa tudo dentro da requisição.
+ *
+ * A lógica de domínio do caminho legado vive em
+ * `@/lib/webhook-evolution-processing.server` — as mesmas funções que o
+ * message-worker chama. Aqui ficou só o que é HTTP: token, corpo e status.
+ */
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { getSql, sql } from "@/lib/pg.server";
-import { isValidE164Digits, normalizePhoneE164, normalizePhoneForMatch } from "@/lib/phone";
-import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
-import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
+import { getSql } from "@/lib/pg.server";
 import { getWebhookInboxSql } from "@/lib/pg-webhook-inbox.server";
 import { isDurableWebhookInboxEnabled } from "@/lib/webhook-inbox-core";
+import { isWebhookLegacyProcessingEnabled } from "@/lib/webhook-message-core";
 import { ingestWebhookRequestToInbox } from "@/lib/webhook-inbox.server";
 import { runWebhookIngress } from "@/lib/webhook-ingress.server";
+import {
+  collectCampaignCandidates,
+  runCampaignCandidates,
+} from "@/lib/webhook-campaign-hook.server";
+import {
+  processEvolutionInboxEvent,
+  type Json,
+} from "@/lib/webhook-evolution-processing.server";
 
 const PayloadSchema = z
   .object({
@@ -22,423 +34,6 @@ const PayloadSchema = z
     data: z.unknown().optional(),
   })
   .passthrough();
-
-type Json = Record<string, unknown>;
-
-type ChannelRow = {
-  id: string;
-  company_id: string;
-  evolution_instance_name: string | null;
-  name: string;
-};
-
-type ParsedMsg = {
-  type: "text" | "image" | "audio" | "video" | "document" | "reaction" | "contact" | "contacts";
-  body?: string;
-  mimeType?: string;
-  fileName?: string;
-  durationSeconds?: number;
-  reactionEmoji?: string;
-  reactionToId?: string;
-};
-
-function pickMessageType(msg: Json): ParsedMsg {
-  const m = (msg.message ?? {}) as any;
-  // Reação (emoji) do WhatsApp — nunca tratar como "não suportada".
-  if (m.reactionMessage) {
-    const emoji = typeof m.reactionMessage.text === "string" ? m.reactionMessage.text : "";
-    const reactionToId: string | undefined = m.reactionMessage.key?.id ?? undefined;
-    return {
-      type: "reaction",
-      body: emoji ? `Reagiu com ${emoji}` : "Removeu a reação",
-      reactionEmoji: emoji || undefined,
-      reactionToId,
-    };
-  }
-  // Contato(s) compartilhado(s) — contactMessage / contactsArrayMessage / vCard.
-  const contactParsed = parseContactMessageNode(m);
-  if (contactParsed) {
-    return { type: contactParsed.type, body: contactParsed.body };
-  }
-  if (typeof m.conversation === "string") return { type: "text", body: m.conversation };
-  if (m.extendedTextMessage?.text) return { type: "text", body: m.extendedTextMessage.text };
-  if (m.imageMessage)
-    return { type: "image", body: m.imageMessage.caption, mimeType: m.imageMessage.mimetype };
-  if (m.audioMessage)
-    return {
-      type: "audio",
-      mimeType: m.audioMessage.mimetype,
-      durationSeconds: Number(m.audioMessage.seconds) || undefined,
-    };
-  if (m.videoMessage)
-    return { type: "video", body: m.videoMessage.caption, mimeType: m.videoMessage.mimetype };
-  if (m.documentMessage)
-    return {
-      type: "document",
-      mimeType: m.documentMessage.mimetype,
-      fileName: m.documentMessage.fileName,
-    };
-  return { type: "text", body: "[mensagem não suportada]" };
-}
-
-async function findChannelByInstance(instance: string): Promise<ChannelRow | null> {
-  const s = sql();
-  const rows = await s<ChannelRow[]>`
-    SELECT id, company_id, evolution_instance_name, name
-    FROM public.whatsapp_channels
-    WHERE lower(channel_type) = 'evolution'
-      AND evolution_instance_name = ${instance}
-    LIMIT 1
-  `;
-  return rows[0] ?? null;
-}
-
-async function upsertContact(
-  companyId: string,
-  phone: string,
-  externalJid: string,
-  name: string | undefined,
-  fromMe: boolean,
-): Promise<string> {
-  const s = sql();
-  // Chave canônica tolerante ao nono dígito BR (com/sem 9 = mesmo contato).
-  const phoneMatch = normalizePhoneForMatch(phone);
-  // Um telefone = um único contato. Procura por phone_match (variante equivalente).
-  // Prioriza o contato ATIVO; se só houver inativo/merged, reaproveita (nunca cria outro).
-  const existing = await s<
-    { id: string; name: string | null; name_source: string | null; status: string | null }[]
-  >`
-    SELECT id, name, name_source, status FROM public.contacts
-    WHERE company_id = ${companyId}::uuid AND phone_match = ${phoneMatch}
-    ORDER BY (status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo') DESC,
-             created_at ASC
-    LIMIT 1
-  `;
-  if (existing[0]) {
-    const c = existing[0];
-    const cur = c.name;
-    const isManual = c.name_source === "manual";
-    const isPlaceholder = !cur || cur.trim() === "" || cur === phone;
-    // Nome manual NUNCA é sobrescrito pelo pushName do WhatsApp. Só atualiza
-    // quando não é manual E o nome atual é vazio/igual ao telefone/placeholder.
-    if (!fromMe && name && name.trim() && !isManual && isPlaceholder) {
-      await s`
-        UPDATE public.contacts
-        SET name = ${name}, name_source = 'whatsapp', updated_at = now()
-        WHERE id = ${c.id}::uuid
-      `;
-    }
-    // Reaproveita contato inativo: reativa preservando todo o histórico.
-    if (c.status === "inativo") {
-      await s`UPDATE public.contacts SET status = 'ativo', updated_at = now() WHERE id = ${c.id}::uuid`;
-      console.log("[CONTACT_REACTIVATED]", { id: c.id, phone });
-    }
-    return c.id;
-  }
-  // Novo contato automático. Regra: nunca usa nome próprio quando fromMe=true.
-  const finalName = fromMe ? phone : name && name.trim() ? name : phone;
-  const nameSource = !fromMe && name && name.trim() ? "whatsapp" : "auto";
-  try {
-    const inserted = await s<{ id: string }[]>`
-      INSERT INTO public.contacts
-        (company_id, phone, phone_match, name, name_source, external_jid, contact_type)
-      VALUES
-        (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
-      RETURNING id
-    `;
-    return inserted[0].id;
-  } catch (e) {
-    // Corrida: outro processo criou o mesmo contato (variante). Reaproveita.
-    const again = await s<{ id: string }[]>`
-      SELECT id FROM public.contacts
-      WHERE company_id = ${companyId}::uuid AND phone_match = ${phoneMatch}
-      ORDER BY (status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo') DESC,
-               created_at ASC
-      LIMIT 1
-    `;
-    if (again[0]) return again[0].id;
-    throw e;
-  }
-}
-
-async function upsertConversation(
-  companyId: string,
-  channelId: string,
-  contactId: string,
-): Promise<string> {
-  const s = sql();
-  // Um contato + um canal = uma única conversa principal. Reaproveita a conversa
-  // existente em QUALQUER status (a mais recente). Nunca cria outra por diferença
-  // de nome/pushName. Se estiver fechada, reabre ao chegar nova mensagem.
-  const existing = await s<{ id: string; status: string | null }[]>`
-    SELECT id, status FROM public.conversations
-    WHERE company_id = ${companyId}::uuid
-      AND whatsapp_channel_id = ${channelId}::uuid
-      AND contact_id = ${contactId}::uuid
-      AND status IS DISTINCT FROM 'merged'
-      AND status IS DISTINCT FROM 'archived'
-    ORDER BY (status = 'open') DESC, last_message_at DESC NULLS LAST, created_at DESC
-    LIMIT 1
-  `;
-  if (existing[0]) {
-    if (existing[0].status !== "open") {
-      await s`UPDATE public.conversations SET status = 'open', updated_at = now() WHERE id = ${existing[0].id}::uuid`;
-    }
-    return existing[0].id;
-  }
-  const inserted = await s<{ id: string }[]>`
-    INSERT INTO public.conversations
-      (company_id, contact_id, whatsapp_channel_id, status, unread_count, last_message_at)
-    VALUES
-      (${companyId}::uuid, ${contactId}::uuid, ${channelId}::uuid, 'open', 1, now())
-    RETURNING id
-  `;
-  return inserted[0].id;
-}
-
-type MediaResult = {
-  base64: string | null;
-  mimetype: string | null;
-  error: string | null;
-};
-
-async function downloadMediaFromEvolution(
-  rawMessage: any,
-  fallbackMime: string | undefined,
-): Promise<MediaResult> {
-  const apiUrl = process.env.EVOLUTION_API_URL;
-  const apiKey = process.env.EVOLUTION_API_KEY;
-  const key = rawMessage?.key ?? {};
-  const externalId: string | undefined = key?.id;
-  const instance: string | undefined = rawMessage?.instance ?? rawMessage?.instanceName;
-
-  const endpointPath = instance ? `/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}` : null;
-  const baseErr = {
-    endpoint: endpointPath,
-    instance: instance ?? null,
-    messageId: externalId ?? null,
-    headers: { apikey: "EVOLUTION_API_KEY", "Content-Type": "application/json" },
-    requestBody: { message: "<rawMessage>" },
-  };
-
-  if (!apiUrl || !apiKey || !instance || !externalId) {
-    return {
-      base64: null,
-      mimetype: fallbackMime ?? null,
-      error: JSON.stringify({
-        reason: "missing_config",
-        ...baseErr,
-        hasApiUrl: !!apiUrl,
-        hasApiKey: !!apiKey,
-        hasInstance: !!instance,
-        hasMessageId: !!externalId,
-      }),
-    };
-  }
-
-  console.log("[MEDIA_DECRYPT_START]", { instance, externalId });
-  const url = `${apiUrl.replace(/\/+$/, "")}${endpointPath}`;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 20_000);
-
-  try {
-    console.log("[MEDIA_DECRYPT_REQUEST]", { url, instance, externalId });
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: apiKey },
-      body: JSON.stringify({ message: rawMessage }),
-      signal: ctrl.signal,
-    });
-    const text = await res.text().catch(() => "");
-    console.log("[MEDIA_DECRYPT_RESPONSE]", { status: res.status, length: text.length });
-
-    if (!res.ok) {
-      return {
-        base64: null,
-        mimetype: fallbackMime ?? null,
-        error: JSON.stringify({
-          reason: "evolution_http_error",
-          status: res.status,
-          body: text.slice(0, 2000),
-          ...baseErr,
-        }),
-      };
-    }
-
-    const parsed: any = (() => { try { return JSON.parse(text); } catch { return null; } })();
-    let base64: string | null = parsed?.base64 ?? parsed?.data?.base64 ?? null;
-    if (typeof base64 === "string" && base64.startsWith("data:")) {
-      const comma = base64.indexOf(",");
-      if (comma >= 0) base64 = base64.slice(comma + 1);
-    }
-    const mimetype: string = parsed?.mimetype ?? parsed?.mimeType ?? fallbackMime ?? "application/octet-stream";
-
-    if (!base64 || base64.length < 50) {
-      return {
-        base64: null,
-        mimetype,
-        error: JSON.stringify({
-          reason: "no_base64",
-          status: res.status,
-          body: text.slice(0, 2000),
-          ...baseErr,
-        }),
-      };
-    }
-
-    console.log("[MEDIA_WEBHOOK_DOWNLOAD_OK]", { externalId, mimetype, base64Length: base64.length });
-    return { base64, mimetype, error: null };
-  } catch (e) {
-    const isAbort = e instanceof Error && e.name === "AbortError";
-    const msg = e instanceof Error ? e.message : String(e);
-    console.log("[MEDIA_DECRYPT_FAIL]", { externalId, error: msg });
-    return {
-      base64: null,
-      mimetype: fallbackMime ?? null,
-      error: JSON.stringify({
-        reason: isAbort ? "timeout" : "exception",
-        error: msg,
-        ...baseErr,
-      }),
-    };
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload: Json) {
-  const msg = raw as any;
-  const key = msg?.key ?? {};
-  const remoteJid: string | undefined = key.remoteJid;
-  const fromMe: boolean = key.fromMe === true;
-  const pushName: string | undefined = msg?.pushName;
-
-  if (!remoteJid) { console.log("[IGNORED_NO_REMOTE_JID]"); return; }
-  if (remoteJid.endsWith("@g.us")) { console.log("[IGNORED_GROUP]", remoteJid); return; }
-
-  const phone = normalizePhoneE164(remoteJid, { defaultCountry: "BR" });
-  if (!isValidE164Digits(phone)) {
-    console.log("[INVALID_PHONE_BLOCKED]", { remoteJid, phone });
-    return;
-  }
-
-  console.log("[CONTACT_NORMALIZATION]", { fromMe, remoteJid, phone, pushName });
-  const parsed = pickMessageType(msg);
-
-  const contactId = await upsertContact(channel.company_id, phone, remoteJid, pushName, fromMe);
-  console.log("[EVOLUTION_CONTACT_UPSERT]", { contactId, phone, fromMe });
-  const conversationId = await upsertConversation(channel.company_id, channel.id, contactId);
-  console.log("[EVOLUTION_CONVERSATION_UPSERT]", { conversationId, channelId: channel.id });
-
-  let mediaBase64: string | null = null;
-  let mimeType: string | null = parsed.mimeType ?? null;
-  let mediaError: string | null = null;
-  const isMedia =
-    parsed.type === "image" ||
-    parsed.type === "audio" ||
-    parsed.type === "video" ||
-    parsed.type === "document";
-
-  if (isMedia) {
-    // Inclui o nome da instância no payload para o helper resolver o endpoint.
-    const enriched = { ...msg, instance: channel.evolution_instance_name };
-    const r = await downloadMediaFromEvolution(enriched, parsed.mimeType);
-    if (r.base64) {
-      mediaBase64 = r.base64;
-      mimeType = r.mimetype ?? mimeType;
-    } else {
-      mediaError = r.error;
-      mimeType = r.mimetype ?? mimeType;
-    }
-  }
-
-  const externalId: string | null = key?.id ?? null;
-  const direction = fromMe ? "out" : "in";
-  const lastMessageText = parsed.body ?? (isMedia ? `[${parsed.type}]` : null);
-
-  console.log("[WEBHOOK_MEDIA_DEBUG]", {
-    messageType: parsed.type,
-    mediaType: isMedia ? parsed.type : null,
-    isMedia,
-    hasEvolutionUrl: !!process.env.EVOLUTION_API_URL,
-    hasEvolutionKey: !!process.env.EVOLUTION_API_KEY,
-    instanceName: channel.evolution_instance_name,
-    externalId,
-  });
-
-  if (isMedia && !mediaBase64 && !mediaError) {
-    mediaError = "MEDIA_DOWNLOAD_NOT_EXECUTED_OR_FAILED";
-  }
-
-  const s = sql();
-  const inserted = await s<{ id: string }[]>`
-    INSERT INTO public.messages (
-      conversation_id, external_id, external_message_id, direction,
-      message_type, message_text, from_me, raw_payload,
-      media_type, media_mimetype, mime_type, media_filename,
-      media_caption, media_base64, media_error, media_url, status,
-      reaction_emoji, reaction_to_message_id
-    ) VALUES (
-      ${conversationId}::uuid, ${externalId}, ${externalId}, ${direction},
-      ${parsed.type}, ${parsed.body ?? null}, ${fromMe}, ${fullPayload as any}::jsonb,
-      ${isMedia ? parsed.type : null}, ${mimeType}, ${mimeType}, ${parsed.fileName ?? null},
-      ${parsed.body ?? null}, ${mediaBase64}, ${mediaError}, ${null}, 'received',
-      ${parsed.reactionEmoji ?? null}, ${parsed.reactionToId ?? null}
-    )
-    ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
-    DO NOTHING
-    RETURNING id
-  `;
-
-  if (inserted[0]) {
-    console.log("[EVOLUTION_MESSAGE_SAVED]", { messageId: inserted[0].id, conversationId, direction, type: parsed.type });
-  }
-
-  if (inserted[0] && mediaBase64) {
-    // Após termos o id, gravamos uma URL servida pela própria API.
-    const mediaUrl = `/api/messages/${inserted[0].id}/media`;
-    await s`UPDATE public.messages SET media_url = ${mediaUrl} WHERE id = ${inserted[0].id}::uuid`;
-  }
-
-  await s`
-    UPDATE public.conversations
-    SET last_message = ${lastMessageText},
-        last_message_at = now(),
-        unread_count = CASE WHEN ${fromMe} THEN unread_count ELSE COALESCE(unread_count,0) + 1 END,
-        updated_at = now()
-    WHERE id = ${conversationId}::uuid
-  `;
-
-  // Resposta a disparo de campanha (texto ou mídia).
-  if (!fromMe) {
-    const isText = parsed.type === "text" && !!parsed.body;
-    const isMedia = ["image", "audio", "document", "video"].includes(parsed.type);
-    if (isText || isMedia) {
-      try {
-        await handleCampaignInboundReply({
-          companyId: channel.company_id,
-          channelId: channel.id,
-          conversationId,
-          phone,
-          responseText: isText ? parsed.body! : (parsed.body ?? null),
-          allowEmptyText: isMedia,
-        });
-      } catch (e) {
-        console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", e);
-      }
-    }
-  }
-}
-
-async function handleConnectionUpdate(channel: ChannelRow, raw: Json) {
-  const s = sql();
-  const state = (raw as any)?.state ?? (raw as any)?.connection;
-  if (state === "open") {
-    await s`UPDATE public.whatsapp_channels SET status = 'connected', last_connected_at = now() WHERE id = ${channel.id}::uuid`;
-  } else if (state === "close") {
-    await s`UPDATE public.whatsapp_channels SET status = 'disconnected' WHERE id = ${channel.id}::uuid`;
-  }
-}
 
 /**
  * Lê o segredo do webhook em qualquer um dos formatos aceitos:
@@ -487,46 +82,36 @@ export async function handleEvolutionWebhookPOST(request: Request): Promise<Resp
     return new Response("Invalid payload", { status: 400 });
   }
 
-  const event = body.event ?? "unknown";
-  const instance = body.instance ?? (body as any)?.data?.instance;
-  if (!instance) {
-    console.log("[WEBHOOK_MISSING_INSTANCE]", event);
-    return new Response("Missing instance", { status: 400 });
-  }
-
   try {
-    const channel = await findChannelByInstance(String(instance));
-    if (!channel) {
-      console.log("[WEBHOOK_CHANNEL_NOT_FOUND]", { instance, event });
+    // Modo inline: o anexo é baixado dentro da requisição, como sempre foi.
+    const result = await processEvolutionInboxEvent({
+      sql: getSql(),
+      payload: body as Json,
+      media: { mode: "inline" },
+    });
+
+    if (result.status === "missing_instance") {
+      return new Response("Missing instance", { status: 400 });
+    }
+    if (result.status === "channel_not_found") {
       return new Response("Channel not found", { status: 404 });
     }
-
-    // Isolamento oficial por company_id: a empresa é SEMPRE derivada do canal
-    // (whatsapp_channels.company_id). Se o canal não tiver empresa válida, o
-    // webhook é IGNORADO — nunca cria contato/conversa/mensagem, nunca usa
-    // Empresa Padrão, nunca usa tenant_id. Retorna 200 para a Evolution não
-    // reenviar em loop.
-    if (!channel.company_id) {
-      console.warn("[WEBHOOK_CHANNEL_WITHOUT_COMPANY]", {
-        instance,
-        channelId: channel.id,
-        event,
-        note: "Canal sem empresa vinculada. Webhook ignorado.",
-      });
+    if (result.status === "channel_without_company") {
+      // 200 para a Evolution não reenviar em loop um evento que nunca será
+      // processável.
       return Response.json({ ok: true, ignored: "channel_without_company" });
     }
 
-    if (event === "messages.upsert" || event === "MESSAGES_UPSERT") {
-      const items = Array.isArray((body as any).data) ? (body as any).data : [(body as any).data];
-      for (const item of items) if (item) await handleMessagesUpsert(channel, item, body as Json);
-    } else if (event === "connection.update" || event === "CONNECTION_UPDATE") {
-      await handleConnectionUpdate(channel, (body as any).data ?? body);
-    }
+    await runCampaignCandidates(collectCampaignCandidates(result.messages));
 
     return Response.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("[WEBHOOK_ERROR]", { event, instance, error: msg });
+    console.error("[WEBHOOK_ERROR]", {
+      event: body.event ?? "unknown",
+      instance: body.instance ?? null,
+      error: msg,
+    });
     return new Response("Server error", { status: 500 });
   }
 }
@@ -549,9 +134,21 @@ export async function ingestEvolutionWebhookDurable(request: Request): Promise<R
   });
 }
 
-/** Roteia entre ingestão durável (flag ligada) e o processador legado. */
+/** Roteia entre ingestão durável, legado e kill-switch. */
 export async function handleEvolutionWebhookRequest(request: Request): Promise<Response> {
   if (isDurableWebhookInboxEnabled()) return ingestEvolutionWebhookDurable(request);
+  if (!isWebhookLegacyProcessingEnabled()) {
+    console.warn("[WEBHOOK_MESSAGE_CONFIG_CONFLICT]", {
+      code: "legacy_disabled",
+      severity: "warning",
+      message:
+        "WEBHOOK_LEGACY_PROCESSING_ENABLED=false e WEBHOOK_DURABLE_INBOX_ENABLED=false: nenhum processamento ativo.",
+    });
+    return Response.json(
+      { ok: false, code: "legacy_processing_disabled" },
+      { status: 503, headers: { "Retry-After": "30" } },
+    );
+  }
   return handleEvolutionWebhookPOST(request);
 }
 

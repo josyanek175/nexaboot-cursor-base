@@ -12,6 +12,7 @@
     "campaign:worker": "node scripts/campaign-worker.mjs",
     "campaign:worker:direct": "tsx scripts/campaign-worker-direct.mjs",
     "webhook:outbox-publisher": "tsx scripts/webhook-outbox-publisher.ts",
+    "webhook:message-worker": "tsx scripts/webhook-message-worker.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

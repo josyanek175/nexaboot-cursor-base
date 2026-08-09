@@ -2,7 +2,19 @@
 // Usado pelo webhook Meta; Evolution mantém cópia local até refatoração futura.
 
 import { sql } from "@/lib/pg.server";
+import type { SqlExecutor } from "@/lib/pg-types";
 import { normalizePhoneForMatch } from "@/lib/phone";
+
+/**
+ * Executor de query destas funções.
+ *
+ * Sem `sql` explícito vale o pool global, que é o que a rota HTTP sempre usou.
+ * O message-worker passa a `TransactionSql` do seu `begin` para que contato,
+ * conversa e mensagem entrem no mesmo COMMIT.
+ */
+function resolveSql(injected?: SqlExecutor): SqlExecutor {
+  return injected ?? (sql() as unknown as SqlExecutor);
+}
 
 /** Contato inbound (Evolution/Meta). fromMe=false para mensagens recebidas da Meta. */
 export async function upsertInboundContact(params: {
@@ -11,9 +23,10 @@ export async function upsertInboundContact(params: {
   externalJid: string;
   name?: string;
   fromMe?: boolean;
+  sql?: SqlExecutor;
 }): Promise<string> {
   const { companyId, phone, externalJid, name, fromMe = false } = params;
-  const s = sql();
+  const s = resolveSql(params.sql);
   const phoneMatch = normalizePhoneForMatch(phone);
 
   const existing = await s<
@@ -74,9 +87,10 @@ export async function upsertInboundConversation(params: {
   companyId: string;
   channelId: string;
   contactId: string;
+  sql?: SqlExecutor;
 }): Promise<string> {
   const { companyId, channelId, contactId } = params;
-  const s = sql();
+  const s = resolveSql(params.sql);
 
   const existing = await s<{ id: string; status: string | null }[]>`
     SELECT id, status FROM public.conversations
@@ -86,8 +100,18 @@ export async function upsertInboundConversation(params: {
       AND status IS DISTINCT FROM 'merged'
       AND status IS DISTINCT FROM 'archived'
     ORDER BY (status = 'open') DESC, last_message_at DESC NULLS LAST, created_at DESC
-    LIMIT 1
   `;
+
+  if (existing.length > 1) {
+    console.warn("[CONVERSATION_DUPLICATE_DETECTED]", {
+      companyId,
+      channelId,
+      contactId,
+      count: existing.length,
+      chosenId: existing[0].id,
+      note: "Aplicar docs/migrations/20260809_conversations_unique_proposed.sql após dedup",
+    });
+  }
 
   if (existing[0]) {
     if (existing[0].status !== "open") {
@@ -111,9 +135,10 @@ export async function insertInboundTextMessage(params: {
   externalMessageId: string;
   messageText: string;
   rawPayload: unknown;
+  sql?: SqlExecutor;
 }): Promise<string | null> {
   const { conversationId, externalMessageId, messageText, rawPayload } = params;
-  const s = sql();
+  const s = resolveSql(params.sql);
 
   const inserted = await s<{ id: string }[]>`
     INSERT INTO public.messages (
@@ -143,6 +168,9 @@ export async function insertInboundMediaMessage(params: {
   mediaError: string | null;
   mediaSize: number | null;
   rawPayload: unknown;
+  sql?: SqlExecutor;
+  /** Modo worker: sem base64, o anexo vira tarefa em webhook_media_jobs. */
+  mediaStatus?: string | null;
 }): Promise<string | null> {
   const {
     conversationId,
@@ -157,7 +185,7 @@ export async function insertInboundMediaMessage(params: {
     mediaSize,
     rawPayload,
   } = params;
-  const s = sql();
+  const s = resolveSql(params.sql);
 
   const inserted = await s<{ id: string }[]>`
     INSERT INTO public.messages (
@@ -182,15 +210,26 @@ export async function insertInboundMediaMessage(params: {
     await s`UPDATE public.messages SET media_url = ${mediaUrl} WHERE id = ${messageId}::uuid`;
   }
 
+  // Coluna nova da etapa 3, tocada só quando o chamador pede — assim a rota
+  // legada continua funcionando sem a migration aplicada.
+  if (messageId && params.mediaStatus) {
+    await s`
+      UPDATE public.messages
+      SET media_status = ${params.mediaStatus}
+      WHERE id = ${messageId}::uuid AND media_status IS NULL
+    `;
+  }
+
   return messageId;
 }
 
 export async function bumpConversationAfterInboundMessage(params: {
   conversationId: string;
   lastMessageText: string;
+  sql?: SqlExecutor;
 }): Promise<void> {
   const { conversationId, lastMessageText } = params;
-  const s = sql();
+  const s = resolveSql(params.sql);
   await s`
     UPDATE public.conversations
     SET last_message = ${lastMessageText},

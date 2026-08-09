@@ -4,14 +4,14 @@
  * - NÃO importa src/server.ts, não sobe servidor web, não roda bootstrap.
  * - NÃO executa processamento de contato, conversa ou mensagem: só transporta
  *   a referência do evento para o RabbitMQ.
- * - Com RABBITMQ_ENABLED=false fica estacionado, sem abrir pool nem consultar
- *   a outbox.
+ * - Com RABBITMQ_ENABLED=false ou WEBHOOK_OUTBOX_PUBLISHER_ENABLED=false fica
+ *   estacionado, sem abrir pool nem consultar a outbox.
  *
  * Uso:
  *   npm run webhook:outbox-publisher
  *   tsx scripts/webhook-outbox-publisher.ts
  *
- * Env obrigatórias quando RABBITMQ_ENABLED=true:
+ * Env obrigatórias quando as duas flags estão ligadas:
  *   RABBITMQ_URL
  *   WEBHOOK_INBOX_DATABASE_URL (ou DATABASE_URL)
  */
@@ -26,6 +26,7 @@ import {
   maskRabbitError,
   readRabbitConfig,
 } from "@/lib/rabbitmq.server";
+import { isWebhookOutboxPublisherEnabled } from "@/lib/webhook-message-core";
 import { readWebhookOutboxConfig } from "@/lib/webhook-outbox-core";
 import { runWebhookOutboxPublisherLoop } from "@/lib/webhook-outbox-publisher.server";
 import { createSqlOutboxRepository } from "@/lib/webhook-outbox.server";
@@ -44,6 +45,7 @@ function buildWorkerId(): string {
 const workerId = buildWorkerId();
 const rabbitConfig = readRabbitConfig(process.env);
 const outboxConfig = readWebhookOutboxConfig(process.env);
+const publisherEnabled = isWebhookOutboxPublisherEnabled(process.env);
 
 // O pool só é aberto se o serviço realmente for trabalhar.
 let sqlOpened = false;
@@ -51,6 +53,7 @@ let sqlOpened = false;
 const { exitCode } = await runWebhookOutboxPublisherLoop({
   config: outboxConfig,
   rabbitConfig,
+  publisherEnabled,
   workerId,
   createRepository: () => {
     sqlOpened = true;

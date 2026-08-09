@@ -132,12 +132,30 @@ export type RabbitChannelLike = {
     options: RabbitPublishOptions,
     callback: (err: unknown) => void,
   ) => unknown;
+  /** Consumo com ACK manual. Presente no confirm channel real e nos fakes. */
+  consume?: (
+    queue: string,
+    onMessage: (msg: RabbitConsumedMessage | null) => void | Promise<void>,
+    options?: { noAck?: boolean },
+  ) => Promise<{ consumerTag: string }>;
+  ack?: (msg: RabbitConsumedMessage) => unknown;
+  nack?: (msg: RabbitConsumedMessage, allUpTo?: boolean, requeue?: boolean) => unknown;
+  cancel?: (consumerTag: string) => Promise<unknown>;
   close?: () => Promise<unknown>;
   on?: (event: string, handler: (arg?: unknown) => void) => unknown;
 };
 
+/** Mensagem entregue pelo broker. Só o necessário para ACK/NACK e processar. */
+export type RabbitConsumedMessage = {
+  content: Buffer;
+  fields: { deliveryTag: number; redelivered?: boolean; routingKey?: string };
+  properties?: { messageId?: string; timestamp?: number; contentType?: string };
+};
+
 export type RabbitConnectionLike = {
   createConfirmChannel: () => Promise<RabbitChannelLike>;
+  /** Canal sem confirm — o suficiente para o consumer. */
+  createChannel?: () => Promise<RabbitChannelLike>;
   close?: () => Promise<unknown>;
   on?: (event: string, handler: (arg?: unknown) => void) => unknown;
 };

@@ -209,6 +209,12 @@ export async function runWebhookOutboxPublisherLoop(params: {
   config: WebhookOutboxConfig;
   rabbitConfig: RabbitConfig;
   workerId: string;
+  /**
+   * Segunda trava, além de RABBITMQ_ENABLED. Default true para não quebrar
+   * quem já liga o publicador só pelo broker; o entrypoint passa o valor
+   * de WEBHOOK_OUTBOX_PUBLISHER_ENABLED.
+   */
+  publisherEnabled?: boolean;
   /** Criados sob demanda: parado, o serviço não abre conexão nenhuma. */
   createRepository: () => OutboxRepository;
   createPublisher: () => RabbitPublisher;
@@ -272,7 +278,8 @@ export async function runWebhookOutboxPublisherLoop(params: {
     });
   };
 
-  const parked = !params.rabbitConfig.enabled;
+  const publisherEnabled = params.publisherEnabled !== false;
+  const parked = !params.rabbitConfig.enabled || !publisherEnabled;
   let iterations = 0;
   // Objeto único: o bloco finally ainda consegue corrigir o exitCode depois do
   // return.
@@ -282,7 +289,9 @@ export async function runWebhookOutboxPublisherLoop(params: {
     if (parked) {
       log("WEBHOOK_OUTBOX_PUBLISHER_PARKED", {
         workerId: params.workerId,
-        reason: "rabbitmq_disabled",
+        reason: !params.rabbitConfig.enabled
+          ? "rabbitmq_disabled"
+          : "publisher_disabled",
         pollIntervalMs: WEBHOOK_OUTBOX_PARKED_POLL_INTERVAL_MS,
       });
       while (!stopping) {

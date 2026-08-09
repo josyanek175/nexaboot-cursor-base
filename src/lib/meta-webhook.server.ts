@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { getSql, sql } from "@/lib/pg.server";
 import { getWebhookInboxSql } from "@/lib/pg-webhook-inbox.server";
 import { isDurableWebhookInboxEnabled } from "@/lib/webhook-inbox-core";
+import { isWebhookLegacyProcessingEnabled } from "@/lib/webhook-message-core";
 import {
   ingestWebhookRequestToInbox,
   readWebhookBodyForInbox,
@@ -562,8 +563,21 @@ async function ingestMetaWebhookDurableWithBody(
   });
 }
 
-/** Roteia entre ingestão durável (flag ligada) e o processador legado. */
+/** Roteia entre ingestão durável, legado e kill-switch. */
 export async function handleMetaWebhookRequest(request: Request): Promise<Response> {
   if (isDurableWebhookInboxEnabled()) return ingestMetaWebhookDurable(request);
+  if (!isWebhookLegacyProcessingEnabled()) {
+    console.warn("[WEBHOOK_MESSAGE_CONFIG_CONFLICT]", {
+      code: "legacy_disabled",
+      severity: "warning",
+      message:
+        "WEBHOOK_LEGACY_PROCESSING_ENABLED=false e WEBHOOK_DURABLE_INBOX_ENABLED=false: nenhum processamento ativo.",
+    });
+    // Meta espera 200 para não reenviar em loop; o evento não é processado.
+    return new Response("OK", {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
   return handleMetaWebhookPOST(request);
 }
