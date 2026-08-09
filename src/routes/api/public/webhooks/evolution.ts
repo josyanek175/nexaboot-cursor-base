@@ -6,11 +6,14 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql } from "@/lib/pg.server";
+import { getSql, sql } from "@/lib/pg.server";
 import { isValidE164Digits, normalizePhoneE164, normalizePhoneForMatch } from "@/lib/phone";
 import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
-import { runWebhookWithConcurrencyLimit } from "@/lib/pg-pool-gate.server";
+import { getWebhookInboxSql } from "@/lib/pg-webhook-inbox.server";
+import { isDurableWebhookInboxEnabled } from "@/lib/webhook-inbox-core";
+import { ingestWebhookRequestToInbox } from "@/lib/webhook-inbox.server";
+import { runWebhookIngress } from "@/lib/webhook-ingress.server";
 
 const PayloadSchema = z
   .object({
@@ -528,6 +531,30 @@ export async function handleEvolutionWebhookPOST(request: Request): Promise<Resp
   }
 }
 
+/**
+ * Ingestão durável: valida o token, lê o corpo com teto e prazo, persiste o
+ * payload integral na inbox e só então responde 200.
+ *
+ * Nenhuma etapa pesada roda aqui — sem upsertContact, upsertConversation,
+ * download de mídia, INSERT em messages, atualização de conversa ou campanha.
+ */
+export async function ingestEvolutionWebhookDurable(request: Request): Promise<Response> {
+  const authError = checkWebhookAuth(request);
+  if (authError) return authError;
+
+  return ingestWebhookRequestToInbox({
+    sql: getWebhookInboxSql(),
+    provider: "evolution",
+    request,
+  });
+}
+
+/** Roteia entre ingestão durável (flag ligada) e o processador legado. */
+export async function handleEvolutionWebhookRequest(request: Request): Promise<Response> {
+  if (isDurableWebhookInboxEnabled()) return ingestEvolutionWebhookDurable(request);
+  return handleEvolutionWebhookPOST(request);
+}
+
 export const Route = createFileRoute("/api/public/webhooks/evolution")({
   server: {
     handlers: {
@@ -536,9 +563,7 @@ export const Route = createFileRoute("/api/public/webhooks/evolution")({
           headers: { "Content-Type": "application/json" },
         }),
       POST: async ({ request }) =>
-        runWebhookWithConcurrencyLimit("evolution_public", () =>
-          handleEvolutionWebhookPOST(request),
-        ),
+        runWebhookIngress("evolution_public", () => handleEvolutionWebhookRequest(request)),
     },
   },
 });

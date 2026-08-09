@@ -2,7 +2,13 @@
 // Nunca logar tokens, headers sensíveis ou payload bruto com segredos.
 
 import { createHmac, timingSafeEqual } from "crypto";
-import { sql } from "@/lib/pg.server";
+import { getSql, sql } from "@/lib/pg.server";
+import { getWebhookInboxSql } from "@/lib/pg-webhook-inbox.server";
+import { isDurableWebhookInboxEnabled } from "@/lib/webhook-inbox-core";
+import {
+  ingestWebhookRequestToInbox,
+  readWebhookBodyForInbox,
+} from "@/lib/webhook-inbox.server";
 import {
   buildMetaWebhookAuditPayload,
   extractMetaEventTypes,
@@ -441,4 +447,123 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
   }
 
   return metaWebhookOkResponse();
+}
+
+/**
+ * Ingestão durável do POST Meta.
+ *
+ * Mantém intactas a validação de assinatura e as auditorias de rejeição.
+ * Assinatura ausente ou inválida NUNCA vira evento na inbox — segue devolvendo
+ * 200 (como hoje) apenas para não induzir reenvio infinito da Meta.
+ *
+ * Com assinatura válida, o payload integral é persistido e só então o 200 é
+ * devolvido. Nenhuma resolução de canal, persistência de mensagem ou toque em
+ * whatsapp_channels acontece aqui.
+ */
+export async function ingestMetaWebhookDurable(request: Request): Promise<Response> {
+  const signatureHeader = request.headers.get("x-hub-signature-256");
+
+  // A assinatura exige o corpo bruto, então a leitura acontece aqui — mas sob
+  // a mesma reserva de memória usada pelo pipeline compartilhado.
+  const body = await readWebhookBodyForInbox(request, { provider: "meta" });
+  if (!body.ok) return body.response;
+
+  try {
+    return await ingestMetaWebhookDurableWithBody(request, signatureHeader, body);
+  } finally {
+    body.release();
+  }
+}
+
+async function ingestMetaWebhookDurableWithBody(
+  request: Request,
+  signatureHeader: string | null,
+  body: { text: string; sizeBytes: number; release: () => void },
+): Promise<Response> {
+  const rawBody = body.text;
+
+  console.log("[META_WEBHOOK_RECEIVED]", {
+    contentLength: rawBody.length,
+    hasSignature: !!signatureHeader,
+  });
+  console.log("[META_WEBHOOK_POST_RECEIVED]", {
+    contentLength: rawBody.length,
+    hasSignature: !!signatureHeader,
+  });
+
+  let payload: unknown = {};
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    payload = { parse_error: true };
+  }
+
+  const phoneNumberIds = extractMetaPhoneNumberIds(payload);
+  const phoneNumberId = phoneNumberIds[0] ?? null;
+  const eventTypes = extractMetaEventTypes(payload);
+  const eventType = eventTypes.length > 0 ? eventTypes.join(",") : null;
+  const parsedPhones = parseMetaWebhookPhones(payload);
+  const auditPayload = buildMetaWebhookAuditPayload(payload, parsedPhones);
+
+  logMetaWebhookChanges(payload);
+  console.log("[META_WEBHOOK_POST_BODY]", {
+    object: (payload as Record<string, unknown>)?.object ?? null,
+    phoneNumberIds,
+    changes: parsedPhones.length,
+    messageCount: parsedPhones.reduce((total, change) => total + change.messages.length, 0),
+    eventType,
+  });
+  if (phoneNumberId) {
+    console.log("[META_WEBHOOK_PHONE_NUMBER_ID]", { phoneNumberId });
+  }
+
+  const rejectUnauthorized = async (reason: string): Promise<Response> => {
+    console.error("[META_WEBHOOK_ERROR]", { reason, phoneNumberId });
+    await insertMetaWebhookLog({
+      companyId: null,
+      channelId: null,
+      phoneNumberId,
+      eventType,
+      signatureValid: false,
+      processingStatus: reason === "missing_meta_app_secret" ? "error" : "unauthorized",
+      httpStatus: 200,
+      payload: auditPayload,
+      error: reason,
+    }).catch((e) => {
+      console.error("[META_WEBHOOK_ERROR]", {
+        reason: "audit_log_failed",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    });
+    return metaWebhookOkResponse();
+  };
+
+  if (!metaAppSecret()) return rejectUnauthorized("missing_meta_app_secret");
+  if (!signatureHeader) return rejectUnauthorized("missing_signature");
+  if (!validateMetaWebhookSignature(rawBody, signatureHeader)) {
+    return rejectUnauthorized("invalid_signature");
+  }
+
+  return ingestWebhookRequestToInbox({
+    sql: getWebhookInboxSql(),
+    provider: "meta",
+    request,
+    rawBody,
+    payloadSizeBytes: body.sizeBytes,
+    releaseBody: body.release,
+    okResponse: (outcome) => {
+      console.log("[META_WEBHOOK_POST_PROCESSED]", {
+        phoneNumberId,
+        inboxId: outcome.inboxId,
+        processingStatus: outcome.status === "duplicate" ? "inbox_duplicate" : "inbox_pending",
+      });
+      return metaWebhookOkResponse();
+    },
+  });
+}
+
+/** Roteia entre ingestão durável (flag ligada) e o processador legado. */
+export async function handleMetaWebhookRequest(request: Request): Promise<Response> {
+  if (isDurableWebhookInboxEnabled()) return ingestMetaWebhookDurable(request);
+  return handleMetaWebhookPOST(request);
 }
