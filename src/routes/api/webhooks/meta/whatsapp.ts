@@ -1,7 +1,7 @@
 // GET/POST /api/webhooks/meta/whatsapp — URL pública do webhook Meta WhatsApp Cloud API.
 import { createFileRoute } from "@tanstack/react-router";
-import { handleMetaWebhookGET, handleMetaWebhookPOST } from "@/lib/meta-webhook.server";
-import { runWebhookWithConcurrencyLimit } from "@/lib/pg-pool-gate.server";
+import { handleMetaWebhookGET, handleMetaWebhookRequest } from "@/lib/meta-webhook.server";
+import { runWebhookIngress } from "@/lib/webhook-ingress.server";
 
 export const Route = createFileRoute("/api/webhooks/meta/whatsapp")({
   server: {
@@ -24,9 +24,7 @@ export const Route = createFileRoute("/api/webhooks/meta/whatsapp")({
           hasSignature: !!request.headers.get("x-hub-signature-256"),
           contentType: request.headers.get("content-type"),
         });
-        return runWebhookWithConcurrencyLimit("meta_whatsapp", () =>
-          handleMetaWebhookPOST(request),
-        );
+        return runWebhookIngress("meta_whatsapp", () => handleMetaWebhookRequest(request));
       },
     },
   },

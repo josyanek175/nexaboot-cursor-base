@@ -9,6 +9,7 @@ import {
   probeDatabaseReadiness,
 } from "@/lib/pg.server";
 import { logPoolGateStatus } from "@/lib/pg-pool-gate.server";
+import { readWebhookArchitectureHealth } from "@/lib/webhook-health.server";
 
 function readGitCommit(): string | null {
   if (process.env.GIT_COMMIT?.trim()) return process.env.GIT_COMMIT.trim();
@@ -41,6 +42,7 @@ export const Route = createFileRoute("/api/health")({
 
         const ready = dbProbe.ok;
         logPoolGateStatus("PG_POOL_STATUS_HEALTH");
+        const webhooks = readWebhookArchitectureHealth();
 
         console.log("[HEALTH_CHECK]", {
           port: process.env.PORT ?? null,
@@ -53,6 +55,12 @@ export const Route = createFileRoute("/api/health")({
           totalCount: pool.totalCount,
           idleCount: pool.idleCount,
           waitingCount: pool.waitingCount,
+          webhooks: {
+            durableInboxEnabled: webhooks.durableInboxEnabled,
+            rabbitProcessingEnabled: webhooks.rabbitProcessingEnabled,
+            legacyProcessingActive: webhooks.legacyProcessingActive,
+            configIssues: webhooks.configIssues.length,
+          },
         });
 
         return Response.json(
@@ -79,6 +87,7 @@ export const Route = createFileRoute("/api/health")({
               webhookMax: pool.webhookMax,
             },
             db: dbProbe,
+            webhooks,
             hasMetaVerifyToken: !!process.env.META_APP_VERIFY_TOKEN?.trim(),
             hasMetaAppSecret: !!process.env.META_APP_SECRET?.trim(),
             hasTokenEncryptionKey: !!process.env.META_TOKEN_ENCRYPTION_KEY?.trim(),
