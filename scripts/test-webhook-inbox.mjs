@@ -782,7 +782,7 @@ assert("read_error -> 400", bodyReadFailureStatus("read_error") === 400);
     externalMessageId: "WAMID-A",
     deduplicationKey: "evolution:nexa-01:messages.upsert:WAMID-A",
     conversationKey: "5511999999999@s.whatsapp.net",
-    rawPayload: JSON.stringify(evolutionPayload),
+    rawPayload: evolutionPayload,
     requestHeaders: { "content-type": "application/json" },
     exchangeName: "nexaboot.dev.webhooks",
     routingKey: "evolution.messages.upsert",
@@ -810,7 +810,7 @@ assert("read_error -> 400", bodyReadFailureStatus("read_error") === 400);
     externalMessageId: "WAMID-A",
     deduplicationKey: "evolution:nexa-01:messages.upsert:WAMID-A",
     conversationKey: "5511999999999@s.whatsapp.net",
-    rawPayload: JSON.stringify(evolutionPayload),
+    rawPayload: evolutionPayload,
     requestHeaders: { "content-type": "application/json" },
     exchangeName: "nexaboot.dev.webhooks",
     routingKey: "evolution.messages.upsert",
@@ -849,18 +849,26 @@ assert("read_error -> 400", bodyReadFailureStatus("read_error") === 400);
   assert("desfecho persisted", observed.status === "persisted");
 
   const row = store.rows[0];
-  assert("payload permanece integral", row.payload === JSON.stringify(evolutionPayload));
+  assert(
+    "payload permanece integral",
+    row.payload != null &&
+      typeof row.payload === "object" &&
+      JSON.stringify(row.payload) === JSON.stringify(evolutionPayload),
+  );
   assert(
     "payload preserva campos aninhados",
-    JSON.parse(row.payload).data.key.id === "WAMID-A" &&
-      JSON.parse(row.payload).data.message.conversation === "ola",
+    row.payload?.data?.key?.id === "WAMID-A" &&
+      row.payload?.data?.message?.conversation === "ola",
   );
   assert("instance gravada", row.instance_name === "nexa-01");
   assert("external_message_id gravado", row.external_message_id === "WAMID-A");
   assert("company_id fica nulo na ingestao", row.company_id === null);
   assert("channel_id fica nulo na ingestao", row.channel_id === null);
-  assert("headers sensiveis nao sao salvos", !row.request_headers.includes("SEGREDO-NAO-PODE-VAZAR"));
-  assert("presenca de apikey registrada", JSON.parse(row.request_headers).has_apikey === true);
+  assert(
+    "headers sensiveis nao sao salvos",
+    !JSON.stringify(row.request_headers).includes("SEGREDO-NAO-PODE-VAZAR"),
+  );
+  assert("presenca de apikey registrada", row.request_headers?.has_apikey === true);
 
   // "Restart": novo cliente SQL, mesmo armazenamento — o já persistido continua lá.
   const restarted = makeSql(store, {});
@@ -1041,7 +1049,7 @@ assert("read_error -> 400", bodyReadFailureStatus("read_error") === 400);
     externalMessageId: "WAMID-SLOT",
     deduplicationKey: "evolution:slot",
     conversationKey: null,
-    rawPayload: JSON.stringify(evolutionPayload),
+    rawPayload: evolutionPayload,
     requestHeaders: {},
     exchangeName: "nexaboot.dev.webhooks",
     routingKey: "evolution.messages.upsert",

@@ -334,9 +334,12 @@ function makeRequest(bodyObject, headers = {}) {
   assert("outbox usa routing key derivada", store.outbox[0].routing_key === "evolution.messages.upsert");
   assert("outbox nasce pending", store.outbox[0].status === "pending");
 
-  const message = JSON.parse(store.outbox[0].message_payload);
+  const message = store.outbox[0].message_payload;
   assert("mensagem gravada referencia a inbox", message.inboxId === store.rows[0].id);
-  assert("mensagem gravada nao tem payload bruto", !store.outbox[0].message_payload.includes("pushName"));
+  assert(
+    "mensagem gravada nao tem payload bruto",
+    !JSON.stringify(store.outbox[0].message_payload).includes("pushName"),
+  );
 }
 
 {

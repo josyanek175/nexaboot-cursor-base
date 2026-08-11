@@ -55,7 +55,7 @@ export async function ensureMediaJob(
       ${params.mediaType},
       ${params.mimeType},
       ${params.fileName},
-      ${JSON.stringify(params.mediaReference ?? {})}::jsonb,
+      ${params.mediaReference ?? {}}::jsonb,
       'pending'
     )
     ON CONFLICT (message_id) DO NOTHING

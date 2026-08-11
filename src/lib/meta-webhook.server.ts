@@ -97,7 +97,7 @@ async function insertMetaWebhookLog(params: {
       ${params.signatureValid},
       ${params.processingStatus},
       ${params.httpStatus},
-      ${JSON.stringify(safePayload)}::jsonb,
+      ${safePayload}::jsonb,
       ${params.error ?? null}
     )
   `;

@@ -54,7 +54,7 @@ export async function insertOutboundTextMessage(params: {
     ) VALUES (
       ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'out',
       'text', ${messageText}, true,
-      ${rawPayload != null ? JSON.stringify(rawPayload) : null}::jsonb,
+      ${rawPayload}::jsonb,
       ${status},
       ${sentByUserId}::uuid, ${sentByName}
     )

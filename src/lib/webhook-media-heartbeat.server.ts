@@ -35,7 +35,7 @@ export async function upsertMediaWorkerHeartbeat(
       ${params.connected},
       ${params.active},
       now(),
-      ${JSON.stringify(params.details ?? {})}::jsonb,
+      ${params.details ?? {}}::jsonb,
       now()
     )
     ON CONFLICT (worker_kind) DO UPDATE SET

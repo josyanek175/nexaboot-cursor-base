@@ -73,8 +73,12 @@ export type PersistWebhookEventParams = {
   externalMessageId: string | null;
   deduplicationKey: string;
   conversationKey: string | null;
-  /** Corpo bruto já validado como JSON. Inserido via `::jsonb`, sem re-serializar. */
-  rawPayload: string;
+  /**
+   * Payload já parseado (objeto/array/valor JSON).
+   * Passar objeto JS direto — NÃO string JSON nem JSON.stringify.
+   * Com postgres.js, string + `::jsonb` vira jsonb scalar string.
+   */
+  rawPayload: unknown;
   requestHeaders: Record<string, string | boolean>;
   /** Destino da mensagem de saída, gravada na mesma transação da inbox. */
   exchangeName: string;
@@ -119,7 +123,7 @@ export async function persistWebhookEvent(
         ${params.conversationKey},
         ${params.deduplicationKey},
         ${params.rawPayload}::jsonb,
-        ${JSON.stringify(params.requestHeaders)}::jsonb,
+        ${params.requestHeaders}::jsonb,
         'pending'
       )
       ON CONFLICT (provider, deduplication_key) DO NOTHING
@@ -290,7 +294,7 @@ export async function ingestWebhookEvent(
       externalMessageId: identifiers.externalMessageId,
       deduplicationKey,
       conversationKey: identifiers.conversationKey,
-      rawPayload: params.rawBody,
+      rawPayload: payload,
       requestHeaders: sanitizeWebhookHeaders(params.headers),
       exchangeName,
       routingKey,

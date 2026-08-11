@@ -299,7 +299,7 @@ async function saveOutboundCampaignMessage(db: PgSql, opts: {
         'sent',
         NULL,
         ${SYSTEM_SENDER_NAME},
-        ${JSON.stringify(payload)}::jsonb
+        ${payload}::jsonb
       )
       ON CONFLICT (conversation_id, external_message_id)
         WHERE external_message_id IS NOT NULL
@@ -325,7 +325,7 @@ async function saveOutboundCampaignMessage(db: PgSql, opts: {
         'sent',
         NULL,
         ${SYSTEM_SENDER_NAME},
-        ${JSON.stringify(payload)}::jsonb
+        ${payload}::jsonb
       )
     `;
   }

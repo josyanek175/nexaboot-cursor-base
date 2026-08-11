@@ -614,7 +614,7 @@ export async function insertCampaignEvent(
     VALUES (
       ${campaignId}::uuid, ${companyId}::uuid,
       ${campaignContactId ?? null}::uuid,
-      ${eventType}, ${JSON.stringify(payload)}::jsonb,
+      ${eventType}, ${payload}::jsonb,
       ${userId ?? null}::uuid
     )
   `;
@@ -1186,7 +1186,7 @@ export async function createCampaign(
       ${metaFields.meta_template_id},
       ${metaFields.meta_template_name},
       ${metaFields.meta_language_code},
-      ${JSON.stringify(storedMappings)}::jsonb,
+      ${storedMappings}::jsonb,
       ${userId ?? null}::uuid
     )
     RETURNING id, company_id, whatsapp_channel_id, name,
@@ -1343,7 +1343,7 @@ export async function updateCampaign(
         meta_template_id = ${metaFields.meta_template_id},
         meta_template_name = ${metaFields.meta_template_name},
         meta_language_code = ${metaFields.meta_language_code},
-        meta_variable_mappings = ${JSON.stringify(storedMappings)}::jsonb,
+        meta_variable_mappings = ${storedMappings}::jsonb,
         template_id = ${isMeta ? null : (data.template_id !== undefined ? data.template_id : existing.template_id ?? null)}::uuid,
         send_mode = ${CAMPAIGN_SEND_MODE},
         updated_at = now()
@@ -1593,7 +1593,7 @@ export async function addCampaignContacts(
           (campaign_id, company_id, contact_id, phone, name, variables, status, skip_reason)
         VALUES (
           ${campaignId}::uuid, ${companyId}::uuid, ${ct.id}::uuid,
-          ${phone}, ${ct.name}, ${JSON.stringify(contactVariables)}::jsonb,
+          ${phone}, ${ct.name}, ${contactVariables}::jsonb,
           ${rowStatus}, ${skipReason}
         )
         ON CONFLICT (campaign_id, phone) DO NOTHING

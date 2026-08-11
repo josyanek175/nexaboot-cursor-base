@@ -146,7 +146,7 @@ export async function insertInboundTextMessage(params: {
       message_type, message_text, from_me, raw_payload, status
     ) VALUES (
       ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'in',
-      'text', ${messageText}, false, ${JSON.stringify(rawPayload)}::jsonb, 'received'
+      'text', ${messageText}, false, ${rawPayload}::jsonb, 'received'
     )
     ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
     DO NOTHING
@@ -195,7 +195,7 @@ export async function insertInboundMediaMessage(params: {
       media_base64, media_error, media_url, media_size
     ) VALUES (
       ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'in',
-      ${mediaType}, ${messageText}, false, ${JSON.stringify(rawPayload)}::jsonb, 'received',
+      ${mediaType}, ${messageText}, false, ${rawPayload}::jsonb, 'received',
       ${mediaType}, ${mimeType}, ${mimeType}, ${filename}, ${caption},
       ${mediaBase64}, ${mediaError}, ${null}, ${mediaSize}
     )

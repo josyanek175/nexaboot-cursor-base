@@ -529,7 +529,7 @@ export async function processEvolutionMessageNode(params: {
       reaction_emoji, reaction_to_message_id
     ) VALUES (
       ${conversationId}::uuid, ${externalId}, ${externalId}, ${direction},
-      ${parsed.type}, ${parsed.body ?? null}, ${fromMe}, ${JSON.stringify(params.fullPayload)}::jsonb,
+      ${parsed.type}, ${parsed.body ?? null}, ${fromMe}, ${params.fullPayload}::jsonb,
       ${isMedia ? parsed.type : null}, ${mimeType}, ${mimeType}, ${parsed.fileName ?? null},
       ${parsed.body ?? null}, ${mediaBase64}, ${mediaError}, ${null}, 'received',
       ${parsed.reactionEmoji ?? null}, ${parsed.reactionToId ?? null}

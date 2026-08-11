@@ -48,7 +48,7 @@ export async function ensureCampaignJob(
       ${params.phone},
       ${params.responseText},
       ${params.allowEmptyText},
-      ${JSON.stringify({})}::jsonb,
+      ${{}}::jsonb,
       'pending'
     )
     ON CONFLICT (message_id) DO NOTHING
