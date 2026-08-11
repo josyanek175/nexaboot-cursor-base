@@ -16,6 +16,28 @@ const Body = z.object({
   channelId: z.string().uuid(),
 });
 
+type ConversationStartRow = {
+  id: string;
+  contact_id: string;
+  whatsapp_channel_id: string;
+  status: string;
+  last_message_at: string | null;
+  unread_count: number | null;
+};
+
+function startSuccessPayload(row: ConversationStartRow, created: boolean) {
+  return {
+    ok: true as const,
+    created,
+    conversationId: row.id,
+    contactId: row.contact_id,
+    channelId: row.whatsapp_channel_id,
+    status: row.status,
+    lastMessageAt: row.last_message_at,
+    unreadCount: row.unread_count ?? 0,
+  };
+}
+
 export const Route = createFileRoute("/api/conversations/start")({
   server: {
     handlers: {
@@ -49,8 +71,10 @@ export const Route = createFileRoute("/api/conversations/start")({
         if (!channel[0]) return Response.json({ error: "channel_not_found" }, { status: 404 });
 
         // Já existe conversa para este contato + canal? Reaproveita.
-        const existing = await s<{ id: string }[]>`
-          SELECT id FROM public.conversations
+        // Política de status/ORDER BY inalterada — só amplia colunas retornadas.
+        const existing = await s<ConversationStartRow[]>`
+          SELECT id, contact_id, whatsapp_channel_id, status, last_message_at, unread_count
+          FROM public.conversations
           WHERE company_id = ${companyId}::uuid
             AND contact_id = ${contactId}::uuid
             AND whatsapp_channel_id = ${channelId}::uuid
@@ -60,19 +84,23 @@ export const Route = createFileRoute("/api/conversations/start")({
           LIMIT 1
         `;
         if (existing[0]) {
-          return Response.json({ ok: true, created: false, conversationId: existing[0].id });
+          return Response.json(startSuccessPayload(existing[0], false));
         }
 
         // Cria conversa vazia (sem mensagem fake, sem enviar WhatsApp).
-        const inserted = await s<{ id: string }[]>`
+        const inserted = await s<ConversationStartRow[]>`
           INSERT INTO public.conversations
             (company_id, contact_id, whatsapp_channel_id, status, unread_count, last_message_at)
           VALUES
             (${companyId}::uuid, ${contactId}::uuid, ${channelId}::uuid, 'open', 0, now())
-          RETURNING id
+          RETURNING id, contact_id, whatsapp_channel_id, status, last_message_at, unread_count
         `;
-        console.log("[CONVERSATION_STARTED]", { conversationId: inserted[0].id, contactId, channelId });
-        return Response.json({ ok: true, created: true, conversationId: inserted[0].id });
+        console.log("[CONVERSATION_STARTED]", {
+          conversationId: inserted[0].id,
+          contactId: inserted[0].contact_id,
+          channelId: inserted[0].whatsapp_channel_id,
+        });
+        return Response.json(startSuccessPayload(inserted[0], true));
       },
     },
   },

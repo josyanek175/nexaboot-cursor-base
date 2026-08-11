@@ -38,6 +38,7 @@ import {
 import { normalizeCampaignColor, CAMPAIGN_COLOR_PALETTE, DEFAULT_CAMPAIGN_COLOR } from "@/lib/campaign-color";
 import {
   transformApiConversation,
+  mapApiStatus,
   campaignServiceStatusDisplay,
   matchesCampaignColorFilter,
   resolveConversationRowCampaign,
@@ -188,6 +189,73 @@ function getContact(id: string): Contact {
       avatarColor: "#64748b",
     }
   );
+}
+
+/** Só no fluxo "Novo atendimento": dados da busca prevalecem sobre cache sticky. */
+function applyClickedContactToCache(ct: Contact) {
+  const idx = contacts.findIndex((x) => x.id === ct.id);
+  if (idx >= 0) {
+    contacts[idx] = {
+      ...contacts[idx],
+      name: ct.name,
+      phone: ct.phone,
+      email: ct.email,
+      avatarColor: ct.avatarColor,
+      tenantId: ct.tenantId || contacts[idx].tenantId,
+    };
+    return;
+  }
+  contacts.push(ct);
+}
+
+type ConversationStartResponse = {
+  conversationId?: string;
+  contactId?: string;
+  channelId?: string;
+  status?: string;
+  lastMessageAt?: string | null;
+  unreadCount?: number;
+  created?: boolean;
+};
+
+/** Merge seguro: se já existe em convs, preserva assigned/campanha; senão defaults. */
+function upsertConversationFromStart(
+  prev: Conversation[],
+  res: ConversationStartResponse,
+  tenantId: string,
+): Conversation[] {
+  const id = String(res.conversationId ?? "");
+  const contactId = String(res.contactId ?? "");
+  const channelId = String(res.channelId ?? "");
+  if (!id || !contactId || !channelId) return prev;
+
+  const confirmed: Pick<
+    Conversation,
+    "id" | "tenantId" | "contactId" | "channelId" | "status" | "lastMessageAt" | "unreadCount"
+  > = {
+    id,
+    tenantId,
+    contactId,
+    channelId,
+    status: mapApiStatus(res.status),
+    lastMessageAt: res.lastMessageAt ? String(res.lastMessageAt) : new Date().toISOString(),
+    unreadCount: typeof res.unreadCount === "number" ? res.unreadCount : 0,
+  };
+
+  const idx = prev.findIndex((c) => c.id === id);
+  if (idx >= 0) {
+    const next = prev.slice();
+    next[idx] = { ...next[idx], ...confirmed };
+    return next;
+  }
+
+  return [
+    {
+      ...confirmed,
+      tags: [],
+    },
+    ...prev,
+  ];
 }
 function getChannel(id: string): Channel {
   return (
@@ -583,6 +651,7 @@ function AtendimentoPage() {
   const [contactResults, setContactResults] = useState<Contact[]>([]);
   const [searchingContacts, setSearchingContacts] = useState(false);
   const [startingContactId, setStartingContactId] = useState<string>("");
+  const [startingChannelId, setStartingChannelId] = useState<string>("");
 
   // Snapshot anterior para detectar mensagens novas no polling.
   const prevConvsRef = useRef<Map<string, string>>(new Map());
@@ -1020,41 +1089,70 @@ function AtendimentoPage() {
     });
   }, [contactResults, convs, search, channelFilter, tenantChannels]);
 
-  /** Resolve o canal real para iniciar uma conversa nova (por contato + canal). */
-  function resolveStartChannelId(ct?: Contact): string | null {
-    if (channelFilter !== "all") return channelFilter;
-    if (tenantChannels.length === 1) return tenantChannels[0].id;
+  /** Canais nos quais o contato ainda pode iniciar atendimento (ids reais). */
+  function channelsAvailableToStart(ct: Contact): Channel[] {
+    const channelsWithConv = new Set(
+      convs.filter((c) => c.contactId === ct.id).map((c) => c.channelId),
+    );
 
-    // Com filtro "todos", preferir um canal em que o contato ainda não tem conversa.
-    if (ct) {
-      const channelsWithConv = new Set(
-        convs.filter((c) => c.contactId === ct.id).map((c) => c.channelId),
-      );
-      const missing = tenantChannels.filter((ch) => !channelsWithConv.has(ch.id));
-      if (missing.length === 1) return missing[0].id;
+    if (channelFilter !== "all") {
+      const ch = tenantChannels.find((c) => c.id === channelFilter);
+      if (!ch) return [];
+      return channelsWithConv.has(ch.id) ? [] : [ch];
     }
-    return null;
+
+    return tenantChannels.filter((ch) => !channelsWithConv.has(ch.id));
   }
 
-  /** Abre/cria conversa real para o contato no canal selecionado (ou no único sem conversa). */
-  async function startConversationWithContact(ct: Contact) {
+  /**
+   * Abre/cria conversa real para o contato no channelId explícito do botão.
+   * Nunca resolve canal por nome, tipo, índice ou heurística silenciosa.
+   */
+  async function startConversationWithContact(ct: Contact, channelId: string) {
+    if (!channelId) {
+      toast.info("Selecione um canal para iniciar a conversa.");
+      return;
+    }
     if (tenantChannels.length === 0) {
       toast.error("Nenhum canal real disponível. Conecte um canal em Canais.");
       return;
     }
-    const channelId = resolveStartChannelId(ct);
-    if (!channelId) {
-      toast.info("Selecione um canal no filtro para iniciar a conversa neste canal.");
+    // channelId deve ser o id real de um canal do tenant (vindo do objeto Channel).
+    if (!tenantChannels.some((ch) => ch.id === channelId)) {
+      console.error("[START_CONVERSATION_INVALID_CHANNEL]", { contactId: ct.id, channelId });
+      toast.error("Falha ao iniciar conversa");
       return;
     }
+
     setStartingContactId(ct.id);
+    setStartingChannelId(channelId);
     try {
-      const res = await apiPost("/conversations/start", { contactId: ct.id, channelId });
-      const convId: string | undefined = res?.conversationId;
-      if (!convId) throw new Error("resposta inválida do servidor");
-      // Registra o contato localmente para getContact resolver de imediato.
-      if (!contacts.find((x) => x.id === ct.id)) contacts.push(ct);
+      applyClickedContactToCache(ct);
+      const res = (await apiPost("/conversations/start", {
+        contactId: ct.id,
+        channelId,
+      })) as ConversationStartResponse;
+
+      const convId = res?.conversationId ? String(res.conversationId) : "";
+      const resContactId = res?.contactId ? String(res.contactId) : "";
+      const resChannelId = res?.channelId ? String(res.channelId) : "";
+
+      if (!convId || resContactId !== ct.id || resChannelId !== channelId) {
+        console.error("[START_CONVERSATION_INVARIANT_FAIL]", {
+          request: { contactId: ct.id, channelId },
+          response: {
+            conversationId: res?.conversationId,
+            contactId: res?.contactId,
+            channelId: res?.channelId,
+          },
+        });
+        toast.error("Falha ao iniciar conversa");
+        return;
+      }
+
       await reloadConversations({ silent: true });
+      // Merge após reload: se a conversa sair do top 100, ainda fica selecionável.
+      setConvs((prev) => upsertConversationFromStart(prev, res, session.tenantId));
       setSelectedId(convId);
       setMobileView("chat");
       setSearch("");
@@ -1064,6 +1162,7 @@ function AtendimentoPage() {
       toast.error(e instanceof Error ? e.message : "Falha ao iniciar conversa");
     } finally {
       setStartingContactId("");
+      setStartingChannelId("");
     }
   }
 
@@ -1640,8 +1739,10 @@ function AtendimentoPage() {
                 <ContactResultRow
                   key={`ctr-${ct.id}`}
                   contact={ct}
-                  starting={startingContactId === ct.id}
-                  onClick={() => startConversationWithContact(ct)}
+                  startChannels={channelsAvailableToStart(ct)}
+                  startingContactId={startingContactId}
+                  startingChannelId={startingChannelId}
+                  onStart={(channelId) => startConversationWithContact(ct, channelId)}
                 />
               ))}
             </>
@@ -1944,15 +2045,22 @@ function ConversationRow({
 }
 
 function ContactResultRow({
-  contact, starting, onClick,
-}: { contact: Contact; starting?: boolean; onClick: () => void }) {
+  contact,
+  startChannels,
+  startingContactId,
+  startingChannelId,
+  onStart,
+}: {
+  contact: Contact;
+  startChannels: Channel[];
+  startingContactId?: string;
+  startingChannelId?: string;
+  onStart: (channelId: string) => void;
+}) {
+  const busy = startingContactId === contact.id;
   return (
     <li>
-      <button
-        onClick={onClick}
-        disabled={starting}
-        className="flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-muted/60 disabled:opacity-60"
-      >
+      <div className="flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left">
         <div
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
           style={{ backgroundColor: contact.avatarColor }}
@@ -1962,14 +2070,33 @@ function ContactResultRow({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{contact.name || contact.phone}</div>
           {contact.phone && <div className="truncate text-xs text-muted-foreground">{phoneLabel(contact.phone)}</div>}
-          <div className="mt-1">
-            <span className="inline-flex items-center gap-1 rounded bg-whatsapp/10 px-1.5 py-0.5 text-[10px] font-medium text-whatsapp">
-              <UserPlus className="h-3 w-3" />
-              {starting ? "Abrindo…" : "Novo atendimento"}
-            </span>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {startChannels.length === 0 ? (
+              <span className="text-[10px] text-muted-foreground">Selecione um canal no filtro</span>
+            ) : (
+              startChannels.map((ch) => {
+                const thisStarting = busy && startingChannelId === ch.id;
+                return (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onStart(ch.id)}
+                    className="inline-flex items-center gap-1 rounded bg-whatsapp/10 px-1.5 py-0.5 text-[10px] font-medium text-whatsapp transition-colors hover:bg-whatsapp/20 disabled:opacity-60"
+                  >
+                    <UserPlus className="h-3 w-3" />
+                    {thisStarting
+                      ? "Abrindo…"
+                      : startChannels.length === 1
+                        ? "Novo atendimento"
+                        : `Novo · ${ch.provider === "META" ? "Meta" : "Evolution"}`}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
-      </button>
+      </div>
     </li>
   );
 }
