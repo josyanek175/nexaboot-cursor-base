@@ -54,7 +54,7 @@ export async function ensureOutboxForInbox(
       ${params.inboxId}::uuid,
       ${params.exchangeName},
       ${params.routingKey},
-      ${JSON.stringify(params.messagePayload)}::jsonb,
+      ${params.messagePayload}::jsonb,
       'pending'
     )
     ON CONFLICT (inbox_id, routing_key) DO NOTHING
@@ -93,9 +93,11 @@ export type OutboxRecoveredRow = {
 
 export type OutboxRepository = {
   recoverExpiredLeases: () => Promise<OutboxRecoveredRow[]>;
-  claimBatch: (params: { batchSize: number; leaseMs: number; workerId: string }) => Promise<
-    OutboxClaimedRow[]
-  >;
+  claimBatch: (params: {
+    batchSize: number;
+    leaseMs: number;
+    workerId: string;
+  }) => Promise<OutboxClaimedRow[]>;
   markPublished: (params: { id: string; workerId: string }) => Promise<boolean>;
   markRetry: (params: {
     id: string;
