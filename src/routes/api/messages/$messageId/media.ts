@@ -92,7 +92,13 @@ export const Route = createFileRoute("/api/messages/$messageId/media")({
             const stream = await storage.openReadStream(String(msg.storage_key));
             const webStream = Readable.toWeb(stream as Readable);
             return new Response(webStream as BodyInit, { status: 200, headers });
-          } catch {
+          } catch (e) {
+            console.error("[MEDIA_STORAGE_READ_ERROR]", {
+              messageId: msg.id,
+              storageKey: msg.storage_key,
+              error: e instanceof Error ? e.message : String(e),
+            });
+
             return jsonErr(
               {
                 error: "Mídia não disponível no storage",
