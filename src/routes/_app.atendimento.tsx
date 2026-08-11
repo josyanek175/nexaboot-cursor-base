@@ -1067,12 +1067,12 @@ function AtendimentoPage() {
     }
   }
 
-  // Garante que a conversa selecionada seja sempre uma que o usuário pode ver.
+  // Auto-seleciona a primeira só quando ainda não há seleção explícita.
+  // Nunca substitui selectedId (busca, deep-link ?c=, start, fora do top 100).
   useEffect(() => {
+    if (selectedId) return;
     if (filtered.length === 0) return;
-    if (!filtered.some((c) => c.id === selectedId)) {
-      setSelectedId(filtered[0].id);
-    }
+    setSelectedId(filtered[0].id);
   }, [filtered, selectedId]);
 
   // Zera unread da conversa selecionada (local + servidor, best-effort).
@@ -1091,7 +1091,9 @@ function AtendimentoPage() {
     setUnread("atendimento", total);
   }, [filtered, selectedId]);
 
-  const selected = convs.find((c) => c.id === selectedId) ?? filtered[0];
+  const selected = selectedId
+    ? convs.find((c) => c.id === selectedId)
+    : undefined;
   const messages = selected ? msgs[selected.id] ?? [] : [];
   const convLogs = useMemo(
     () => logs.filter((l) => l.conversationId === selected?.id).slice().reverse(),
