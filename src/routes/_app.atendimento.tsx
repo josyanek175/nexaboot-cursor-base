@@ -149,14 +149,51 @@ function formatWaitingDuration(seconds?: number): string {
 }
 
 // ───────── Utilitários de formatação ─────────
+/** Fuso de exibição do Atendimento (horário comercial BR). */
+const ATTENDANCE_DISPLAY_TZ = "America/Sao_Paulo";
+
+/** YYYY-MM-DD no fuso de exibição (para hoje/ontem civis). */
+function attendanceYmd(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ATTENDANCE_DISPLAY_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+function attendanceTimeHm(d: Date): string {
+  return d.toLocaleTimeString("pt-BR", {
+    timeZone: ATTENDANCE_DISPLAY_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Data/hora da mensagem: "Hoje, 15:29" | "Ontem, 18:42" | "12/08/2026, 09:15". */
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  const today = new Date();
-  const sameDay = d.toDateString() === today.toDateString();
-  if (sameDay) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  const diff = (today.getTime() - d.getTime()) / 86_400_000;
-  if (diff < 7) return d.toLocaleDateString("pt-BR", { weekday: "short" });
-  return d.toLocaleDateString("pt-BR");
+  if (Number.isNaN(d.getTime())) return "";
+
+  const msgYmd = attendanceYmd(d);
+  const todayYmd = attendanceYmd(new Date());
+  const time = attendanceTimeHm(d);
+
+  if (msgYmd === todayYmd) return `Hoje, ${time}`;
+
+  const [y, m, day] = todayYmd.split("-").map(Number);
+  const yest = new Date(Date.UTC(y, m - 1, day));
+  yest.setUTCDate(yest.getUTCDate() - 1);
+  const yesterdayYmd = `${yest.getUTCFullYear()}-${String(yest.getUTCMonth() + 1).padStart(2, "0")}-${String(yest.getUTCDate()).padStart(2, "0")}`;
+  if (msgYmd === yesterdayYmd) return `Ontem, ${time}`;
+
+  const date = d.toLocaleDateString("pt-BR", {
+    timeZone: ATTENDANCE_DISPLAY_TZ,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  return `${date}, ${time}`;
 }
 function formatBytes(b?: number): string {
   if (!b) return "";
