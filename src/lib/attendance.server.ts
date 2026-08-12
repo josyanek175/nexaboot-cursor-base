@@ -250,6 +250,7 @@ export async function assumeConversation(
     await onCampaignAssume({
       companyId: actor.companyId,
       conversationId,
+      db: tx as unknown as ReturnType<typeof sql>,
     });
 
     return {

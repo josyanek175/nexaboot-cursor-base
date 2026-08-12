@@ -111,8 +111,10 @@ export async function onCampaignInbound(opts: {
 export async function onCampaignAssume(opts: {
   companyId: string;
   conversationId: string;
+  /** Client da transação aberta (ex.: assumeConversation). Evita self-lock no pool. */
+  db?: ReturnType<typeof sql>;
 }): Promise<void> {
-  const s = sql();
+  const s = opts.db ?? sql();
   await s`
     UPDATE public.conversations
     SET campaign_service_status = CASE
