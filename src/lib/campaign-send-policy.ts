@@ -79,6 +79,99 @@ export function nextPauseAfterSend(opts: {
   return { kind: "message", delayMs: nextMessagePauseMs() };
 }
 
+/**
+ * Fuso canônico das janelas de campanha (UI/DB gravam horário comercial BR).
+ * Nunca usar getHours()/getMinutes() do host — containers PROD costumam ser UTC.
+ */
+export const CAMPAIGN_TIME_ZONE = "America/Sao_Paulo";
+
+const campaignDateTimeFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: CAMPAIGN_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+export type CampaignZonedParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+/** Partes de calendário/relógio em America/Sao_Paulo para um instante. */
+export function getCampaignZonedParts(date: Date): CampaignZonedParts {
+  const parts = campaignDateTimeFmt.formatToParts(date);
+  const num = (type: Intl.DateTimeFormatPartTypes): number => {
+    const v = parts.find((p) => p.type === type)?.value;
+    return v != null ? Number(v) : NaN;
+  };
+  return {
+    year: num("year"),
+    month: num("month"),
+    day: num("day"),
+    hour: num("hour"),
+    minute: num("minute"),
+    second: num("second"),
+  };
+}
+
+/** Minutos desde meia-noite em America/Sao_Paulo. */
+export function campaignMinutesSinceMidnight(date: Date): number {
+  const p = getCampaignZonedParts(date);
+  return p.hour * 60 + p.minute;
+}
+
+/**
+ * Converte data/hora de parede em America/Sao_Paulo para um Instant (Date UTC).
+ * Itera o offset (sem dependência externa; cobre UTC−3 estável e eventuais mudanças).
+ */
+export function campaignZonedTimeToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second = 0,
+): Date {
+  let utcMs = Date.UTC(year, month - 1, day, hour, minute, second, 0);
+  for (let i = 0; i < 4; i += 1) {
+    const parts = getCampaignZonedParts(new Date(utcMs));
+    const wanted = Date.UTC(year, month - 1, day, hour, minute, second, 0);
+    const actual = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+      0,
+    );
+    const diff = wanted - actual;
+    if (diff === 0) break;
+    utcMs += diff;
+  }
+  return new Date(utcMs);
+}
+
+/** schedule_date + window_start (HH:MM) como instante em America/Sao_Paulo. */
+export function getCampaignScheduleStart(
+  scheduleDate: string | null | undefined,
+  windowStart: string | null | undefined,
+): Date | null {
+  if (!scheduleDate) return null;
+  const [y, m, d] = scheduleDate.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const startMin = timeToMinutes(windowStart) ?? 0;
+  return campaignZonedTimeToUtc(y, m, d, Math.floor(startMin / 60), startMin % 60, 0);
+}
+
 /** Parse "HH:MM" ou "HH:MM:SS" → minutos desde meia-noite. */
 export function timeToMinutes(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -98,7 +191,7 @@ export function isWithinSendWindow(
   const start = timeToMinutes(windowStart);
   const end = timeToMinutes(windowEnd);
   if (start == null || end == null) return true;
-  const cur = now.getHours() * 60 + now.getMinutes();
+  const cur = campaignMinutesSinceMidnight(now);
   if (start <= end) return cur >= start && cur < end;
   // Janela que cruza meia-noite.
   return cur >= start || cur < end;
@@ -107,6 +200,7 @@ export function isWithinSendWindow(
 /**
  * Se estiver fora da janela, retorna o próximo instante permitido
  * (mesmo dia se ainda não começou; senão próximo dia no horário inicial).
+ * Todos os cálculos de calendário/relógio usam America/Sao_Paulo.
  */
 export function nextAllowedSendAt(
   now: Date,
@@ -116,30 +210,33 @@ export function nextAllowedSendAt(
 ): Date {
   const startMin = timeToMinutes(windowStart) ?? 0;
   const endMin = timeToMinutes(windowEnd);
-
-  const candidate = new Date(now);
+  const startH = Math.floor(startMin / 60);
+  const startM = startMin % 60;
 
   if (scheduleDate) {
-    const [y, m, d] = scheduleDate.split("-").map(Number);
-    if (y && m && d) {
-      const scheduleStart = new Date(y, m - 1, d, Math.floor(startMin / 60), startMin % 60, 0, 0);
-      if (candidate < scheduleStart) return scheduleStart;
-    }
+    const scheduleStart = getCampaignScheduleStart(scheduleDate, windowStart);
+    if (scheduleStart && now < scheduleStart) return scheduleStart;
   }
 
-  if (endMin != null && !isWithinSendWindow(candidate, windowStart, windowEnd)) {
-    const cur = candidate.getHours() * 60 + candidate.getMinutes();
+  if (endMin != null && !isWithinSendWindow(now, windowStart, windowEnd)) {
+    const z = getCampaignZonedParts(now);
+    const cur = z.hour * 60 + z.minute;
     if (cur < startMin) {
-      candidate.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
-      return candidate;
+      return campaignZonedTimeToUtc(z.year, z.month, z.day, startH, startM, 0);
     }
-    // Passou do horário final → próximo dia no início da janela.
-    candidate.setDate(candidate.getDate() + 1);
-    candidate.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
-    return candidate;
+    // Passou do horário final → próximo dia civil em SP no início da janela.
+    const nextCivil = new Date(Date.UTC(z.year, z.month - 1, z.day + 1));
+    return campaignZonedTimeToUtc(
+      nextCivil.getUTCFullYear(),
+      nextCivil.getUTCMonth() + 1,
+      nextCivil.getUTCDate(),
+      startH,
+      startM,
+      0,
+    );
   }
 
-  return candidate;
+  return new Date(now);
 }
 
 export function shouldPauseUntilNextDay(
@@ -148,7 +245,7 @@ export function shouldPauseUntilNextDay(
 ): boolean {
   const endMin = timeToMinutes(windowEnd);
   if (endMin == null) return false;
-  const cur = now.getHours() * 60 + now.getMinutes();
+  const cur = campaignMinutesSinceMidnight(now);
   return cur >= endMin;
 }
 

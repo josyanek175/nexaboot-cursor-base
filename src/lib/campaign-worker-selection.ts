@@ -5,6 +5,7 @@
 
 import { MANUAL_PAUSED_STATUS } from "@/lib/campaign-manual-control";
 import {
+  getCampaignScheduleStart,
   isWithinSendWindow,
   nextAllowedSendAt,
   nextMessagePauseMs,
@@ -80,13 +81,7 @@ export function getScheduleStart(
   scheduleDate: string | null | undefined,
   windowStart: string | null | undefined,
 ): Date | null {
-  if (!scheduleDate) return null;
-  const startMin = windowStart
-    ? Number(windowStart.slice(0, 2)) * 60 + Number(windowStart.slice(3, 5))
-    : 0;
-  const [y, m, d] = scheduleDate.split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d, Math.floor(startMin / 60), startMin % 60, 0, 0);
+  return getCampaignScheduleStart(scheduleDate, windowStart);
 }
 
 export function isCampaignOutsideSendWindow(

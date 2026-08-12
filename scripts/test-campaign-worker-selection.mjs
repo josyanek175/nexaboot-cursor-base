@@ -23,10 +23,10 @@ function assert(label, condition) {
   }
 }
 
-// Dentro da janela 08:00–18:00 (meio-dia local).
-const noon = new Date(2026, 6, 23, 12, 0, 0, 0);
-// Fora da janela (20:00 local).
-const evening = new Date(2026, 6, 23, 20, 0, 0, 0);
+// Instantes UTC equivalentes a meio-dia / 20:00 America/Sao_Paulo (UTC−3, sem DST).
+// Evita depender do timezone do host (containers/CI costumam ser UTC).
+const noon = new Date("2026-07-23T15:00:00.000Z"); // 12:00 SP
+const evening = new Date("2026-07-23T23:00:00.000Z"); // 20:00 SP
 
 // A fora da janela, B running com janela mais ampla e 2 pending → tick envia B
 {
