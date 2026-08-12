@@ -151,7 +151,10 @@ function Shell() {
 
   useEffect(() => {
     let cancel = false;
+    let inFlight = false;
     const loadUnread = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const r = await fetch("/api/internal-chat/unread-count", { credentials: "include" });
         if (!r.ok) return;
@@ -163,10 +166,12 @@ function Shell() {
         }
       } catch {
         /* ignore */
+      } finally {
+        inFlight = false;
       }
     };
     loadUnread();
-    const id = setInterval(loadUnread, 10000);
+    const id = setInterval(loadUnread, 60_000);
     return () => {
       cancel = true;
       clearInterval(id);

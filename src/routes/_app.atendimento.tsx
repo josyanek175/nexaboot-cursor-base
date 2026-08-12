@@ -663,6 +663,8 @@ function AtendimentoPage() {
   const attendanceNotifsBootstrapped = useRef(false);
   const selectedIdRef = useRef<string>("");
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  const convsPollInFlightRef = useRef(false);
+  const msgsPollInFlightRef = useRef(false);
   // Scroll automático para o fim do chat ao chegar/enviar mensagem.
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -675,6 +677,7 @@ function AtendimentoPage() {
 
   // Carrega conversas via REST.
   const reloadConversations = async (opts?: { silent?: boolean }) => {
+    convsPollInFlightRef.current = true;
     if (!opts?.silent) {
       setLoadingConvs(true);
       setConvsError(null);
@@ -767,13 +770,17 @@ function AtendimentoPage() {
         setConvs([]);
       }
     } finally {
+      convsPollInFlightRef.current = false;
       if (!opts?.silent) setLoadingConvs(false);
     }
   };
   useEffect(() => {
     reloadConversations();
-    // Polling de conversas a cada 10s (FASE 2 — 45 usuários concorrentes).
-    const id = setInterval(() => reloadConversations({ silent: true }), 10_000);
+    // Polling de conversas a cada 30s (FASE 2 — 45 usuários concorrentes).
+    const id = setInterval(() => {
+      if (convsPollInFlightRef.current) return;
+      void reloadConversations({ silent: true });
+    }, 30_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.tenantId, listMode, campaignSubFilter, campaignColorFilter, assigneeFilter, channelFilter]);
@@ -815,6 +822,7 @@ function AtendimentoPage() {
 
   /** Carrega mensagens, mesclando por id para não duplicar nem perder otimistas. */
   const reloadMessages = async (convId: string, opts?: { silent?: boolean }) => {
+    msgsPollInFlightRef.current = true;
     if (!opts?.silent) {
       setLoadingMsgs(true);
       setMsgsError(null);
@@ -868,16 +876,20 @@ function AtendimentoPage() {
         setMsgs((prev) => ({ ...prev, [convId]: prev[convId] ?? [] }));
       }
     } finally {
+      msgsPollInFlightRef.current = false;
       if (!opts?.silent) setLoadingMsgs(false);
     }
   };
 
-  // Carrega mensagens da conversa selecionada via REST + polling 5s.
+  // Carrega mensagens da conversa selecionada via REST + polling 10s.
   useEffect(() => {
     if (!selectedId) return;
     console.log("conversation selecionada", selectedId);
     reloadMessages(selectedId);
-    const id = setInterval(() => reloadMessages(selectedId, { silent: true }), 5_000);
+    const id = setInterval(() => {
+      if (msgsPollInFlightRef.current) return;
+      void reloadMessages(selectedId, { silent: true });
+    }, 10_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -915,10 +927,13 @@ function AtendimentoPage() {
     }
   };
 
-  // Polling de notificações de transferência (a cada 12s).
+  // Polling de notificações de transferência (a cada 60s).
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
     async function pollAttendanceNotifications() {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const data = await apiGet("/attendance/notifications?unread=1");
         if (cancelled) return;
@@ -954,10 +969,12 @@ function AtendimentoPage() {
         }
       } catch {
         // silencioso — não interrompe o atendimento
+      } finally {
+        inFlight = false;
       }
     }
     pollAttendanceNotifications();
-    const id = setInterval(pollAttendanceNotifications, 12_000);
+    const id = setInterval(pollAttendanceNotifications, 60_000);
     return () => {
       cancelled = true;
       clearInterval(id);
