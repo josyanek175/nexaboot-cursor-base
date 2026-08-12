@@ -5,7 +5,7 @@ import {
   ShieldAlert, X, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPost, apiDelete, apiPatch } from "@/lib/api";
+import { ApiRequestError, apiGet, apiPost, apiDelete, apiPatch, getApiErrorMessage } from "@/lib/api";
 import { formatChannelPhoneForDisplay } from "@/lib/phone";
 import { useAuth } from "@/lib/auth";
 import { canManageMetaCoexistence } from "@/lib/permissions";
@@ -41,6 +41,7 @@ function CanaisPage() {
   const [loading, setLoading] = useState(true);
   const [evolutionConfigured, setEvolutionConfigured] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [showAddMeta, setShowAddMeta] = useState(false);
   const [qrChannel, setQrChannel] = useState<Channel | null>(null);
   const [metaTokenChannel, setMetaTokenChannel] = useState<Channel | null>(null);
   const [showCoexistence, setShowCoexistence] = useState(false);
@@ -205,7 +206,13 @@ function CanaisPage() {
             onClick={() => setShowAdd(true)}
             className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
           >
-            <Plus className="h-4 w-4" /> Adicionar número
+            <Plus className="h-4 w-4" /> Adicionar Evolution
+          </button>
+          <button
+            onClick={() => setShowAddMeta(true)}
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            <Plus className="h-4 w-4" /> Adicionar Meta
           </button>
         </div>
       </header>
@@ -247,6 +254,9 @@ function CanaisPage() {
                           ? "Meta Coexistence (Embedded Signup)"
                           : "Meta WhatsApp Cloud API"
                         : `Instância: ${c.evolution_instance_name || "—"}`}
+                    </p>
+                    <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={c.id}>
+                      channelId: {c.id}
                     </p>
                     {phoneLabel && (
                       <p className="truncate text-xs text-muted-foreground">{phoneLabel}</p>
@@ -307,7 +317,7 @@ function CanaisPage() {
             })}
             {channels.length === 0 && (
               <div className="col-span-full rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                Nenhum canal cadastrado. Clique em “Adicionar número” para começar.
+                Nenhum canal cadastrado. Clique em “Adicionar Evolution” ou “Adicionar Meta” para começar.
               </div>
             )}
           </div>
@@ -321,6 +331,17 @@ function CanaisPage() {
             setShowAdd(false);
             await load();
             setQrChannel(created);
+          }}
+        />
+      )}
+
+      {showAddMeta && (
+        <AddMetaChannelModal
+          onClose={() => setShowAddMeta(false)}
+          onCreated={async (createdId) => {
+            setShowAddMeta(false);
+            toast.success(`Canal Meta criado · channelId ${createdId}`);
+            await load();
           }}
         />
       )}
@@ -427,6 +448,145 @@ function AddChannelModal({
           className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-50"
         >
           {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar e conectar
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function metaCreateErrorToast(error: unknown): string {
+  if (error instanceof ApiRequestError) {
+    const code = error.body.error ?? "";
+    if (error.status === 401) return "Sessão expirada. Faça login novamente.";
+    if (code === "invalid_input") return "Preencha todos os campos corretamente.";
+    if (code === "invalid_status") return "Status inválido.";
+    if (code === "token_graph_validation_failed") {
+      return error.body.message?.trim() ||
+        "Token rejeitado pela Meta. Confira WABA e Phone Number ID.";
+    }
+    if (code === "phone_number_id_already_exists") {
+      return "Este Phone Number ID já está cadastrado.";
+    }
+    if (code === "phone_number_id_belongs_to_another_company") {
+      return "Este número já pertence a outra empresa.";
+    }
+    if (code === "missing_encryption_key") {
+      return "Criptografia de token não configurada no servidor.";
+    }
+  }
+  return getApiErrorMessage(error);
+}
+
+// ─── Modal: adicionar canal Meta Cloud API ───────────────────────────────────
+function AddMetaChannelModal({
+  onClose, onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (channelId: string) => void | Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [wabaId, setWabaId] = useState("");
+  const [phoneNumberId, setPhoneNumberId] = useState("");
+  const [businessId, setBusinessId] = useState("");
+  const [displayPhoneNumber, setDisplayPhoneNumber] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [webhookVerifyToken, setWebhookVerifyToken] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function clearSecrets() {
+    setAccessToken("");
+    setWebhookVerifyToken("");
+  }
+
+  useEffect(() => () => { clearSecrets(); }, []);
+
+  function handleClose() {
+    clearSecrets();
+    onClose();
+  }
+
+  async function save() {
+    const payload = {
+      name: name.trim(),
+      waba_id: wabaId.trim(),
+      phone_number_id: phoneNumberId.trim(),
+      business_id: businessId.trim(),
+      display_phone_number: displayPhoneNumber.trim(),
+      access_token: accessToken.trim(),
+      webhook_verify_token: webhookVerifyToken.trim(),
+    };
+    if (
+      !payload.name || payload.name.length > 120 ||
+      !payload.waba_id || payload.waba_id.length > 120 ||
+      !payload.phone_number_id || payload.phone_number_id.length > 120 ||
+      !payload.business_id || payload.business_id.length > 120 ||
+      !payload.display_phone_number || payload.display_phone_number.length > 40 ||
+      !payload.access_token || payload.access_token.length > 4096 ||
+      !payload.webhook_verify_token || payload.webhook_verify_token.length > 256
+    ) {
+      toast.error("Preencha todos os campos corretamente.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await apiPost("/meta/channels", payload);
+      const channelId = String(r?.channel?.id ?? "");
+      if (!channelId) {
+        toast.error("Canal criado, mas a API não devolveu channelId.");
+        return;
+      }
+      console.log("[META_CHANNEL_CREATED]", {
+        channelId,
+        phone_number_id: payload.phone_number_id,
+        waba_id: payload.waba_id,
+      });
+      clearSecrets();
+      await onCreated(channelId);
+    } catch (e) {
+      toast.error(metaCreateErrorToast(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Adicionar canal Meta Cloud API" onClose={handleClose}>
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Cadastra um número já registrado na Meta. O access token é cifrado no servidor
+          e não fica salvo no navegador. Anote o <b>channelId</b> do toast após o sucesso
+          para testar roteamento de conversas.
+        </p>
+        <Field label="Nome do canal" value={name} onChange={setName} placeholder="Comercial Meta 2" />
+        <Field label="WABA ID" value={wabaId} onChange={setWabaId} placeholder="ID da WhatsApp Business Account" />
+        <Field label="Phone Number ID" value={phoneNumberId} onChange={setPhoneNumberId} placeholder="ID do número na Cloud API" />
+        <Field label="Business ID" value={businessId} onChange={setBusinessId} placeholder="ID do Business Manager" />
+        <Field label="Número exibido" value={displayPhoneNumber} onChange={setDisplayPhoneNumber} placeholder="+55 34 99999-0000" />
+        <Field
+          label="Access Token"
+          value={accessToken}
+          onChange={setAccessToken}
+          type="password"
+          autoComplete="off"
+          placeholder="EAAxxxxxxxx…"
+        />
+        <Field
+          label="Webhook Verify Token"
+          value={webhookVerifyToken}
+          onChange={setWebhookVerifyToken}
+          type="password"
+          autoComplete="off"
+          placeholder="mesmo token configurado no app Meta, se aplicável"
+        />
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <button onClick={handleClose} className="rounded-md px-3 py-2 text-sm hover:bg-accent">Cancelar</button>
+        <button
+          onClick={() => void save()}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar canal
         </button>
       </div>
     </ModalShell>
@@ -643,11 +803,22 @@ function StatusBadge({ status }: { status: ChannelStatus }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+function Field({
+  label, value, onChange, placeholder, type = "text", autoComplete,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  autoComplete?: string;
+}) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       <input
+        type={type}
+        autoComplete={autoComplete}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
