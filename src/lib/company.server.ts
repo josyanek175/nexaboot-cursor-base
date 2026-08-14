@@ -12,7 +12,7 @@
 //
 // NÃO mexe em tenant_id, senha, sessão ou login (isso é feito nos endpoints).
 import { sql, ensureCrmSchema } from "@/lib/pg.server";
-import { getSessionUserId } from "@/lib/session.server";
+import { getSessionUserId, requireSession } from "@/lib/session.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 import { getOperationalCompanyIdFromCookie } from "@/lib/operational-company.server";
 
@@ -108,7 +108,7 @@ export async function getCurrentUserCompanyInfo(
     companyValid: false,
   };
 
-  const uid = userId ?? getSessionUserId();
+  const uid = userId ?? (await getSessionUserId());
   if (!uid) return empty;
 
   // Cookie/sessão resolvida: autenticado na camada de sessão (igual /api/auth/me).
@@ -243,19 +243,23 @@ export async function requireCompanyId(
 ): Promise<string | Response> {
   const t0 = Date.now();
   const tSession0 = Date.now();
-  const uid = userId ?? getSessionUserId();
-  const sessionMs = Date.now() - tSession0;
-
+  let uid = userId ?? null;
   if (!uid) {
-    console.log("[COMPANY_CONTEXT_TIMING]", {
-      route,
-      sessionMs,
-      userQueryMs: 0,
-      companyQueryMs: 0,
-      totalMs: Date.now() - t0,
-    });
-    return Response.json({ error: "unauthenticated" }, { status: 401 });
+    const session = await requireSession();
+    const sessionMs = Date.now() - tSession0;
+    if (session instanceof Response) {
+      console.log("[COMPANY_CONTEXT_TIMING]", {
+        route,
+        sessionMs,
+        userQueryMs: 0,
+        companyQueryMs: 0,
+        totalMs: Date.now() - t0,
+      });
+      return session;
+    }
+    uid = session.userId;
   }
+  const sessionMs = Date.now() - tSession0;
 
   const timing: CompanyInfoTiming = { userQueryMs: 0, companyQueryMs: 0 };
   const info = await getCurrentUserCompanyInfo(uid, timing);

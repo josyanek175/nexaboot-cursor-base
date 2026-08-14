@@ -8,7 +8,7 @@ import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 
 async function getActor() {
-  const uid = getSessionUserId();
+  const uid = await getSessionUserId();
   if (!uid) return null;
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id, active

@@ -19,6 +19,12 @@ import {
   type AuthUser,
   type MeUserPayload,
 } from "./auth-user";
+import {
+  NEXA_SESSION_REPLACED_EVENT,
+  SESSION_REPLACED_ERROR,
+  SESSION_REPLACED_MESSAGE,
+} from "./session-errors";
+import { toast } from "sonner";
 
 export type { AuthUser };
 
@@ -85,15 +91,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const clearLocalAuth = useCallback(() => {
+    setUser(null);
+    setCompanyValid(false);
+    setCompanyName(null);
+    setCompanyId(null);
+    setCompanyMessage(null);
+    setPlatformAccess(false);
+  }, []);
+
+  const handleSessionReplaced = useCallback(() => {
+    clearLocalAuth();
+    toast.error(SESSION_REPLACED_MESSAGE);
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.assign("/login");
+    }
+  }, [clearLocalAuth]);
+
   const refreshSession = useCallback(async () => {
     const res = await fetch("/api/auth/me", {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
+    if (res.status === 401) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (data.error === SESSION_REPLACED_ERROR) handleSessionReplaced();
+      return;
+    }
     if (!res.ok) return;
     const data = (await res.json()) as { user: MeUserPayload | null; company_message?: string };
     applyMeResponse(data);
-  }, [applyMeResponse]);
+  }, [applyMeResponse, handleSessionReplaced]);
 
   const setOperationalCompany = useCallback(
     async (id: string) => {
@@ -118,6 +146,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           credentials: "include",
           headers: { Accept: "application/json" },
         });
+        if (res.status === 401) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          if (!cancelled && data.error === SESSION_REPLACED_ERROR) {
+            handleSessionReplaced();
+          }
+          return;
+        }
         if (!res.ok) throw new Error("me failed");
         const data = (await res.json()) as {
           user: MeUserPayload | null;
@@ -135,7 +170,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyMeResponse]);
+  }, [applyMeResponse, handleSessionReplaced]);
+
+  useEffect(() => {
+    const onReplaced = () => handleSessionReplaced();
+    window.addEventListener(NEXA_SESSION_REPLACED_EVENT, onReplaced);
+    return () => window.removeEventListener(NEXA_SESSION_REPLACED_EVENT, onReplaced);
+  }, [handleSessionReplaced]);
 
   const login = useCallback(
     async (email: string, password: string, _remember: boolean): Promise<LoginResult> => {
@@ -280,12 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     const current = user;
-    setUser(null);
-    setCompanyValid(false);
-    setCompanyName(null);
-    setCompanyId(null);
-    setCompanyMessage(null);
-    setPlatformAccess(false);
+    clearLocalAuth();
     fetch("/api/auth/me?action=logout", {
       method: "POST",
       credentials: "include",
@@ -305,7 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reason: `Logout: ${current.email}`,
       });
     }
-  }, [user]);
+  }, [user, clearLocalAuth]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
     await new Promise((r) => setTimeout(r, 400));

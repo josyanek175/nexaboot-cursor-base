@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/internal-chat/send")({
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
 
         const contentType = request.headers.get("content-type") || "";

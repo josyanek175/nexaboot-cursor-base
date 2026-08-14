@@ -63,7 +63,7 @@ export async function requireAttendanceActor(): Promise<
   const company = await requireCompanyId();
   if (company instanceof Response) return company;
 
-  let uid = getSessionUserId();
+  let uid = await getSessionUserId();
   if (!uid) {
     const info = await getCurrentUserCompanyInfo();
     uid = info.userId;

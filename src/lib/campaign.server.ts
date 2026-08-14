@@ -395,7 +395,7 @@ type CampaignActorResult = {
 async function requireCampaignActor(
   mode: "view" | "manage" | "delete",
 ): Promise<CampaignActorResult | Response> {
-  let uid = getSessionUserId();
+  let uid = await getSessionUserId();
   let companyId: string | Response;
 
   if (uid) {

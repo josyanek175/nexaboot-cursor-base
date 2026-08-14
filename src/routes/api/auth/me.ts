@@ -2,9 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomUUID } from "node:crypto";
 import {
-  getSessionUserId,
   buildClearSetCookie,
   COOKIE_NAME,
+  resolveSession,
+  revokeSessionByCookie,
+  sessionUnauthorizedResponse,
 } from "@/lib/session.server";
 import { buildOperationalCompanyClearCookie } from "@/lib/operational-company.server";
 import {
@@ -60,32 +62,36 @@ export const Route = createFileRoute("/api/auth/me")({
           // Diagnóstico do ciclo do cookie de sessão.
           const rawCookie = getCookie(COOKIE_NAME);
           const tSession0 = Date.now();
-          const uid = getSessionUserId();
+          const resolved = await resolveSession();
           sessionMs = Date.now() - tSession0;
-          userId = uid;
+          userId = resolved.status === "ok" ? resolved.session.userId : null;
 
           console.log("[ME_SESSION_CHECK]", {
             requestId,
             cookieReceived: !!rawCookie,
             cookieName: COOKIE_NAME,
-            sessionResolved: !!uid,
-            userId: uid,
+            sessionStatus: resolved.status,
+            sessionResolved: resolved.status === "ok",
+            userId,
             ...getDatabaseRuntimeDiag(),
           });
 
-          if (!uid) {
-            // cookieReceived=false  -> navegador não enviou o cookie (Secure/SameSite/domínio/credentials)
-            // cookieReceived=true   -> cookie chegou mas a assinatura/SESSION_SECRET não confere
+          if (resolved.status !== "ok") {
             success = true;
             logTiming();
-            return Response.json(
-              {
-                user: null,
-                diag: { cookieReceived: !!rawCookie, sessionResolved: false },
-              },
-              { status: 200 },
-            );
+            if (resolved.status === "none") {
+              return Response.json(
+                {
+                  user: null,
+                  diag: { cookieReceived: !!rawCookie, sessionResolved: false },
+                },
+                { status: 200 },
+              );
+            }
+            return sessionUnauthorizedResponse(resolved);
           }
+
+          const uid = resolved.session.userId;
 
           // ── Etapa DB 1: user query (mesmo SQL; timeout 5s; connection vs query) ──
           const userStep = await meUserQueryWithConnectionTiming(uid, requestId);
@@ -195,6 +201,7 @@ export const Route = createFileRoute("/api/auth/me")({
         const url = new URL(request.url);
         if (url.searchParams.get("action") === "logout") {
           console.log("[ME_LOGOUT]");
+          await revokeSessionByCookie("logout");
           const headers = new Headers();
           headers.append("Set-Cookie", buildClearSetCookie());
           headers.append("Set-Cookie", buildOperationalCompanyClearCookie());

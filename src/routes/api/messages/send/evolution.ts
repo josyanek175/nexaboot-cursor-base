@@ -28,7 +28,7 @@ export const Route = createFileRoute("/api/messages/send/evolution")({
         const s = sql();
 
         // Autoria: usuário logado, restrito à mesma empresa (nunca outra).
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`
               SELECT id, name FROM public.users

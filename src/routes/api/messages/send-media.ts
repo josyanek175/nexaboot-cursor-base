@@ -38,7 +38,7 @@ export const Route = createFileRoute("/api/messages/send-media")({
           return Response.json({ error: "missing_file", message: "Não foi possível enviar o documento" }, { status: 400 });
         }
 
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         const s = sql();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`
