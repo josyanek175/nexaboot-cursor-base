@@ -11,6 +11,11 @@ import {
   hasSessionSecret,
 } from "@/lib/session.server";
 import { buildAuthUserResponse } from "@/lib/auth-user";
+import { accessAllowedNow } from "@/lib/access-hours.server";
+import {
+  ACCESS_OUTSIDE_ALLOWED_HOURS,
+  formatAccessHoursUserMessage,
+} from "@/lib/access-hours";
 
 const Body = z.object({
   email: z.string().email().max(255),
@@ -224,6 +229,26 @@ export const Route = createFileRoute("/api/auth/login")({
           tenant_id: u.tenant_id,
           tenantExists,
         });
+
+        if (roleUpper === "ATENDENTE") {
+          const hours = await accessAllowedNow({
+            companyId: u.company_id,
+            role: roleUpper,
+          });
+          if (!hours.allowed) {
+            return Response.json(
+              {
+                error: ACCESS_OUTSIDE_ALLOWED_HOURS,
+                message: formatAccessHoursUserMessage(hours),
+                allowedStart: hours.allowedStart,
+                allowedEnd: hours.allowedEnd,
+                nextWeekdayLabel: hours.nextWeekdayLabel,
+                nextTime: hours.nextTime,
+              },
+              { status: 403 },
+            );
+          }
+        }
 
         // 7) last_login_at (não-fatal) -----------------------------------
         try {

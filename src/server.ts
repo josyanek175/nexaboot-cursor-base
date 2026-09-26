@@ -6,7 +6,14 @@ import {
   bootstrapDatabaseSchema,
   isDatabaseSchemaBootstrapEnabled,
   PG_POOL_MAX,
+  sql,
 } from "./lib/pg.server";
+import { buildClearSetCookie, verifySessionToken } from "./lib/session.server";
+import { accessAllowedNow } from "./lib/access-hours.server";
+import {
+  ACCESS_OUTSIDE_ALLOWED_HOURS,
+  formatAccessHoursUserMessage,
+} from "./lib/access-hours";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -109,10 +116,76 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
+function readSessionUserId(request: Request): string | null {
+  const cookie = request.headers.get("cookie") ?? "";
+  const match = cookie.match(/(?:^|;\s*)nexa_session=([^;]+)/);
+  if (!match?.[1]) return null;
+  try {
+    return verifySessionToken(decodeURIComponent(match[1]));
+  } catch {
+    return null;
+  }
+}
+
+/** Só o perfil ATENDENTE. Demais perfis seguem sem checagem. */
+async function attendantAccessHoursResponse(request: Request): Promise<Response | null> {
+  const path = new URL(request.url).pathname;
+  if (!path.startsWith("/api/")) return null;
+  if (
+    path.startsWith("/api/auth/login") ||
+    path.startsWith("/api/health") ||
+    path.startsWith("/api/webhooks") ||
+    path.startsWith("/api/public")
+  ) {
+    return null;
+  }
+  const userId = readSessionUserId(request);
+  if (!userId) return null;
+  try {
+    const users = await sql<{ role: string | null; company_id: string | null }[]>`
+      SELECT role, company_id FROM public.users WHERE id = ${userId}::uuid AND active = true LIMIT 1
+    `;
+    const role = String(users[0]?.role ?? "").toUpperCase();
+    if (role !== "ATENDENTE") return null;
+    const hours = await accessAllowedNow({
+      companyId: users[0]?.company_id ?? null,
+      role,
+    });
+    if (hours.allowed) return null;
+    const headers = new Headers();
+    if (hours.forceLogout) headers.set("Set-Cookie", buildClearSetCookie());
+    return Response.json(
+      {
+        error: ACCESS_OUTSIDE_ALLOWED_HOURS,
+        message: formatAccessHoursUserMessage({
+          sessionEnded: hours.forceLogout,
+          allowedStart: hours.allowedStart,
+          allowedEnd: hours.allowedEnd,
+          nextWeekdayLabel: hours.nextWeekdayLabel,
+          nextTime: hours.nextTime,
+        }),
+        forceLogout: hours.forceLogout,
+        allowedStart: hours.allowedStart,
+        allowedEnd: hours.allowedEnd,
+        nextWeekdayLabel: hours.nextWeekdayLabel,
+        nextTime: hours.nextTime,
+      },
+      { status: hours.forceLogout ? 401 : 403, headers },
+    );
+  } catch (error) {
+    console.error("[ACCESS_HOURS_GATE_FAIL]", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     // Bootstrap NÃO é reiniciado aqui — só no load do módulo (acima).
     try {
+      const blocked = await attendantAccessHoursResponse(request);
+      if (blocked) return blocked;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

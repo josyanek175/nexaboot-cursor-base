@@ -743,6 +743,7 @@ export async function ensureCrmSchema() {
 
       // Atribuição de atendimento + notificações de transferência.
       await ensureAttendanceSchema(s);
+      await ensureAccessHoursSchema(s);
 
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {
@@ -883,6 +884,38 @@ export async function ensureAttendanceSchema(s?: ReturnType<typeof sql>): Promis
     }
   })();
   return _attendanceReady;
+}
+
+async function ensureAccessHoursSchema(db: ReturnType<typeof sql>): Promise<void> {
+  await db.unsafe(`
+    ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS timezone TEXT;
+
+    CREATE TABLE IF NOT EXISTS public.company_access_hour_settings (
+      company_id UUID PRIMARY KEY REFERENCES public.companies(id) ON DELETE CASCADE,
+      admin_geral_bypass BOOLEAN NOT NULL DEFAULT true,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.company_access_schedules (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      profile TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      force_logout_outside_schedule BOOLEAN NOT NULL DEFAULT false,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (company_id, profile)
+    );
+
+    CREATE TABLE IF NOT EXISTS public.company_access_windows (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      schedule_id UUID NOT NULL REFERENCES public.company_access_schedules(id) ON DELETE CASCADE,
+      weekday SMALLINT NOT NULL,
+      blocked BOOLEAN NOT NULL DEFAULT false,
+      start_time TIME NULL,
+      end_time TIME NULL,
+      UNIQUE (schedule_id, weekday)
+    );
+  `);
 }
 
 async function applyAttendanceSchema(db: ReturnType<typeof sql>): Promise<void> {

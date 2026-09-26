@@ -15,6 +15,7 @@ import {
   Menu,
   UsersRound,
   Megaphone,
+  Clock3,
 } from "lucide-react";
 import { canManageInternalGroups } from "@/lib/current-user";
 import {
@@ -56,6 +57,7 @@ type NavItem = {
   badgeKey?: UnreadKey;
   adminOnly?: boolean;
   campaignsOnly?: boolean;
+  accessHours?: boolean;
 };
 
 type CompanyOption = { id: string; name: string };
@@ -82,6 +84,7 @@ const nav: NavItem[] = [
   { to: "/canais", label: "Canais WhatsApp", icon: Smartphone },
   { to: "/automacoes", label: "Automações N8N", icon: Workflow },
   { to: "/logs", label: "Logs", icon: ScrollText },
+  { to: "/horarios-acesso", label: "Horários de acesso", icon: Clock3, accessHours: true },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
@@ -236,6 +239,11 @@ function Shell() {
         <nav className="flex-1 overflow-y-auto p-2">
           {nav
             .filter((item) => !item.adminOnly || canManageInternalGroups(user.role))
+            .filter((item) => {
+              if (!item.accessHours) return true;
+              const role = String(user.role ?? "");
+              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"].includes(role);
+            })
             .filter((item) => {
               if (!item.campaignsOnly) return true;
               if (!actor) return false;

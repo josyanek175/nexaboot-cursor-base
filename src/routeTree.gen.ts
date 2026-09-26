@@ -34,6 +34,8 @@ import { Route as AppEmpresasRouteImport } from './routes/_app.empresas'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppContatosRouteImport } from './routes/_app.contatos'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
+import { Route as AppHorariosAcessoRouteImport } from './routes/_app.horarios-acesso'
+import { Route as ApiAccessHoursRouteImport } from './routes/api/access-hours'
 import { Route as AppComunicacaoInternaRouteImport } from './routes/_app.comunicacao-interna'
 import { Route as AppCanaisRouteImport } from './routes/_app.canais'
 import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
@@ -242,6 +244,16 @@ const AppContatosRoute = AppContatosRouteImport.update({
   id: '/contatos',
   path: '/contatos',
   getParentRoute: () => AppRoute,
+} as any)
+const AppHorariosAcessoRoute = AppHorariosAcessoRouteImport.update({
+  id: '/horarios-acesso',
+  path: '/horarios-acesso',
+  getParentRoute: () => AppRoute,
+} as any)
+const ApiAccessHoursRoute = ApiAccessHoursRouteImport.update({
+  id: '/api/access-hours',
+  path: '/api/access-hours',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppConfiguracoesRoute = AppConfiguracoesRouteImport.update({
   id: '/configuracoes',
@@ -739,6 +751,7 @@ export interface FileRoutesByFullPath {
   '/canais': typeof AppCanaisRoute
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
+  '/horarios-acesso': typeof AppHorariosAcessoRoute
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
@@ -746,6 +759,7 @@ export interface FileRoutesByFullPath {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/access-hours': typeof ApiAccessHoursRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -853,6 +867,7 @@ export interface FileRoutesByTo {
   '/canais': typeof AppCanaisRoute
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
+  '/horarios-acesso': typeof AppHorariosAcessoRoute
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
@@ -860,6 +875,7 @@ export interface FileRoutesByTo {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/access-hours': typeof ApiAccessHoursRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -970,6 +986,7 @@ export interface FileRoutesById {
   '/_app/canais': typeof AppCanaisRoute
   '/_app/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
+  '/_app/horarios-acesso': typeof AppHorariosAcessoRoute
   '/_app/contatos': typeof AppContatosRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/empresas': typeof AppEmpresasRoute
@@ -977,6 +994,7 @@ export interface FileRoutesById {
   '/_app/logs': typeof AppLogsRoute
   '/_app/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/access-hours': typeof ApiAccessHoursRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -1087,6 +1105,7 @@ export interface FileRouteTypes {
     | '/canais'
     | '/comunicacao-interna'
     | '/configuracoes'
+    | '/horarios-acesso'
     | '/contatos'
     | '/dashboard'
     | '/empresas'
@@ -1094,6 +1113,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/attendants'
+    | '/api/access-hours'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1201,6 +1221,7 @@ export interface FileRouteTypes {
     | '/canais'
     | '/comunicacao-interna'
     | '/configuracoes'
+    | '/horarios-acesso'
     | '/contatos'
     | '/dashboard'
     | '/empresas'
@@ -1208,6 +1229,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/attendants'
+    | '/api/access-hours'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1317,6 +1339,7 @@ export interface FileRouteTypes {
     | '/_app/canais'
     | '/_app/comunicacao-interna'
     | '/_app/configuracoes'
+    | '/_app/horarios-acesso'
     | '/_app/contatos'
     | '/_app/dashboard'
     | '/_app/empresas'
@@ -1324,6 +1347,7 @@ export interface FileRouteTypes {
     | '/_app/logs'
     | '/_app/usuarios'
     | '/api/attendants'
+    | '/api/access-hours'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1429,6 +1453,7 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   TermosDeUsoRoute: typeof TermosDeUsoRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
+  ApiAccessHoursRoute: typeof ApiAccessHoursRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
@@ -1652,6 +1677,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/configuracoes'
       preLoaderRoute: typeof AppConfiguracoesRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/horarios-acesso': {
+      id: '/_app/horarios-acesso'
+      path: '/horarios-acesso'
+      fullPath: '/horarios-acesso'
+      preLoaderRoute: typeof AppHorariosAcessoRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/access-hours': {
+      id: '/api/access-hours'
+      path: '/api/access-hours'
+      fullPath: '/api/access-hours'
+      preLoaderRoute: typeof ApiAccessHoursRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/comunicacao-interna': {
       id: '/_app/comunicacao-interna'
@@ -2304,6 +2343,7 @@ interface AppRouteChildren {
   AppCanaisRoute: typeof AppCanaisRoute
   AppComunicacaoInternaRoute: typeof AppComunicacaoInternaRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
+  AppHorariosAcessoRoute: typeof AppHorariosAcessoRoute
   AppContatosRoute: typeof AppContatosRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppEmpresasRoute: typeof AppEmpresasRoute
@@ -2319,6 +2359,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppCanaisRoute: AppCanaisRoute,
   AppComunicacaoInternaRoute: AppComunicacaoInternaRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,
+  AppHorariosAcessoRoute: AppHorariosAcessoRoute,
   AppContatosRoute: AppContatosRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppEmpresasRoute: AppEmpresasRoute,
@@ -2628,6 +2669,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   TermosDeUsoRoute: TermosDeUsoRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
+  ApiAccessHoursRoute: ApiAccessHoursRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
   ApiContactsRoute: ApiContactsRouteWithChildren,
