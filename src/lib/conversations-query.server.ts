@@ -2,6 +2,7 @@
  * Consultas de conversas com filtros de fila de campanha (server-side).
  */
 import { sql } from "@/lib/pg.server";
+import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import { normalizeCampaignColor } from "@/lib/campaign-color.server";
 import { resolveConversationCampaignVisual } from "@/lib/conversation-campaign-visual";
 import {
@@ -21,6 +22,9 @@ export type ConversationListFilters = {
   dateFrom?: string;
   dateTo?: string;
   countsOnly?: boolean;
+  /** Nome, e-mail ou telefone (dígitos). Vazio não filtra. */
+  search?: string;
+  channelId?: string;
 };
 
 export type CampaignQueueCounts = {
@@ -139,6 +143,13 @@ export async function listConversationsForCompany(opts: {
   const unreadOnly = f.unreadOnly === true;
   const dateFrom = f.dateFrom?.trim() || null;
   const dateTo = f.dateTo?.trim() || null;
+  const searchText = f.search?.trim().slice(0, 80) || null;
+  const searchPattern = searchText ? `%${searchText}%` : null;
+  const searchDigits = searchText ? normalizePhone(searchText) : "";
+  const searchPhonePattern = searchDigits.length >= 3 ? `%${searchDigits}%` : null;
+  const searchMatchDigits = searchText ? normalizePhoneForMatch(searchText) : "";
+  const searchMatchPattern = searchMatchDigits.length >= 3 ? `%${searchMatchDigits}%` : null;
+  const channelId = f.channelId && isUuid(f.channelId) ? f.channelId : null;
 
   const interestedFilter = f.campaignServiceStatus === "interested";
 
@@ -263,6 +274,14 @@ export async function listConversationsForCompany(opts: {
       AND (${unreadOnly}::boolean = false OR COALESCE(c.unread_count, 0) > 0)
       AND (${dateFrom}::date IS NULL OR c.last_message_at::date >= ${dateFrom}::date)
       AND (${dateTo}::date IS NULL OR c.last_message_at::date <= ${dateTo}::date)
+      AND (${channelId}::uuid IS NULL OR c.whatsapp_channel_id = ${channelId}::uuid)
+      AND (
+        ${searchPattern}::text IS NULL
+        OR ct.name ILIKE ${searchPattern}
+        OR ct.email ILIKE ${searchPattern}
+        OR (${searchPhonePattern}::text IS NOT NULL AND ct.phone LIKE ${searchPhonePattern})
+        OR (${searchMatchPattern}::text IS NOT NULL AND ct.phone_match LIKE ${searchMatchPattern})
+      )
     ${orderClause}
     LIMIT ${limit}
   `;

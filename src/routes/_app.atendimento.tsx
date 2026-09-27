@@ -671,6 +671,7 @@ function AtendimentoPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "groups" | "individuals">("individuals");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showDetails, setShowDetails] = useState(true);
   const [mobileView, setMobileView] = useState<"list" | "chat">(
     initialConversationId ? "chat" : "list",
@@ -743,6 +744,11 @@ function AtendimentoPage() {
       }
       if (campaignColorFilter !== "all") {
         params.set("campaign_color", campaignColorFilter);
+      }
+      const q = debouncedSearch.trim();
+      if (q.length >= 2) params.set("q", q);
+      if (listMode !== "campaign" && channelFilter !== "all") {
+        params.set("channel_id", channelFilter);
       }
       const qs = params.toString();
       const data = await apiGet(`/conversations${qs ? `?${qs}` : ""}`);
@@ -820,7 +826,13 @@ function AtendimentoPage() {
     }, 30_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.tenantId, listMode, campaignSubFilter, campaignColorFilter, assigneeFilter, channelFilter]);
+  }, [session.tenantId, listMode, campaignSubFilter, campaignColorFilter, assigneeFilter, channelFilter, debouncedSearch]);
+
+  useEffect(() => {
+    const q = search.trim();
+    const t = setTimeout(() => setDebouncedSearch(q), q.length >= 2 ? 180 : 0);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // Carrega canais reais conectados/cadastrados (Evolution) para o filtro.
   const reloadChannels = async () => {
@@ -1127,7 +1139,12 @@ function AtendimentoPage() {
   const contactsWithoutConversation = useMemo(() => {
     if (!search.trim()) return [];
 
+    const q = search.trim().toLowerCase();
+    const digits = search.replace(/\D/g, "");
     return contactResults.filter((ct) => {
+      const nameHit = (ct.name || "").toLowerCase().includes(q);
+      const phoneHit = digits.length >= 3 && (ct.phone || "").includes(digits);
+      if (!nameHit && !phoneHit) return false;
       const channelsWithConv = new Set(
         convs.filter((c) => c.contactId === ct.id).map((c) => c.channelId),
       );
@@ -1609,6 +1626,11 @@ function AtendimentoPage() {
               className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 ring-ring"
             />
           </div>
+          {search.trim().length >= 2 && channelFilter === "all" && (
+            <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+              Selecione o telefone do canal para a busca ser precisa. Sem o número, o nome aparece em todos os canais.
+            </p>
+          )}
 
           <div className="mt-3 flex gap-1">
             <button
@@ -1719,6 +1741,7 @@ function AtendimentoPage() {
               icon={Filter}
               value={channelFilter}
               onChange={setChannelFilter}
+              emphasize={search.trim().length >= 2 && channelFilter === "all"}
               options={[{ v: "all", l: "Todos canais" }, ...tenantChannels.map((c) => ({ v: c.id, l: channelFilterLabel(c) }))]}
             />
             <FilterSelect
@@ -2162,12 +2185,13 @@ function StatusChip({ status }: { status: ConversationStatus }) {
 }
 
 function FilterSelect({
-  icon: Icon, value, onChange, options,
+  icon: Icon, value, onChange, options, emphasize,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   value: string;
   onChange: (v: string) => void;
   options: { v: string; l: string }[];
+  emphasize?: boolean;
 }) {
   return (
     <div className="relative">
@@ -2175,7 +2199,9 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none rounded-md border border-input bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-2 ring-ring"
+        className={`w-full appearance-none rounded-md border bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-2 ring-ring ${
+          emphasize ? "border-amber-400 ring-2 ring-amber-300" : "border-input"
+        }`}
       >
         {options.map((o) => (<option key={o.v} value={o.v}>{o.l}</option>))}
       </select>
