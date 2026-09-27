@@ -2135,6 +2135,38 @@ function ContactResultRow({
   onStart: (channelId: string) => void;
 }) {
   const busy = startingContactId === contact.id;
+  const sole = startChannels.length === 1 ? startChannels[0] : null;
+  const opening = busy && !!sole && startingChannelId === sole.id;
+  const initials = (contact.name || contact.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("");
+
+  if (sole) {
+    return (
+      <li>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onStart(sole.id)}
+          className="flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-muted/60 disabled:opacity-60"
+        >
+          <div
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+            style={{ backgroundColor: contact.avatarColor }}
+          >
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{contact.name || contact.phone}</div>
+            {contact.phone && <div className="truncate text-xs text-muted-foreground">{phoneLabel(contact.phone)}</div>}
+            <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-whatsapp">
+              <UserPlus className="h-3 w-3" />
+              {opening ? "Abrindo…" : "Novo atendimento"}
+            </div>
+          </div>
+        </button>
+      </li>
+    );
+  }
+
   return (
     <li>
       <div className="flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left">
@@ -2142,7 +2174,7 @@ function ContactResultRow({
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
           style={{ backgroundColor: contact.avatarColor }}
         >
-          {(contact.name || contact.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("")}
+          {initials}
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{contact.name || contact.phone}</div>
@@ -2162,11 +2194,7 @@ function ContactResultRow({
                     className="inline-flex items-center gap-1 rounded bg-whatsapp/10 px-1.5 py-0.5 text-[10px] font-medium text-whatsapp transition-colors hover:bg-whatsapp/20 disabled:opacity-60"
                   >
                     <UserPlus className="h-3 w-3" />
-                    {thisStarting
-                      ? "Abrindo…"
-                      : startChannels.length === 1
-                        ? "Novo atendimento"
-                        : `Novo · ${ch.provider === "META" ? "Meta" : "Evolution"}`}
+                    {thisStarting ? "Abrindo…" : `Novo · ${ch.provider === "META" ? "Meta" : "Evolution"}`}
                   </button>
                 );
               })
