@@ -8,7 +8,7 @@ export const Route = createFileRoute("/_app/fluxos")({
   head: () => ({ meta: [{ title: "Fluxos — NexaBoot" }] }),
 });
 
-type Channel = { id: string; name: string; channelType: string };
+type Channel = { id: string; name: string; channelType: string; status: string };
 type Template = { name: string; language: string; bodyText: string | null; buttons: string[] };
 type FlowCard = {
   id: string;
@@ -49,6 +49,7 @@ function FluxosPage() {
   const [flows, setFlows] = useState<FlowCard[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [editing, setEditing] = useState<FlowCard | null>(null);
+  const [phase, setPhase] = useState<"draw" | "assign">("draw");
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -69,8 +70,11 @@ function FluxosPage() {
       <FlowEditor
         flow={editing}
         channels={channels}
+        phase={phase}
+        onPhase={setPhase}
         onClose={() => {
           setEditing(null);
+          setPhase("draw");
           void reload();
         }}
       />
@@ -78,53 +82,86 @@ function FluxosPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Fluxos</h1>
-          <p className="text-sm text-muted-foreground">
-            Atendimento responde quem chama o número. Vendas dispara a mensagem, e na Meta usa uma campanha aprovada.
-          </p>
+    <div className="min-h-full bg-[radial-gradient(ellipse_at_top,_rgba(37,211,102,0.16),_transparent_55%)]">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-whatsapp">Atendimento automático</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Fluxos</h1>
+            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+              Desenhe a conversa primeiro. Os números ativos da empresa entram só no passo seguinte.
+            </p>
+          </div>
+          <button
+            className="rounded-full bg-whatsapp px-5 py-2.5 text-sm font-semibold text-whatsapp-foreground shadow-lg shadow-whatsapp/30"
+            onClick={() => {
+              setPhase("draw");
+              setEditing({
+                id: "",
+                name: "",
+                kind: "attendance",
+                status: "draft",
+                definition: emptyDefinition(),
+                dispatch_channel_id: null,
+                meta_template_name: null,
+                meta_template_language: null,
+                channel_ids: [],
+              });
+            }}
+          >
+            Novo fluxo
+          </button>
         </div>
-        <button
-          className="rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground"
-          onClick={() =>
-            setEditing({
-              id: "",
-              name: "",
-              kind: "attendance",
-              status: "draft",
-              definition: emptyDefinition(),
-              dispatch_channel_id: null,
-              meta_template_name: null,
-              meta_template_language: null,
-              channel_ids: [],
-            })
-          }
-        >
-          Novo fluxo
-        </button>
-      </div>
-      {loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
-      {!loading && flows.length === 0 && (
-        <p className="rounded-md border border-border p-4 text-sm text-muted-foreground">Nenhum fluxo ainda.</p>
-      )}
-      <ul className="flex flex-col gap-2">
-        {flows.map((flow) => (
-          <li key={flow.id} className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-3">
-            <div>
-              <div className="font-medium">{flow.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {flow.kind === "attendance" ? "Atendimento" : "Vendas"} · {statusLabel(flow.status)} ·{" "}
-                {flow.kind === "attendance" ? `${flow.channel_ids.length} número(s)` : "disparo"}
+        {loading && <p className="text-sm text-muted-foreground">Carregando os fluxos…</p>}
+        {!loading && flows.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-whatsapp/40 bg-card/80 p-10 text-center">
+            <p className="text-lg font-medium">Nenhum fluxo ainda</p>
+            <p className="mt-1 text-sm text-muted-foreground">Comece pelo desenho. A escolha do telefone fica para depois.</p>
+          </div>
+        )}
+        <ul className="grid gap-3 md:grid-cols-2">
+          {flows.map((flow) => (
+            <li key={flow.id} className="rounded-3xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold">{flow.name}</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-medium">
+                    <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-emerald-800">
+                      {flow.kind === "attendance" ? "Atendimento" : "Vendas"}
+                    </span>
+                    <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">{statusLabel(flow.status)}</span>
+                    {flow.kind === "attendance" && (
+                      <span className="rounded-full bg-sky-500/15 px-2 py-1 text-sky-800">
+                        {flow.channel_ids.length} número(s)
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-            <button className="text-sm text-whatsapp" onClick={() => setEditing(flow)}>
-              Editar
-            </button>
-          </li>
-        ))}
-      </ul>
+              <div className="mt-4 flex gap-2">
+                <button
+                  className="rounded-full bg-muted px-3 py-1.5 text-xs font-medium"
+                  onClick={() => {
+                    setPhase("draw");
+                    setEditing(flow);
+                  }}
+                >
+                  Editar desenho
+                </button>
+                <button
+                  className="rounded-full bg-whatsapp/15 px-3 py-1.5 text-xs font-semibold text-whatsapp"
+                  onClick={() => {
+                    setPhase("assign");
+                    setEditing(flow);
+                  }}
+                >
+                  Atribuir números
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -135,7 +172,19 @@ function statusLabel(status: FlowStatus) {
   return "Rascunho";
 }
 
-function FlowEditor({ flow, channels, onClose }: { flow: FlowCard; channels: Channel[]; onClose: () => void }) {
+function FlowEditor({
+  flow,
+  channels,
+  phase,
+  onPhase,
+  onClose,
+}: {
+  flow: FlowCard;
+  channels: Channel[];
+  phase: "draw" | "assign";
+  onPhase: (phase: "draw" | "assign") => void;
+  onClose: () => void;
+}) {
   const [draft, setDraft] = useState(flow);
   const [selected, setSelected] = useState<string | null>(flow.definition.entryStepId);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -183,7 +232,8 @@ function FlowEditor({ flow, channels, onClose }: { flow: FlowCard; channels: Cha
     setSelected(step.id);
   }
 
-  async function save(takeChannels = false) {
+  async function save(takeChannels = false, override?: Partial<FlowCard>) {
+    const current = { ...draft, ...override };
     setSaving(true);
     try {
       const res = await fetch("/api/automation-flows", {
@@ -192,15 +242,15 @@ function FlowEditor({ flow, channels, onClose }: { flow: FlowCard; channels: Cha
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "save",
-          id: draft.id || undefined,
-          name: draft.name,
-          kind: draft.kind,
-          status: draft.status,
-          definition: draft.definition,
-          channelIds: draft.channel_ids,
-          dispatchChannelId: draft.dispatch_channel_id,
-          metaTemplateName: draft.meta_template_name,
-          metaTemplateLanguage: draft.meta_template_language,
+          id: current.id || undefined,
+          name: current.name,
+          kind: current.kind,
+          status: current.status,
+          definition: current.definition,
+          channelIds: current.channel_ids,
+          dispatchChannelId: current.dispatch_channel_id,
+          metaTemplateName: current.meta_template_name,
+          metaTemplateLanguage: current.meta_template_language,
           takeChannels,
         }),
       });
@@ -216,11 +266,19 @@ function FlowEditor({ flow, channels, onClose }: { flow: FlowCard; channels: Cha
         toast.error(body.message ?? "Não foi possível salvar o fluxo.");
         return;
       }
-      if (body.id) setDraft((currentDraft) => ({ ...currentDraft, id: body.id! }));
-      toast.success("Fluxo salvo.");
+      if (body.id) setDraft((currentDraft) => ({ ...currentDraft, ...override, id: body.id! }));
+      else if (override) setDraft((currentDraft) => ({ ...currentDraft, ...override }));
+      toast.success(phase === "assign" ? "Números atribuídos." : "Fluxo salvo.");
+      return true;
     } finally {
       setSaving(false);
     }
+    return false;
+  }
+
+  async function advance() {
+    const saved = await save();
+    if (saved) onPhase("assign");
   }
 
   async function searchContacts() {
@@ -251,107 +309,59 @@ function FlowEditor({ flow, channels, onClose }: { flow: FlowCard; channels: Cha
 
   const options = steps.map((step) => ({ v: step.id, l: `${STEP_LABEL[step.type]} · ${stepLabel(step)}` }));
 
+  if (phase === "assign") {
+    return (
+      <AssignPanel
+        draft={draft}
+        channels={channels}
+        templates={templates}
+        saving={saving}
+        onBack={() => onPhase("draw")}
+        onClose={onClose}
+        onChange={setDraft}
+        onSave={(override) => save(false, override)}
+        onMove={(override) => save(true, override)}
+      />
+    );
+  }
+
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-4 p-6 lg:grid-cols-[280px_1fr]">
-      <aside className="flex flex-col gap-3">
+    <div className="min-h-full bg-[radial-gradient(ellipse_at_top_left,_rgba(37,211,102,0.18),_transparent_42%)]">
+      <div className="mx-auto grid w-full max-w-6xl gap-5 p-6 lg:grid-cols-[300px_1fr]">
+      <aside className="flex flex-col gap-3 rounded-3xl border border-white/60 bg-card/90 p-4 shadow-sm">
         <button className="text-left text-sm text-muted-foreground" onClick={onClose}>
-          Voltar
+          Voltar para a lista
         </button>
+        <div className="flex gap-2 text-[11px] font-semibold">
+          <span className="rounded-full bg-whatsapp px-3 py-1 text-whatsapp-foreground">1 · Desenhar</span>
+          <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">2 · Atribuir</span>
+        </div>
         <input
           value={draft.name}
           onChange={(event) => setDraft({ ...draft, name: event.target.value })}
           placeholder="Nome do fluxo"
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+          className="rounded-2xl border border-input bg-background px-3 py-2.5 text-sm"
         />
         <select
           value={draft.kind}
           onChange={(event) => setDraft({ ...draft, kind: event.target.value as FlowKind })}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+          className="rounded-2xl border border-input bg-background px-3 py-2.5 text-sm"
         >
           <option value="attendance">Atendimento</option>
           <option value="sales">Vendas</option>
         </select>
-        <select
-          value={draft.status}
-          onChange={(event) => setDraft({ ...draft, status: event.target.value as FlowStatus })}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="draft">Rascunho</option>
-          <option value="active">Ativo</option>
-          <option value="paused">Pausado</option>
-        </select>
-        {draft.kind === "attendance" ? (
-          <div className="rounded-md border border-border p-3 text-sm">
-            <div className="mb-2 font-medium">Números deste atendimento</div>
-            {channels.map((channel) => (
-              <label key={channel.id} className="mb-1 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={draft.channel_ids.includes(channel.id)}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      channel_ids: event.target.checked
-                        ? [...draft.channel_ids, channel.id]
-                        : draft.channel_ids.filter((id) => id !== channel.id),
-                    })
-                  }
-                />
-                <span>{channel.name}</span>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-md border border-border p-3 text-sm">
-            <div className="mb-2 font-medium">Número do disparo</div>
-            <select
-              value={draft.dispatch_channel_id ?? ""}
-              onChange={(event) =>
-                setDraft({ ...draft, dispatch_channel_id: event.target.value || null, meta_template_name: null, meta_template_language: null })
-              }
-              className="w-full rounded-md border border-input bg-background px-2 py-1.5"
-            >
-              <option value="">Selecione</option>
-              {channels.map((channel) => (
-                <option key={channel.id} value={channel.id}>
-                  {channel.name}
-                </option>
-              ))}
-            </select>
-            {dispatchChannel?.channelType === "meta" && (
-              <label className="mt-2 block">
-                Mensagem aprovada pela Meta
-                <select
-                  value={draft.meta_template_name ? `${draft.meta_template_name}::${draft.meta_template_language}` : ""}
-                  onChange={(event) => {
-                    const [name, language] = event.target.value.split("::");
-                    setDraft({ ...draft, meta_template_name: name || null, meta_template_language: language || null });
-                  }}
-                  className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5"
-                >
-                  <option value="">Selecione</option>
-                  {templates.map((template) => (
-                    <option key={`${template.name}-${template.language}`} value={`${template.name}::${template.language}`}>
-                      {template.name} ({template.language})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <p className="mt-2 text-xs text-muted-foreground">
-              Na Meta, a primeira mensagem é a campanha aprovada. Os botões da etapa inicial precisam ter o mesmo texto dos botões dessa mensagem.
-            </p>
-          </div>
-        )}
-        <div className="flex flex-wrap gap-1">
+        <p className="rounded-2xl bg-emerald-500/10 px-3 py-2 text-xs leading-relaxed text-emerald-900">
+          Desenhe a conversa agora. O telefone entra no botão Avançar, só com os números ativos desta empresa.
+        </p>
+        <div className="flex flex-wrap gap-1.5">
           {(Object.keys(STEP_LABEL) as FlowStep["type"][]).map((type) => (
-            <button key={type} className="rounded bg-muted px-2 py-1 text-[11px]" onClick={() => addStep(type)}>
+            <button key={type} className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium hover:bg-whatsapp/15" onClick={() => addStep(type)}>
               + {STEP_LABEL[type]}
             </button>
           ))}
         </div>
-        <button disabled={saving} className="rounded-md bg-whatsapp px-3 py-2 text-sm text-whatsapp-foreground" onClick={() => void save()}>
-          {saving ? "Salvando…" : "Salvar"}
+        <button disabled={saving} className="rounded-full bg-whatsapp px-3 py-2.5 text-sm font-semibold text-whatsapp-foreground shadow-md shadow-whatsapp/25" onClick={() => void advance()}>
+          {saving ? "Salvando…" : "Avançar"}
         </button>
       </aside>
       <section className="flex flex-col gap-3">
@@ -469,6 +479,147 @@ function FlowEditor({ flow, channels, onClose }: { flow: FlowCard; channels: Cha
           </div>
         )}
       </section>
+      </div>
+    </div>
+  );
+}
+
+function AssignPanel({
+  draft,
+  channels,
+  templates,
+  saving,
+  onBack,
+  onClose,
+  onChange,
+  onSave,
+  onMove,
+}: {
+  draft: FlowCard;
+  channels: Channel[];
+  templates: Template[];
+  saving: boolean;
+  onBack: () => void;
+  onClose: () => void;
+  onChange: (flow: FlowCard) => void;
+  onSave: (override?: Partial<FlowCard>) => Promise<boolean>;
+  onMove: (override?: Partial<FlowCard>) => Promise<boolean>;
+}) {
+  const selectedMeta = channels.find((channel) => channel.id === draft.dispatch_channel_id);
+  function toggleAttendance(channelId: string) {
+    const selected = draft.channel_ids.includes(channelId);
+    onChange({
+      ...draft,
+      channel_ids: selected ? draft.channel_ids.filter((id) => id !== channelId) : [...draft.channel_ids, channelId],
+    });
+  }
+  async function commit(status: FlowStatus, take = false) {
+    const override: Partial<FlowCard> = { status };
+    const saved = take ? await onMove(override) : await onSave(override);
+    if (saved) onClose();
+  }
+  return (
+    <div className="min-h-full bg-[radial-gradient(ellipse_at_top,_rgba(14,165,233,0.16),_transparent_50%)]">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-6">
+        <button className="w-fit text-sm text-muted-foreground" onClick={onBack}>Voltar ao desenho</button>
+        <div className="flex gap-2 text-[11px] font-semibold">
+          <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">1 · Desenhar</span>
+          <span className="rounded-full bg-sky-500 px-3 py-1 text-white">2 · Atribuir</span>
+        </div>
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">{draft.name || "Fluxo"}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Só aparecem os números ativos desta empresa. Meta ativo e Evolution conectado.
+          </p>
+        </div>
+        {channels.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-sky-400/50 bg-card p-8 text-sm text-muted-foreground">
+            Nenhum número ativo nesta empresa. Conecte um canal em Canais WhatsApp e volte aqui.
+          </div>
+        )}
+        {draft.kind === "attendance" ? (
+          <div className="grid gap-3">
+            {channels.map((channel) => {
+              const selected = draft.channel_ids.includes(channel.id);
+              return (
+                <button
+                  key={channel.id}
+                  type="button"
+                  onClick={() => toggleAttendance(channel.id)}
+                  className={`rounded-3xl border p-4 text-left shadow-sm transition ${
+                    selected ? "border-whatsapp bg-whatsapp/10" : "border-border bg-card"
+                  }`}
+                >
+                  <div className="font-semibold">{channel.name}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {channel.channelType === "meta" ? "Meta · Ativo" : "Evolution · Conectado"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {channels.map((channel) => {
+              const selected = draft.dispatch_channel_id === channel.id;
+              return (
+                <button
+                  key={channel.id}
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      ...draft,
+                      dispatch_channel_id: channel.id,
+                      meta_template_name: null,
+                      meta_template_language: null,
+                    })
+                  }
+                  className={`rounded-3xl border p-4 text-left shadow-sm ${
+                    selected ? "border-sky-500 bg-sky-500/10" : "border-border bg-card"
+                  }`}
+                >
+                  <div className="font-semibold">{channel.name}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {channel.channelType === "meta" ? "Meta · escolha a mensagem aprovada" : "Evolution · usa a primeira etapa do fluxo"}
+                  </div>
+                </button>
+              );
+            })}
+            {selectedMeta?.channelType === "meta" && (
+              <label className="rounded-3xl border border-border bg-card p-4 text-sm">
+                Mensagem aprovada pela Meta
+                <select
+                  value={draft.meta_template_name ? `${draft.meta_template_name}::${draft.meta_template_language}` : ""}
+                  onChange={(event) => {
+                    const [name, language] = event.target.value.split("::");
+                    onChange({ ...draft, meta_template_name: name || null, meta_template_language: language || null });
+                  }}
+                  className="mt-2 w-full rounded-2xl border border-input bg-background px-3 py-2"
+                >
+                  <option value="">Selecione</option>
+                  {templates.map((template) => (
+                    <option key={`${template.name}-${template.language}`} value={`${template.name}::${template.language}`}>
+                      {template.name} ({template.language})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button
+            disabled={saving}
+            className="rounded-full bg-whatsapp px-5 py-2.5 text-sm font-semibold text-whatsapp-foreground"
+            onClick={() => void commit("active")}
+          >
+            {saving ? "Salvando…" : "Ativar nestes números"}
+          </button>
+          <button disabled={saving} className="rounded-full bg-muted px-5 py-2.5 text-sm" onClick={() => void commit("draft")}>
+            Guardar sem ativar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -161,16 +161,23 @@ export async function listAutomationFlows(companyId: string): Promise<FlowRow[]>
 }
 
 export async function listCompanyChannels(companyId: string) {
-  const rows = await db()<{ id: string; name: string | null; channel_type: string | null }[]>`
-    SELECT id, name, channel_type
+  const rows = await db()<{ id: string; name: string | null; channel_type: string | null; status: string | null }[]>`
+    SELECT id, name, channel_type, status
     FROM public.whatsapp_channels
     WHERE company_id = ${companyId}::uuid
+      AND deleted_at IS NULL
+      AND COALESCE(active, true) = true
+      AND (
+        (lower(COALESCE(channel_type, '')) = 'meta' AND upper(COALESCE(status, '')) = 'ACTIVE')
+        OR (lower(COALESCE(channel_type, '')) <> 'meta' AND lower(COALESCE(status, '')) = 'connected')
+      )
     ORDER BY name NULLS LAST
   `;
   return rows.map((row) => ({
     id: row.id,
     name: row.name || "Canal",
     channelType: String(row.channel_type ?? "").toLowerCase(),
+    status: String(row.status ?? ""),
   }));
 }
 
