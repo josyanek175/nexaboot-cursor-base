@@ -346,10 +346,20 @@ async function loadContactVars(contactId: string, collected: Collected): Promise
   };
 }
 
-async function sendText(companyId: string, conversationId: string, text: string) {
+async function sendText(companyId: string, conversationId: string, text: string): Promise<boolean> {
   const trimmed = text.trim();
-  if (!trimmed) return;
-  await sendConversationText({ companyId, conversationId, text: trimmed, sentByName: "Fluxo" });
+  if (!trimmed) return false;
+  const result = await sendConversationText({ companyId, conversationId, text: trimmed, sentByName: "Fluxo" });
+  if (!result.ok) {
+    console.error("[AUTOMATION_SEND_FAIL]", {
+      companyId,
+      conversationId,
+      error: result.error,
+      message: result.message ?? null,
+    });
+    return false;
+  }
+  return true;
 }
 
 async function presentStep(params: {
@@ -372,15 +382,10 @@ async function presentStep(params: {
     }
     const vars = await loadContactVars(params.contactId, collected);
     const text = promptForStep(current, vars);
-    if (current.type === "transfer") {
-      await sendText(params.companyId, params.conversationId, text);
-      return { stepId: current.id, status: "transferred", collected };
-    }
-    if (current.type === "end") {
-      await sendText(params.companyId, params.conversationId, text);
-      return { stepId: current.id, status: "ended", collected };
-    }
-    await sendText(params.companyId, params.conversationId, text);
+    const sent = await sendText(params.companyId, params.conversationId, text);
+    if (!sent) return { stepId: current.id, status: "ended", collected };
+    if (current.type === "transfer") return { stepId: current.id, status: "transferred", collected };
+    if (current.type === "end") return { stepId: current.id, status: "ended", collected };
     return { stepId: current.id, status: "waiting", collected };
   }
   return { stepId: null, status: "ended", collected };
@@ -432,8 +437,17 @@ export async function onAutomationInbound(params: {
     const session = sessions[0];
     if (session?.status === "transferred") return;
     if (session?.status === "waiting") {
-      await answerWaitingSession(session, text);
-      return;
+      const alreadySent = await db()<{ id: string }[]>`
+        SELECT id FROM public.messages
+        WHERE conversation_id = ${params.conversationId}::uuid
+          AND direction = 'out'
+          AND created_at >= ${session.updated_at}::timestamptz - interval '1 minute'
+        LIMIT 1
+      `;
+      if (alreadySent[0]) {
+        await answerWaitingSession(session, text);
+        return;
+      }
     }
     const flows = await db()<{ id: string; definition: unknown }[]>`
       SELECT f.id, f.definition
@@ -446,8 +460,15 @@ export async function onAutomationInbound(params: {
       LIMIT 1
     `;
     const flow = flows[0];
-    if (!flow) return;
+    if (!flow) {
+      console.error("[AUTOMATION_NO_FLOW]", { companyId: params.companyId, channelId: params.channelId });
+      return;
+    }
     const definition = asDefinition(flow.definition);
+    if (!definition.entryStepId) {
+      console.error("[AUTOMATION_NO_ENTRY]", { flowId: flow.id, channelId: params.channelId });
+      return;
+    }
     const created: SessionRow = {
       conversation_id: params.conversationId,
       company_id: params.companyId,

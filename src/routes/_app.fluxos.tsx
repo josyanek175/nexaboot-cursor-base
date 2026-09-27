@@ -68,6 +68,7 @@ function FluxosPage() {
   if (editing) {
     return (
       <FlowEditor
+        key={editing.id || "novo"}
         flow={editing}
         channels={channels}
         phase={phase}
@@ -186,14 +187,19 @@ function FlowEditor({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(flow);
-  const [selected, setSelected] = useState<string | null>(flow.definition.entryStepId);
+  const [selected, setSelected] = useState<string | null>(flow.definition?.entryStepId ?? flow.definition?.steps?.[0]?.id ?? null);
+
+  useEffect(() => {
+    setDraft(flow);
+    setSelected(flow.definition?.entryStepId ?? flow.definition?.steps?.[0]?.id ?? null);
+  }, [flow]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [saving, setSaving] = useState(false);
   const [contactQuery, setContactQuery] = useState("");
   const [contacts, setContacts] = useState<{ id: string; name: string; phone: string }[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
 
-  const steps = draft.definition.steps;
+  const steps = draft.definition?.steps ?? [];
   const current = steps.find((step) => step.id === selected) ?? null;
   const dispatchChannel = channels.find((channel) => channel.id === draft.dispatch_channel_id);
 
@@ -365,18 +371,26 @@ function FlowEditor({
         </button>
       </aside>
       <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">{draft.id ? `Editando ${draft.name || "fluxo"}` : "Novo fluxo"}</h2>
+          <p className="text-sm text-muted-foreground">
+            {steps.length > 0
+              ? `${steps.length} etapa(s) salvas. Toque em uma para alterar o texto.`
+              : "Este fluxo ainda não tem etapas. Adicione a primeira mensagem ao lado."}
+          </p>
+        </div>
         <ul className="flex flex-col gap-2">
-          {steps.map((step) => (
+          {steps.map((step, index) => (
             <li key={step.id}>
               <button
-                className={`w-full rounded-md border px-3 py-2 text-left text-sm ${
-                  step.id === selected ? "border-whatsapp bg-whatsapp/10" : "border-border"
+                className={`w-full rounded-2xl border px-4 py-3 text-left text-sm shadow-sm ${
+                  step.id === selected ? "border-whatsapp bg-whatsapp/10" : "border-border bg-card"
                 }`}
                 onClick={() => setSelected(step.id)}
               >
-                <span className="font-medium">{STEP_LABEL[step.type]}</span>
+                <span className="font-medium">{index + 1}. {STEP_LABEL[step.type]}</span>
                 {draft.definition.entryStepId === step.id && <span className="ml-2 text-[10px] text-whatsapp">inicial</span>}
-                <div className="truncate text-xs text-muted-foreground">{stepLabel(step)}</div>
+                <div className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{stepLabel(step) || "Sem texto"}</div>
               </button>
             </li>
           ))}
