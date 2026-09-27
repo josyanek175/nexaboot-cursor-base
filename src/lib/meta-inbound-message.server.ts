@@ -24,6 +24,7 @@ import {
 } from "@/lib/meta-inbound-parse";
 import { downloadMetaMedia } from "@/lib/meta-media-download.server";
 import { loadMetaChannelByPhoneNumberId } from "@/lib/whatsapp/whatsapp-provider-router.server";
+import { onAutomationInbound } from "@/lib/automation-flow.server";
 
 export type { MetaInboundTextMessage, MetaInboundMediaMessage } from "@/lib/meta-inbound-parse";
 export {
@@ -235,7 +236,6 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
   }
 
   try {
-    const { onAutomationInbound } = await import("@/lib/automation-flow.server");
     await onAutomationInbound({
       companyId: channel.companyId,
       channelId: channel.id,

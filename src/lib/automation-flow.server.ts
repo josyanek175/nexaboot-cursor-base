@@ -490,14 +490,31 @@ export async function onAutomationInbound(params: {
       stepId: definition.entryStepId,
       collected: {},
     });
-    if (presented.status === "ended" && !greetingSent) {
-      console.error("[AUTOMATION_GREETING_NOT_SENT]", {
-        conversationId: params.conversationId,
-        channelId: params.channelId,
-        flowId: flow.id,
-      });
-    }
     await saveSession(created, presented);
+    if (!greetingSent) {
+      const sentNow = await db()<{ id: string }[]>`
+        SELECT id FROM public.messages
+        WHERE conversation_id = ${params.conversationId}::uuid
+          AND direction = 'out'
+          AND sent_by_name = 'Fluxo'
+        LIMIT 1
+      `;
+      if (!sentNow[0]) {
+        const note = "A saudação automática não foi enviada. Confira se o fluxo de atendimento está ativo neste ramal.";
+        await db()`
+          INSERT INTO public.messages (
+            conversation_id, direction, message_type, message_text, from_me, status
+          ) VALUES (
+            ${params.conversationId}::uuid, 'system', 'system', ${note}, false, 'received'
+          )
+        `;
+        console.error("[AUTOMATION_GREETING_NOT_SENT]", {
+          conversationId: params.conversationId,
+          channelId: params.channelId,
+          flowId: flow.id,
+        });
+      }
+    }
   } catch (error) {
     console.error("[AUTOMATION_INBOUND]", error instanceof Error ? error.message : error);
   }
