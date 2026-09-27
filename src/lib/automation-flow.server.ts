@@ -435,20 +435,6 @@ export async function onAutomationInbound(params: {
       LIMIT 1
     `;
     const session = sessions[0];
-    if (session?.status === "transferred") return;
-    if (session?.status === "waiting") {
-      const alreadySent = await db()<{ id: string }[]>`
-        SELECT id FROM public.messages
-        WHERE conversation_id = ${params.conversationId}::uuid
-          AND direction = 'out'
-          AND created_at >= ${session.updated_at}::timestamptz - interval '1 minute'
-        LIMIT 1
-      `;
-      if (alreadySent[0]) {
-        await answerWaitingSession(session, text);
-        return;
-      }
-    }
     const flows = await db()<{ id: string; definition: unknown }[]>`
       SELECT f.id, f.definition
       FROM public.automation_flows f
@@ -469,6 +455,22 @@ export async function onAutomationInbound(params: {
       console.error("[AUTOMATION_NO_ENTRY]", { flowId: flow.id, channelId: params.channelId });
       return;
     }
+
+    const greeting = await db()<{ id: string }[]>`
+      SELECT id FROM public.messages
+      WHERE conversation_id = ${params.conversationId}::uuid
+        AND direction = 'out'
+        AND sent_by_name = 'Fluxo'
+      LIMIT 1
+    `;
+    const greetingSent = !!greeting[0];
+
+    if (greetingSent && session?.status === "transferred") return;
+    if (greetingSent && session?.status === "waiting" && session.flow_id === flow.id) {
+      await answerWaitingSession(session, text);
+      return;
+    }
+
     const created: SessionRow = {
       conversation_id: params.conversationId,
       company_id: params.companyId,
@@ -488,6 +490,13 @@ export async function onAutomationInbound(params: {
       stepId: definition.entryStepId,
       collected: {},
     });
+    if (presented.status === "ended" && !greetingSent) {
+      console.error("[AUTOMATION_GREETING_NOT_SENT]", {
+        conversationId: params.conversationId,
+        channelId: params.channelId,
+        flowId: flow.id,
+      });
+    }
     await saveSession(created, presented);
   } catch (error) {
     console.error("[AUTOMATION_INBOUND]", error instanceof Error ? error.message : error);
