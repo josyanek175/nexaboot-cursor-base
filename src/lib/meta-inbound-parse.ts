@@ -371,3 +371,82 @@ export function metaInboundMediaPreviewLabel(mediaType: MetaInboundMediaType): s
       return "[mídia]";
   }
 }
+
+export type MetaSmbEchoMessage = {
+  phoneNumberId: string;
+  externalMessageId: string;
+  customerPhone: string;
+  businessPhone: string | null;
+  messageType: string;
+  messageText: string | null;
+  mediaId: string | null;
+  mimeHint: string | null;
+  filename: string | null;
+  rawPayload: Record<string, unknown>;
+};
+
+/** Mensagens enviadas pelo WhatsApp Business App. `to` é o cliente. Não reenvia. */
+export function extractMetaSmbMessageEchoes(payload: unknown): MetaSmbEchoMessage[] {
+  const out: MetaSmbEchoMessage[] = [];
+  const root = unwrapMetaWebhookBody(payload);
+  if (!root) return out;
+
+  for (const entry of asArray(root.entry)) {
+    const entryRec = asRecord(entry);
+    if (!entryRec) continue;
+
+    for (const change of asArray(entryRec.changes)) {
+      const changeRec = asRecord(change);
+      if (!changeRec) continue;
+      if (readString(changeRec.field) !== "smb_message_echoes") continue;
+
+      const value = asRecord(changeRec.value);
+      if (!value) continue;
+
+      const metadata = asRecord(value.metadata);
+      const phoneNumberId = readString(metadata?.phone_number_id);
+      if (!phoneNumberId) continue;
+
+      for (const echo of asArray(value.message_echoes)) {
+        const echoRec = asRecord(echo);
+        if (!echoRec) continue;
+
+        const externalMessageId = readString(echoRec.id);
+        const toRaw = readString(echoRec.to);
+        const customerPhone = toRaw ? normalizePhoneE164(toRaw) : "";
+        if (!externalMessageId || !customerPhone || !isValidE164Digits(customerPhone)) continue;
+
+        const messageType = readString(echoRec.type) ?? "unknown";
+        const textResolution = resolveMetaInboundMessageText(echoRec);
+        const mediaNode = isMetaInboundMediaType(messageType)
+          ? readMediaNode(echoRec, messageType)
+          : null;
+        const caption = readString(mediaNode?.caption);
+        const messageText =
+          textResolution?.text ??
+          caption ??
+          (mediaNode ? metaInboundMediaPreviewLabel(messageType) : null);
+        if (!messageText && !mediaNode) continue;
+
+        out.push({
+          phoneNumberId,
+          externalMessageId,
+          customerPhone,
+          businessPhone: readString(echoRec.from),
+          messageType,
+          messageText,
+          mediaId: readString(mediaNode?.id),
+          mimeHint: readString(mediaNode?.mime_type),
+          filename: messageType === "document" ? readString(mediaNode?.filename) : null,
+          rawPayload: sanitizeMetaWebhookPayload({
+            field: "smb_message_echoes",
+            metadata,
+            message: echoRec,
+          }) as Record<string, unknown>,
+        });
+      }
+    }
+  }
+
+  return out;
+}

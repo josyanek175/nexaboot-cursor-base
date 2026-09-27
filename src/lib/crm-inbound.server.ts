@@ -200,3 +200,44 @@ export async function bumpConversationAfterInboundMessage(params: {
     WHERE id = ${conversationId}::uuid
   `;
 }
+
+/** Echo do WhatsApp Business App. Grava como enviada, sem reenviar ao cliente. */
+export async function insertWhatsappBusinessAppEcho(params: {
+  conversationId: string;
+  externalMessageId: string;
+  messageType: string;
+  messageText: string | null;
+  rawPayload: unknown;
+}): Promise<string | null> {
+  const { conversationId, externalMessageId, messageType, messageText, rawPayload } = params;
+  const s = sql();
+  await s`ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS message_source TEXT`;
+  const inserted = await s<{ id: string }[]>`
+    INSERT INTO public.messages (
+      conversation_id, external_id, external_message_id, direction,
+      message_type, message_text, from_me, raw_payload, status, message_source
+    ) VALUES (
+      ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'out',
+      ${messageType}, ${messageText}, true, ${rawPayload}::jsonb, 'received',
+      'whatsapp_business_app'
+    )
+    ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
+    DO NOTHING
+    RETURNING id
+  `;
+  return inserted[0]?.id ?? null;
+}
+
+export async function bumpConversationAfterBusinessAppEcho(params: {
+  conversationId: string;
+  lastMessageText: string;
+}): Promise<void> {
+  const s = sql();
+  await s`
+    UPDATE public.conversations
+    SET last_message = ${params.lastMessageText},
+        last_message_at = now(),
+        updated_at = now()
+    WHERE id = ${params.conversationId}::uuid
+  `;
+}

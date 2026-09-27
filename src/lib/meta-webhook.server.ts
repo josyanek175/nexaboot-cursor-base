@@ -15,7 +15,7 @@ import {
   diagnoseMetaChannelByPhoneNumberId,
   loadMetaChannelByPhoneNumberId,
 } from "@/lib/whatsapp/whatsapp-provider-router.server";
-import { persistMetaInboundMessages } from "@/lib/meta-inbound-message.server";
+import { persistMetaInboundMessages, persistMetaSmbMessageEchoes } from "@/lib/meta-inbound-message.server";
 import { unwrapMetaWebhookBody } from "@/lib/meta-inbound-parse";
 
 export type {
@@ -140,7 +140,7 @@ export function handleMetaWebhookGET(request: Request): Response {
   return new Response("Forbidden", { status: 403 });
 }
 
-const KNOWN_META_WEBHOOK_FIELDS = new Set(["messages", "message_template_status_update"]);
+const KNOWN_META_WEBHOOK_FIELDS = new Set(["messages", "message_template_status_update", "smb_message_echoes"]);
 
 function logMetaWebhookChanges(payload: unknown): void {
   for (const change of extractMetaWebhookChanges(payload)) {
@@ -392,6 +392,13 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
           processingStatus = "skipped";
         }
         console.log("[META_INBOUND_PERSIST]", persistResult);
+        const echoResult = await persistMetaSmbMessageEchoes(webhookBody);
+        if (echoResult.saved > 0) {
+          processingStatus = "persisted";
+          console.log("[META_SMB_ECHO_PERSISTED]", echoResult);
+        } else if (echoResult.errors > 0) {
+          console.error("[META_SMB_ECHO_FAIL]", echoResult);
+        }
       } catch (e) {
         persistError = e instanceof Error ? e.message : String(e);
         processingStatus = "persist_error";

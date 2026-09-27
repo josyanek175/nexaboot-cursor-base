@@ -3,20 +3,24 @@
 
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
 import {
+  bumpConversationAfterBusinessAppEcho,
   bumpConversationAfterInboundMessage,
   insertInboundMediaMessage,
   insertInboundTextMessage,
+  insertWhatsappBusinessAppEcho,
   upsertInboundContact,
   upsertInboundConversation,
 } from "@/lib/crm-inbound.server";
 import {
   extractMetaInboundMediaMessages,
   extractMetaInboundTextMessages,
+  extractMetaSmbMessageEchoes,
   metaInboundMediaPreviewLabel,
   resolveMetaInboundMessageText,
   unwrapMetaWebhookBody,
   type MetaInboundMediaMessage,
   type MetaInboundTextMessage,
+  type MetaSmbEchoMessage,
 } from "@/lib/meta-inbound-parse";
 import { downloadMetaMedia } from "@/lib/meta-media-download.server";
 import { loadMetaChannelByPhoneNumberId } from "@/lib/whatsapp/whatsapp-provider-router.server";
@@ -47,6 +51,63 @@ function enrichRawPayload(
   extra: Record<string, unknown>,
 ): Record<string, unknown> {
   return { ...rawPayload, ...extra };
+}
+
+/** Grava o que saiu do WhatsApp do celular. Não envia de novo. */
+export async function persistMetaSmbMessageEchoes(payload: unknown): Promise<MetaInboundPersistResult> {
+  const echoes = extractMetaSmbMessageEchoes(payload);
+  const result: MetaInboundPersistResult = { processed: echoes.length, saved: 0, skipped: 0, errors: 0 };
+  for (const echo of echoes) {
+    try {
+      const saved = await persistOneMetaSmbEcho(echo);
+      if (saved) result.saved += 1;
+      else result.skipped += 1;
+    } catch (e) {
+      result.errors += 1;
+      console.error("[META_SMB_ECHO_FAIL]", {
+        externalMessageId: echo.externalMessageId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return result;
+}
+
+async function persistOneMetaSmbEcho(echo: MetaSmbEchoMessage): Promise<boolean> {
+  const channel = await loadMetaChannelByPhoneNumberId(echo.phoneNumberId);
+  if (!channel?.companyId?.trim() || channel.companyId === "null") return false;
+
+  const contactId = await upsertInboundContact({
+    companyId: channel.companyId,
+    phone: echo.customerPhone,
+    externalJid: echo.customerPhone,
+    fromMe: false,
+  });
+  const conversationId = await upsertInboundConversation({
+    companyId: channel.companyId,
+    channelId: channel.id,
+    contactId,
+  });
+  const messageId = await insertWhatsappBusinessAppEcho({
+    conversationId,
+    externalMessageId: echo.externalMessageId,
+    messageType: echo.messageType,
+    messageText: echo.messageText,
+    rawPayload: echo.rawPayload,
+  });
+  if (!messageId) return false;
+
+  await bumpConversationAfterBusinessAppEcho({
+    conversationId,
+    lastMessageText: echo.messageText ?? `[${echo.messageType}]`,
+  });
+  console.log("[META_SMB_ECHO_SAVED]", {
+    messageId,
+    conversationId,
+    externalMessageId: echo.externalMessageId,
+    resent: false,
+  });
+  return true;
 }
 
 /** Persiste mensagens inbound Meta em contacts/conversations/messages. */
