@@ -35,7 +35,10 @@ import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppContatosRouteImport } from './routes/_app.contatos'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
 import { Route as AppHorariosAcessoRouteImport } from './routes/_app.horarios-acesso'
+import { Route as AppFluxosRouteImport } from './routes/_app.fluxos'
+import { Route as AppLembretesRouteImport } from './routes/_app.lembretes'
 import { Route as ApiAccessHoursRouteImport } from './routes/api/access-hours'
+import { Route as ApiAutomationFlowsRouteImport } from './routes/api/automation-flows'
 import { Route as AppComunicacaoInternaRouteImport } from './routes/_app.comunicacao-interna'
 import { Route as AppCanaisRouteImport } from './routes/_app.canais'
 import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
@@ -250,9 +253,24 @@ const AppHorariosAcessoRoute = AppHorariosAcessoRouteImport.update({
   path: '/horarios-acesso',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFluxosRoute = AppFluxosRouteImport.update({
+  id: '/fluxos',
+  path: '/fluxos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLembretesRoute = AppLembretesRouteImport.update({
+  id: '/lembretes',
+  path: '/lembretes',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiAccessHoursRoute = ApiAccessHoursRouteImport.update({
   id: '/api/access-hours',
   path: '/api/access-hours',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAutomationFlowsRoute = ApiAutomationFlowsRouteImport.update({
+  id: '/api/automation-flows',
+  path: '/api/automation-flows',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppConfiguracoesRoute = AppConfiguracoesRouteImport.update({
@@ -752,6 +770,8 @@ export interface FileRoutesByFullPath {
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
   '/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/fluxos': typeof AppFluxosRoute
+  '/lembretes': typeof AppLembretesRoute
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
@@ -760,6 +780,7 @@ export interface FileRoutesByFullPath {
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -868,6 +889,8 @@ export interface FileRoutesByTo {
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
   '/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/fluxos': typeof AppFluxosRoute
+  '/lembretes': typeof AppLembretesRoute
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
@@ -876,6 +899,7 @@ export interface FileRoutesByTo {
   '/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -987,6 +1011,8 @@ export interface FileRoutesById {
   '/_app/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
   '/_app/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/_app/fluxos': typeof AppFluxosRoute
+  '/_app/lembretes': typeof AppLembretesRoute
   '/_app/contatos': typeof AppContatosRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/empresas': typeof AppEmpresasRoute
@@ -995,6 +1021,7 @@ export interface FileRoutesById {
   '/_app/usuarios': typeof AppUsuariosRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -1106,6 +1133,8 @@ export interface FileRouteTypes {
     | '/comunicacao-interna'
     | '/configuracoes'
     | '/horarios-acesso'
+    | '/fluxos'
+    | '/lembretes'
     | '/contatos'
     | '/dashboard'
     | '/empresas'
@@ -1114,6 +1143,7 @@ export interface FileRouteTypes {
     | '/usuarios'
     | '/api/attendants'
     | '/api/access-hours'
+    | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1222,6 +1252,8 @@ export interface FileRouteTypes {
     | '/comunicacao-interna'
     | '/configuracoes'
     | '/horarios-acesso'
+    | '/fluxos'
+    | '/lembretes'
     | '/contatos'
     | '/dashboard'
     | '/empresas'
@@ -1230,6 +1262,7 @@ export interface FileRouteTypes {
     | '/usuarios'
     | '/api/attendants'
     | '/api/access-hours'
+    | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1340,6 +1373,8 @@ export interface FileRouteTypes {
     | '/_app/comunicacao-interna'
     | '/_app/configuracoes'
     | '/_app/horarios-acesso'
+    | '/_app/fluxos'
+    | '/_app/lembretes'
     | '/_app/contatos'
     | '/_app/dashboard'
     | '/_app/empresas'
@@ -1348,6 +1383,7 @@ export interface FileRouteTypes {
     | '/_app/usuarios'
     | '/api/attendants'
     | '/api/access-hours'
+    | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1454,6 +1490,7 @@ export interface RootRouteChildren {
   TermosDeUsoRoute: typeof TermosDeUsoRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
   ApiAccessHoursRoute: typeof ApiAccessHoursRoute
+  ApiAutomationFlowsRoute: typeof ApiAutomationFlowsRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
@@ -1685,11 +1722,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHorariosAcessoRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/fluxos': {
+      id: '/_app/fluxos'
+      path: '/fluxos'
+      fullPath: '/fluxos'
+      preLoaderRoute: typeof AppFluxosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/lembretes': {
+      id: '/_app/lembretes'
+      path: '/lembretes'
+      fullPath: '/lembretes'
+      preLoaderRoute: typeof AppLembretesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/access-hours': {
       id: '/api/access-hours'
       path: '/api/access-hours'
       fullPath: '/api/access-hours'
       preLoaderRoute: typeof ApiAccessHoursRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/automation-flows': {
+      id: '/api/automation-flows'
+      path: '/api/automation-flows'
+      fullPath: '/api/automation-flows'
+      preLoaderRoute: typeof ApiAutomationFlowsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/comunicacao-interna': {
@@ -2344,6 +2402,8 @@ interface AppRouteChildren {
   AppComunicacaoInternaRoute: typeof AppComunicacaoInternaRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
   AppHorariosAcessoRoute: typeof AppHorariosAcessoRoute
+  AppFluxosRoute: typeof AppFluxosRoute
+  AppLembretesRoute: typeof AppLembretesRoute
   AppContatosRoute: typeof AppContatosRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppEmpresasRoute: typeof AppEmpresasRoute
@@ -2360,6 +2420,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppComunicacaoInternaRoute: AppComunicacaoInternaRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,
   AppHorariosAcessoRoute: AppHorariosAcessoRoute,
+  AppFluxosRoute: AppFluxosRoute,
+  AppLembretesRoute: AppLembretesRoute,
   AppContatosRoute: AppContatosRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppEmpresasRoute: AppEmpresasRoute,
@@ -2670,6 +2732,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermosDeUsoRoute: TermosDeUsoRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
   ApiAccessHoursRoute: ApiAccessHoursRoute,
+  ApiAutomationFlowsRoute: ApiAutomationFlowsRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
   ApiContactsRoute: ApiContactsRouteWithChildren,

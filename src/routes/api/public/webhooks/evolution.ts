@@ -389,6 +389,20 @@ async function handleMessagesUpsert(channel: ChannelRow, raw: Json, fullPayload:
 
   if (inserted[0]) {
     console.log("[EVOLUTION_MESSAGE_SAVED]", { messageId: inserted[0].id, conversationId, direction, type: parsed.type });
+    if (!fromMe && parsed.type === "text" && parsed.body) {
+      try {
+        const { onAutomationInbound } = await import("@/lib/automation-flow.server");
+        await onAutomationInbound({
+          companyId: channel.company_id,
+          channelId: channel.id,
+          conversationId,
+          contactId,
+          text: parsed.body,
+        });
+      } catch (error) {
+        console.error("[AUTOMATION_INBOUND_FAIL]", error instanceof Error ? error.message : String(error));
+      }
+    }
   }
 
   if (inserted[0] && mediaBase64) {

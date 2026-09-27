@@ -170,7 +170,20 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
     console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", {
       externalMessageId: msg.externalMessageId,
       error: e instanceof Error ? e.message : String(e),
+    }    );
+  }
+
+  try {
+    const { onAutomationInbound } = await import("@/lib/automation-flow.server");
+    await onAutomationInbound({
+      companyId: channel.companyId,
+      channelId: channel.id,
+      conversationId,
+      contactId,
+      text: msg.textBody,
     });
+  } catch (e) {
+    console.error("[AUTOMATION_INBOUND_FAIL]", e instanceof Error ? e.message : String(e));
   }
 
   if (resolution?.usedFallback) {

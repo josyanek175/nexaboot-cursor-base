@@ -275,6 +275,9 @@ export async function assumeConversation(
     );
   }
 
+  const { stopAutomationForConversation } = await import("@/lib/automation-flow.server");
+  await stopAutomationForConversation(conversationId, actor.companyId);
+
   return result as AssignmentResult;
 }
 

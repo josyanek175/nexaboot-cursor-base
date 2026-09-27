@@ -6,6 +6,8 @@ import {
   Building2,
   Smartphone,
   Workflow,
+  Waypoints,
+  Bell,
   MessageCircleMore,
   Contact2,
   Settings,
@@ -58,6 +60,8 @@ type NavItem = {
   adminOnly?: boolean;
   campaignsOnly?: boolean;
   accessHours?: boolean;
+  flows?: boolean;
+  reminders?: boolean;
 };
 
 type CompanyOption = { id: string; name: string };
@@ -79,6 +83,8 @@ const nav: NavItem[] = [
   { to: "/grupos-internos", label: "Grupos Internos", icon: UsersRound, adminOnly: true },
   { to: "/contatos", label: "Contatos", icon: Contact2 },
   { to: "/campanhas", label: "Campanhas", icon: Megaphone, campaignsOnly: true },
+  { to: "/fluxos", label: "Fluxos", icon: Waypoints, flows: true },
+  { to: "/lembretes", label: "Lembretes", icon: Bell, reminders: true },
   { to: "/empresas", label: "Empresas", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/canais", label: "Canais WhatsApp", icon: Smartphone },
@@ -243,6 +249,16 @@ function Shell() {
               if (!item.accessHours) return true;
               const role = String(user.role ?? "");
               return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"].includes(role);
+            })
+            .filter((item) => {
+              if (!item.flows) return true;
+              const role = String(user.role ?? "");
+              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"].includes(role);
+            })
+            .filter((item) => {
+              if (!item.reminders) return true;
+              const role = String(user.role ?? "");
+              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA", "GERENTE", "SUPERVISOR", "ATENDENTE", "ATENDENTE_GERAL"].includes(role);
             })
             .filter((item) => {
               if (!item.campaignsOnly) return true;
