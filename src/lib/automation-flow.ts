@@ -8,12 +8,14 @@ export type FlowButton = { id: string; label: string; next: string | null };
 export type ReminderOption = { id: string; label: string; days: number; next: string | null };
 
 export type FlowStep =
-  | { id: string; type: "buttons"; text: string; buttons: FlowButton[] }
-  | { id: string; type: "ask_text"; text: string; saveAs: SaveAs; next: string | null }
-  | { id: string; type: "condition"; match: string; yesNext: string | null; noNext: string | null }
-  | { id: string; type: "reminder"; text: string; options: ReminderOption[] }
-  | { id: string; type: "transfer"; text: string }
-  | { id: string; type: "end"; text: string };
+  | { id: string; name?: string; type: "message"; text: string; next: string | null }
+  | { id: string; name?: string; type: "buttons"; text: string; buttons: FlowButton[] }
+  | { id: string; name?: string; type: "ask_text"; text: string; saveAs: SaveAs; next: string | null }
+  | { id: string; name?: string; type: "condition"; match: string; yesNext: string | null; noNext: string | null }
+  | { id: string; name?: string; type: "reminder"; text: string; options: ReminderOption[] }
+  | { id: string; name?: string; type: "transfer"; text: string }
+  | { id: string; name?: string; type: "goto"; next: string | null }
+  | { id: string; name?: string; type: "end"; text: string };
 
 export type FlowDefinition = { entryStepId: string | null; steps: FlowStep[] };
 
@@ -25,7 +27,7 @@ export type FlowVars = {
   dia?: string;
 };
 
-const STEP_TYPES = new Set(["buttons", "ask_text", "condition", "reminder", "transfer", "end"]);
+const STEP_TYPES = new Set(["message", "buttons", "ask_text", "condition", "reminder", "transfer", "goto", "end"]);
 
 export function emptyDefinition(): FlowDefinition {
   return { entryStepId: null, steps: [] };
@@ -101,7 +103,7 @@ export function validateDefinition(raw: unknown): { ok: true; definition: FlowDe
 
 function referencedIds(step: FlowStep): string[] {
   if (step.type === "buttons") return step.buttons.map((button) => button.next).filter((id): id is string => !!id);
-  if (step.type === "ask_text") return step.next ? [step.next] : [];
+  if (step.type === "message" || step.type === "ask_text" || step.type === "goto") return step.next ? [step.next] : [];
   if (step.type === "condition") return [step.yesNext, step.noNext].filter((id): id is string => !!id);
   if (step.type === "reminder") return step.options.map((option) => option.next).filter((id): id is string => !!id);
   return [];
@@ -132,22 +134,33 @@ function parseStep(raw: unknown): { ok: true; step: FlowStep } | { ok: false; er
       if (options.some((option) => option.days < 1 || option.days > 365)) {
         return { ok: false, error: "O prazo do lembrete fica entre 1 e 365 dias." };
       }
-      return { ok: true, step: { id, type: "reminder", text, options } };
+      return { ok: true, step: withName({ id, type: "reminder", text, options }, row) };
     }
-    return { ok: true, step: { id, type: "buttons", text, buttons: choices as FlowButton[] } };
+    return { ok: true, step: withName({ id, type: "buttons", text, buttons: choices as FlowButton[] }, row) };
   }
 
+  if (type === "message") {
+    return { ok: true, step: withName({ id, type: "message", text, next: cleanRef(row.next) }, row) };
+  }
   if (type === "ask_text") {
     const saveAs = row.saveAs === "endereco" || row.saveAs === "dia" || row.saveAs === "observacao" ? row.saveAs : "";
-    return { ok: true, step: { id, type: "ask_text", text, saveAs, next: cleanRef(row.next) } };
+    return { ok: true, step: withName({ id, type: "ask_text", text, saveAs, next: cleanRef(row.next) }, row) };
   }
   if (type === "condition") {
     const match = cleanText(row.match).slice(0, 40);
     if (!match) return { ok: false, error: "A condição precisa da palavra que o cliente deve escrever." };
-    return { ok: true, step: { id, type: "condition", match, yesNext: cleanRef(row.yesNext), noNext: cleanRef(row.noNext) } };
+    return { ok: true, step: withName({ id, type: "condition", match, yesNext: cleanRef(row.yesNext), noNext: cleanRef(row.noNext) }, row) };
   }
-  if (type === "transfer") return { ok: true, step: { id, type: "transfer", text } };
-  return { ok: true, step: { id, type: "end", text } };
+  if (type === "goto") {
+    return { ok: true, step: withName({ id, type: "goto", next: cleanRef(row.next) }, row) };
+  }
+  if (type === "transfer") return { ok: true, step: withName({ id, type: "transfer", text }, row) };
+  return { ok: true, step: withName({ id, type: "end", text }, row) };
+}
+
+function withName<T extends FlowStep>(step: T, row: Record<string, unknown>): T {
+  const name = cleanText(row.name).slice(0, 80);
+  return name ? { ...step, name } : step;
 }
 
 function parseChoice(raw: unknown): FlowButton | null {
