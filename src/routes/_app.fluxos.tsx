@@ -2,7 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { AutomationFlowBuilder, type BuilderFlow } from "@/components/automation-flow/AutomationFlowBuilder";
 import type { FlowChannel } from "@/components/automation-flow/FlowSettings";
+import { useAuth } from "@/lib/auth";
 import { emptyDefinition, type FlowStatus } from "@/lib/automation-flow";
+
+const FLOW_ADMIN_ROLES = new Set(["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"]);
 
 export const Route = createFileRoute("/_app/fluxos")({
   component: FluxosPage,
@@ -10,6 +13,8 @@ export const Route = createFileRoute("/_app/fluxos")({
 });
 
 function FluxosPage() {
+  const { user } = useAuth();
+  const allowed = FLOW_ADMIN_ROLES.has(String(user?.role ?? ""));
   const [flows, setFlows] = useState<BuilderFlow[]>([]);
   const [channels, setChannels] = useState<FlowChannel[]>([]);
   const [editing, setEditing] = useState<BuilderFlow | null>(null);
@@ -35,6 +40,12 @@ function FluxosPage() {
   useEffect(() => {
     void reload().finally(() => setLoading(false));
   }, [reload]);
+
+  if (!allowed) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">Você não tem acesso a Fluxos.</div>
+    );
+  }
 
   if (editing) {
     return (

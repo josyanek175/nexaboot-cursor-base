@@ -258,7 +258,7 @@ function Shell() {
             .filter((item) => {
               if (!item.reminders) return true;
               const role = String(user.role ?? "");
-              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA", "GERENTE", "SUPERVISOR", "ATENDENTE", "ATENDENTE_GERAL"].includes(role);
+              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"].includes(role);
             })
             .filter((item) => {
               if (!item.campaignsOnly) return true;

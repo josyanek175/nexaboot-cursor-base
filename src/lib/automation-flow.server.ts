@@ -25,13 +25,6 @@ function db() {
 }
 
 const ADMIN_ROLES = new Set(["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"]);
-const REMINDER_ROLES = new Set([
-  ...ADMIN_ROLES,
-  "GERENTE",
-  "SUPERVISOR",
-  "ATENDENTE",
-  "ATENDENTE_GERAL",
-]);
 
 type Actor = { companyId: string; userId: string; role: string };
 
@@ -113,8 +106,7 @@ export async function requireAutomationActor(mode: "manage" | "reminders"): Prom
     SELECT role FROM public.users WHERE id = ${userId}::uuid LIMIT 1
   `;
   const role = String(users[0]?.role ?? "");
-  const allowed = mode === "manage" ? ADMIN_ROLES : REMINDER_ROLES;
-  if (!allowed.has(role)) return Response.json({ error: "forbidden" }, { status: 403 });
+  if (!ADMIN_ROLES.has(role)) return Response.json({ error: "forbidden" }, { status: 403 });
   return { companyId: company, userId, role };
 }
 

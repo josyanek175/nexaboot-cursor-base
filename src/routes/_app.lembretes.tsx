@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth";
+
+const FLOW_ADMIN_ROLES = new Set(["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"]);
 
 export const Route = createFileRoute("/_app/lembretes")({
   component: LembretesPage,
@@ -19,6 +22,8 @@ type Reminder = {
 };
 
 function LembretesPage() {
+  const { user } = useAuth();
+  const allowed = FLOW_ADMIN_ROLES.has(String(user?.role ?? ""));
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,6 +51,10 @@ function LembretesPage() {
     }
     toast.success(action === "resend" ? "Mensagem reenviada." : "Lembrete dispensado.");
     await reload();
+  }
+
+  if (!allowed) {
+    return <div className="p-6 text-sm text-muted-foreground">Você não tem acesso a Lembretes.</div>;
   }
 
   return (
