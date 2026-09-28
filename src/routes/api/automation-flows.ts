@@ -11,6 +11,7 @@ import {
   resendAutomationReminder,
   saveAutomationFlow,
 } from "@/lib/automation-flow.server";
+import { FlowDefinitionError } from "@/lib/automation-flow";
 
 export const Route = createFileRoute("/api/automation-flows")({
   server: {
@@ -31,7 +32,24 @@ export const Route = createFileRoute("/api/automation-flows")({
         if (view === "reminders") {
           return Response.json({ reminders: await listAutomationReminders(actor.companyId) });
         }
-        return Response.json({ flows: await listAutomationFlows(actor.companyId) });
+        try {
+          return Response.json({ flows: await listAutomationFlows(actor.companyId) });
+        } catch (error) {
+          if (error instanceof FlowDefinitionError) {
+            return Response.json(
+              {
+                error: "invalid_definition",
+                message: error.message,
+                flowId: error.flowId,
+                flowName: error.flowName,
+                receivedType: error.receivedType,
+                stepTypes: error.stepTypes,
+              },
+              { status: 500 },
+            );
+          }
+          throw error;
+        }
       },
       POST: async ({ request }) => {
         const body = await request.json().catch(() => null);

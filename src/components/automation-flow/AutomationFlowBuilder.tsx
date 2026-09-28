@@ -124,7 +124,14 @@ export function AutomationFlowBuilder({
           takeChannels,
         }),
       });
-      const body = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        id?: string;
+        definition?: FlowDefinition;
+        name?: string;
+        kind?: FlowKind;
+        status?: FlowStatus;
+      };
       if (res.status === 409) {
         if (window.confirm(body.message ?? "Este ramal já está em outro fluxo. Mover?")) {
           setSaving(false);
@@ -136,7 +143,14 @@ export function AutomationFlowBuilder({
         toast.error(body.message ?? "Não foi possível salvar.");
         return false;
       }
-      setDraft((current) => ({ ...current, id: body.id ?? current.id, status }));
+      setDraft((current) => ({
+        ...current,
+        id: body.id ?? current.id,
+        name: body.name ?? current.name,
+        kind: body.kind ?? current.kind,
+        status: body.status ?? status,
+        definition: body.definition ?? current.definition,
+      }));
       toast.success(status === "active" ? "Fluxo publicado." : "Fluxo salvo.");
       return true;
     } finally {

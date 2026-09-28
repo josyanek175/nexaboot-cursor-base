@@ -6,9 +6,9 @@ import { sendMetaTemplateMessage } from "@/lib/meta-send-message.server";
 import { toMetaTemplatePublic } from "@/lib/meta-message-templates.server";
 import { upsertInboundConversation } from "@/lib/crm-inbound.server";
 import {
-  emptyDefinition,
   matchChoice,
   promptForStep,
+  readStoredDefinition,
   replyMatches,
   stepById,
   validateDefinition,
@@ -130,9 +130,8 @@ type FlowRow = {
   channel_ids: string[];
 };
 
-function asDefinition(value: unknown): FlowDefinition {
-  const parsed = validateDefinition(value);
-  return parsed.ok ? parsed.definition : emptyDefinition();
+function asDefinition(value: unknown, meta: { id?: string | null; name?: string | null } = {}): FlowDefinition {
+  return readStoredDefinition(value, meta);
 }
 
 export async function listAutomationFlows(companyId: string): Promise<FlowRow[]> {
@@ -157,7 +156,11 @@ export async function listAutomationFlows(companyId: string): Promise<FlowRow[]>
     GROUP BY f.id
     ORDER BY f.updated_at DESC
   `;
-  return rows.map((row) => ({ ...row, definition: asDefinition(row.definition), channel_ids: row.channel_ids ?? [] }));
+  return rows.map((row) => ({
+    ...row,
+    definition: asDefinition(row.definition, { id: row.id, name: row.name }),
+    channel_ids: row.channel_ids ?? [],
+  }));
 }
 
 export async function listCompanyChannels(companyId: string) {
@@ -306,7 +309,17 @@ export async function saveAutomationFlow(actor: Actor, body: unknown): Promise<R
       `;
     }
   }
-  return Response.json({ id: flowId });
+  return Response.json({
+    id: flowId,
+    name,
+    kind,
+    status,
+    definition: parsed.definition,
+    dispatch_channel_id: kind === "sales" ? dispatchChannelId : null,
+    meta_template_name: kind === "sales" ? templateName || null : null,
+    meta_template_language: kind === "sales" ? templateLanguage || null : null,
+    channel_ids: kind === "attendance" ? channelIds : [],
+  });
 }
 
 export async function deleteAutomationFlow(actor: Actor, id: string): Promise<Response> {

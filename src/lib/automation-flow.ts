@@ -184,6 +184,64 @@ function cleanRef(value: unknown): string | null {
   return id || null;
 }
 
+export class FlowDefinitionError extends Error {
+  readonly flowId: string | null;
+  readonly flowName: string | null;
+  readonly receivedType: string;
+  readonly stepTypes: string[];
+
+  constructor(message: string, details: { flowId?: string | null; flowName?: string | null; receivedType: string; stepTypes?: string[] }) {
+    super(message);
+    this.name = "FlowDefinitionError";
+    this.flowId = details.flowId ?? null;
+    this.flowName = details.flowName ?? null;
+    this.receivedType = details.receivedType;
+    this.stepTypes = details.stepTypes ?? [];
+  }
+}
+
+/** Lê definition do banco. Vazio de verdade vira documento vazio. Inválido lança erro. */
+export function readStoredDefinition(
+  value: unknown,
+  meta: { id?: string | null; name?: string | null } = {},
+): FlowDefinition {
+  const receivedType = value === null ? "null" : typeof value;
+  let parsedValue = value;
+  if (typeof value === "string") {
+    try {
+      parsedValue = JSON.parse(value);
+    } catch {
+      throw invalidDefinition("Definição inválida.", receivedType, value, meta);
+    }
+  }
+  if (parsedValue == null) return emptyDefinition();
+  const parsed = validateDefinition(parsedValue);
+  if (!parsed.ok) throw invalidDefinition(parsed.error, receivedType, parsedValue, meta);
+  return parsed.definition;
+}
+
+function invalidDefinition(
+  reason: string,
+  receivedType: string,
+  value: unknown,
+  meta: { id?: string | null; name?: string | null },
+): FlowDefinitionError {
+  const steps = value && typeof value === "object" && Array.isArray((value as { steps?: unknown }).steps)
+    ? (value as { steps: unknown[] }).steps
+    : [];
+  const stepTypes = steps.map((step) =>
+    step && typeof step === "object" && "type" in step ? String((step as { type?: unknown }).type ?? "") : "?",
+  );
+  console.error("[AUTOMATION_DEFINITION_INVALID]", {
+    flowId: meta.id ?? null,
+    flowName: meta.name ?? null,
+    reason,
+    receivedType,
+    stepTypes,
+  });
+  return new FlowDefinitionError(reason, { flowId: meta.id, flowName: meta.name, receivedType, stepTypes });
+}
+
 export function stepById(definition: FlowDefinition, id: string | null): FlowStep | null {
   if (!id) return null;
   return definition.steps.find((step) => step.id === id) ?? null;

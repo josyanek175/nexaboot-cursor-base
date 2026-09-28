@@ -14,13 +14,21 @@ function FluxosPage() {
   const [channels, setChannels] = useState<FlowChannel[]>([]);
   const [editing, setEditing] = useState<BuilderFlow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const [flowRes, channelRes] = await Promise.all([
       fetch("/api/automation-flows", { credentials: "include" }),
       fetch("/api/automation-flows?view=channels", { credentials: "include" }),
     ]);
-    if (flowRes.ok) setFlows(((await flowRes.json()) as { flows: BuilderFlow[] }).flows ?? []);
+    if (flowRes.ok) {
+      setError(null);
+      setFlows(((await flowRes.json()) as { flows: BuilderFlow[] }).flows ?? []);
+    } else {
+      const body = (await flowRes.json().catch(() => ({}))) as { message?: string; flowName?: string | null };
+      setError(body.message ? `${body.flowName ? body.flowName + ": " : ""}${body.message}` : "Não foi possível ler os fluxos.");
+      setFlows([]);
+    }
     if (channelRes.ok) setChannels(((await channelRes.json()) as { channels: FlowChannel[] }).channels ?? []);
   }, []);
 
@@ -68,7 +76,7 @@ function FluxosPage() {
           Novo fluxo
         </button>
       </div>
-      {loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      {error && <p className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
       {!loading && flows.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border p-8 text-sm text-muted-foreground">Nenhum fluxo ainda.</p>
       )}
