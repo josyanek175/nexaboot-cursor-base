@@ -281,6 +281,103 @@ export async function assumeConversation(
   return result as AssignmentResult;
 }
 
+/**
+ * Auto-assume na primeira resposta humana: se a conversa estiver sem responsável,
+ * atribui ao autor da mensagem. Não rouba conversa já assumida por outro.
+ * Usado para tirar da fila "Tempo de espera" sem exigir clique em Assumir.
+ */
+export async function tryAutoAssumeOnHumanOutbound(opts: {
+  companyId: string;
+  conversationId: string;
+  userId: string;
+}): Promise<{ assumed: boolean; reason: string }> {
+  const s = sql();
+
+  const meRows = await s<{ id: string; role: string | null }[]>`
+    SELECT id, role FROM public.users
+    WHERE id = ${opts.userId}::uuid AND COALESCE(active, true) = true
+    LIMIT 1
+  `;
+  const me = meRows[0];
+  if (!me || !canAssumeAttendance(me.role)) {
+    return { assumed: false, reason: "cannot_assume" };
+  }
+
+  const owns = await s<{ id: string }[]>`
+    SELECT id FROM public.conversations
+    WHERE id = ${opts.conversationId}::uuid
+      AND company_id = ${opts.companyId}::uuid
+    LIMIT 1
+  `;
+  if (!owns[0]) return { assumed: false, reason: "not_found" };
+
+  try {
+    const outcome = await s.begin(async (tx) => {
+      const locked = await tx<{ id: string }[]>`
+        SELECT id FROM public.conversations
+        WHERE id = ${opts.conversationId}::uuid
+          AND company_id = ${opts.companyId}::uuid
+        FOR UPDATE
+      `;
+      if (!locked[0]) return { assumed: false as const, reason: "not_found" };
+
+      const existing = await tx<{ user_id: string }[]>`
+        SELECT user_id
+        FROM public.conversation_assignments
+        WHERE conversation_id = ${opts.conversationId}::uuid
+          AND active = true
+          AND unassigned_at IS NULL
+        LIMIT 1
+      `;
+      const current = existing[0];
+      if (current) {
+        if (current.user_id === opts.userId) {
+          return { assumed: false as const, reason: "already_mine" };
+        }
+        return { assumed: false as const, reason: "already_assigned" };
+      }
+
+      await replaceAssignment(tx as unknown as ReturnType<typeof sql>, {
+        companyId: opts.companyId,
+        conversationId: opts.conversationId,
+        toUserId: opts.userId,
+        assignedBy: opts.userId,
+      });
+
+      await tx`
+        UPDATE public.conversations
+        SET status = CASE WHEN status = 'waiting' THEN 'open' ELSE status END,
+            updated_at = now()
+        WHERE id = ${opts.conversationId}::uuid
+      `;
+
+      await onCampaignAssume({
+        companyId: opts.companyId,
+        conversationId: opts.conversationId,
+        db: tx as unknown as ReturnType<typeof sql>,
+      });
+
+      return { assumed: true as const, reason: "auto_assumed" };
+    });
+
+    if (outcome.assumed) {
+      try {
+        const { stopAutomationForConversation } = await import(
+          "@/lib/automation-flow.server"
+        );
+        await stopAutomationForConversation(opts.conversationId, opts.companyId);
+      } catch (e) {
+        console.error("[AUTO_ASSUME_STOP_AUTOMATION_FAIL]", e);
+      }
+    }
+
+    return outcome;
+  } catch (e) {
+    console.error("[AUTO_ASSUME_ON_REPLY_FAIL]", e);
+    return { assumed: false, reason: "error" };
+  }
+}
+
 export async function transferConversation(
   conversationId: string,
   toUserId: string,

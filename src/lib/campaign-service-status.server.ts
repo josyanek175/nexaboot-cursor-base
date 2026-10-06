@@ -325,6 +325,21 @@ export async function tryApplyHumanReplyFromMessage(opts: {
   `;
   const msg = msgRows[0];
   if (!msg || !isHumanOutboundMessage(msg)) return false;
+
+  // Responder já assume (sai da fila de espera) quando não há responsável.
+  if (msg.sent_by_user_id) {
+    try {
+      const { tryAutoAssumeOnHumanOutbound } = await import("@/lib/attendance.server");
+      await tryAutoAssumeOnHumanOutbound({
+        companyId: opts.companyId,
+        conversationId: opts.conversationId,
+        userId: msg.sent_by_user_id,
+      });
+    } catch (e) {
+      console.error("[AUTO_ASSUME_HOOK_FAIL]", e);
+    }
+  }
+
   return onHumanReply({
     companyId: opts.companyId,
     conversationId: opts.conversationId,
