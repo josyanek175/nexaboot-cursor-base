@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { getCampaignActor } from "@/lib/campaign.server";
+import { ensureCampaignsSchema } from "@/lib/pg.server";
 import { canConfigureCampaignDispatchWindow } from "@/lib/permissions";
 import {
   getCampaignDispatchWindowSettings,
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/api/campaigns/dispatch-window")({
         if (ctx instanceof Response) return ctx;
 
         try {
+          await ensureCampaignsSchema();
           const settings = await getCampaignDispatchWindowSettings(ctx.companyId);
           return Response.json({
             settings: {
@@ -32,8 +34,19 @@ export const Route = createFileRoute("/api/campaigns/dispatch-window")({
             canConfigure: canConfigureCampaignDispatchWindow(ctx.actor),
           });
         } catch (e) {
-          console.error("[CAMPAIGN_DISPATCH_WINDOW_GET_FAIL]", e);
-          return Response.json({ error: "load_failed" }, { status: 500 });
+          const err = e as Error;
+          console.error("[CAMPAIGN_DISPATCH_WINDOW_GET_FAIL]", {
+            message: err?.message,
+            stack: err?.stack,
+          });
+          return Response.json(
+            {
+              error: "load_failed",
+              message: "Não foi possível carregar a configuração da janela.",
+              detail: err?.message?.slice(0, 300) ?? null,
+            },
+            { status: 500 },
+          );
         }
       },
 
@@ -61,6 +74,7 @@ export const Route = createFileRoute("/api/campaigns/dispatch-window")({
         }
 
         try {
+          await ensureCampaignsSchema();
           const settings = await saveCampaignDispatchWindowSettings(
             ctx.companyId,
             ctx.userId,
@@ -74,8 +88,19 @@ export const Route = createFileRoute("/api/campaigns/dispatch-window")({
             },
           });
         } catch (e) {
-          console.error("[CAMPAIGN_DISPATCH_WINDOW_PUT_FAIL]", e);
-          return Response.json({ error: "save_failed" }, { status: 500 });
+          const err = e as Error;
+          console.error("[CAMPAIGN_DISPATCH_WINDOW_PUT_FAIL]", {
+            message: err?.message,
+            stack: err?.stack,
+          });
+          return Response.json(
+            {
+              error: "save_failed",
+              message: "Não foi possível salvar a configuração da janela.",
+              detail: err?.message?.slice(0, 300) ?? null,
+            },
+            { status: 500 },
+          );
         }
       },
     },

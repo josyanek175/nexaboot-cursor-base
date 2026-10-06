@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getCampaignActor } from "@/lib/campaign.server";
+import { ensureCampaignsSchema } from "@/lib/pg.server";
 import {
   getCampaignDispatchWindowSettings,
   listBlockedDispatchContacts,
@@ -14,10 +15,10 @@ export const Route = createFileRoute("/api/campaigns/dispatch-blocks")({
         if (ctx instanceof Response) return ctx;
 
         try {
-          const [blocked, settings] = await Promise.all([
-            listBlockedDispatchContacts(ctx.companyId),
-            getCampaignDispatchWindowSettings(ctx.companyId),
-          ]);
+          // Sequencial: evita corrida de CREATE TABLE e garante schema de campanhas.
+          await ensureCampaignsSchema();
+          const settings = await getCampaignDispatchWindowSettings(ctx.companyId);
+          const blocked = await listBlockedDispatchContacts(ctx.companyId, { settings });
           return Response.json({
             blocked,
             settings: {
@@ -27,8 +28,19 @@ export const Route = createFileRoute("/api/campaigns/dispatch-blocks")({
             },
           });
         } catch (e) {
-          console.error("[CAMPAIGN_DISPATCH_BLOCKS_GET_FAIL]", e);
-          return Response.json({ error: "load_failed" }, { status: 500 });
+          const err = e as Error;
+          console.error("[CAMPAIGN_DISPATCH_BLOCKS_GET_FAIL]", {
+            message: err?.message,
+            stack: err?.stack,
+          });
+          return Response.json(
+            {
+              error: "load_failed",
+              message: "Não foi possível carregar os bloqueados da janela de disparo.",
+              detail: err?.message?.slice(0, 300) ?? null,
+            },
+            { status: 500 },
+          );
         }
       },
     },

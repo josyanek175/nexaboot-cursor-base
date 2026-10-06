@@ -38,22 +38,56 @@ export type BlockedDispatchContact = {
   lastCampaignName: string | null;
 };
 
+let _dispatchSettingsReady: Promise<void> | null = null;
+
 async function ensureDispatchSettingsTable(db: PgSql): Promise<void> {
-  await db.unsafe(`
-    CREATE TABLE IF NOT EXISTS public.company_campaign_dispatch_settings (
-      company_id UUID PRIMARY KEY REFERENCES public.companies(id) ON DELETE CASCADE,
-      first_window_days INT NOT NULL DEFAULT 7,
-      second_window_days INT NOT NULL DEFAULT 10,
-      third_window_days INT NOT NULL DEFAULT 30,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
-      CONSTRAINT company_campaign_dispatch_settings_days_check CHECK (
-        first_window_days BETWEEN 1 AND 365
-        AND second_window_days BETWEEN 1 AND 365
-        AND third_window_days BETWEEN 1 AND 365
-      )
-    );
-  `);
+  if (_dispatchSettingsReady) return _dispatchSettingsReady;
+
+  _dispatchSettingsReady = (async () => {
+    try {
+      await db.unsafe(`
+        CREATE TABLE IF NOT EXISTS public.company_campaign_dispatch_settings (
+          company_id UUID PRIMARY KEY REFERENCES public.companies(id) ON DELETE CASCADE,
+          first_window_days INT NOT NULL DEFAULT 7,
+          second_window_days INT NOT NULL DEFAULT 10,
+          third_window_days INT NOT NULL DEFAULT 30,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL
+        );
+      `);
+      // CHECK separado: evita falha se a tabela já existir sem a constraint nomeada.
+      await db.unsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'company_campaign_dispatch_settings_days_check'
+          ) THEN
+            ALTER TABLE public.company_campaign_dispatch_settings
+              ADD CONSTRAINT company_campaign_dispatch_settings_days_check CHECK (
+                first_window_days BETWEEN 1 AND 365
+                AND second_window_days BETWEEN 1 AND 365
+                AND third_window_days BETWEEN 1 AND 365
+              );
+          END IF;
+        END$$;
+      `);
+    } catch (e) {
+      _dispatchSettingsReady = null;
+      const msg = String((e as Error)?.message ?? e);
+      // Corrida entre requests: tabela/constraint já criada por outro processo.
+      if (
+        /already exists/i.test(msg) ||
+        /duplicate key/i.test(msg) ||
+        /pg_type_typname/i.test(msg)
+      ) {
+        return;
+      }
+      throw e;
+    }
+  })();
+
+  return _dispatchSettingsReady;
 }
 
 export async function getCampaignDispatchWindowSettings(
@@ -242,10 +276,11 @@ export async function isPhoneInCampaignDispatchWindow(
 /** Contatos ainda bloqueados (somem da lista ao liberar). */
 export async function listBlockedDispatchContacts(
   companyId: string,
-  opts?: { db?: PgSql; now?: Date },
+  opts?: { db?: PgSql; now?: Date; settings?: DispatchWindowSettings },
 ): Promise<BlockedDispatchContact[]> {
   const s = opts?.db ?? sql();
-  const settings = await getCampaignDispatchWindowSettings(companyId, s);
+  const settings =
+    opts?.settings ?? (await getCampaignDispatchWindowSettings(companyId, s));
   const history = await loadCompanyDispatchHistory(companyId, s);
   const now = opts?.now ?? new Date();
   const out: BlockedDispatchContact[] = [];

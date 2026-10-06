@@ -66,8 +66,13 @@ function CampanhasBloqueadosPage() {
     try {
       const res = await fetch("/api/campaigns/dispatch-blocks", { credentials: "include" });
       if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-        throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`);
+        const j = (await res.json().catch(() => ({}))) as {
+          message?: string;
+          error?: string;
+          detail?: string | null;
+        };
+        const base = j.message ?? j.error ?? `HTTP ${res.status}`;
+        throw new Error(j.detail ? `${base} (${j.detail})` : base);
       }
       const data = (await res.json()) as { blocked: BlockedRow[]; settings: Settings };
       setBlocked(data.blocked ?? []);
