@@ -291,6 +291,52 @@ function CampanhasCustosPage() {
           </p>
         </section>
 
+        <section className="rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-1 text-sm font-medium">Tabela de preços (R$)</h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Valores de referência Meta Brasil. Ajuste quando a Meta atualizar a tabela.
+            Evolution permanece R$ 0,00.
+          </p>
+          {canConfigure ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <MoneyInput
+                label="Marketing"
+                value={draft.marketingBrl}
+                onChange={(v) => setDraft((d) => ({ ...d, marketingBrl: v }))}
+              />
+              <MoneyInput
+                label="Utilidade"
+                value={draft.utilityBrl}
+                onChange={(v) => setDraft((d) => ({ ...d, utilityBrl: v }))}
+              />
+              <MoneyInput
+                label="Autenticação"
+                value={draft.authenticationBrl}
+                onChange={(v) => setDraft((d) => ({ ...d, authenticationBrl: v }))}
+              />
+              <button
+                type="button"
+                disabled={saving}
+                onClick={savePrices}
+                className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Salvar preços
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div>Marketing: {money(prices.marketingBrl)}</div>
+              <div>Utilidade: {money(prices.utilityBrl)}</div>
+              <div>Autenticação: {money(prices.authenticationBrl)}</div>
+            </div>
+          )}
+        </section>
+
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando custos…
@@ -377,52 +423,6 @@ function CampanhasCustosPage() {
             </div>
           </>
         )}
-
-        <section className="rounded-lg border border-border bg-card p-4">
-          <h2 className="mb-1 text-sm font-medium">Tabela de preços (R$)</h2>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Valores de referência Meta Brasil. Ajuste quando a Meta atualizar a tabela.
-            Evolution permanece R$ 0,00.
-          </p>
-          {canConfigure ? (
-            <div className="flex flex-wrap items-end gap-3">
-              <MoneyInput
-                label="Marketing"
-                value={draft.marketingBrl}
-                onChange={(v) => setDraft((d) => ({ ...d, marketingBrl: v }))}
-              />
-              <MoneyInput
-                label="Utilidade"
-                value={draft.utilityBrl}
-                onChange={(v) => setDraft((d) => ({ ...d, utilityBrl: v }))}
-              />
-              <MoneyInput
-                label="Autenticação"
-                value={draft.authenticationBrl}
-                onChange={(v) => setDraft((d) => ({ ...d, authenticationBrl: v }))}
-              />
-              <button
-                type="button"
-                disabled={saving}
-                onClick={savePrices}
-                className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90 disabled:opacity-60"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Salvar preços
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div>Marketing: {money(prices.marketingBrl)}</div>
-              <div>Utilidade: {money(prices.utilityBrl)}</div>
-              <div>Autenticação: {money(prices.authenticationBrl)}</div>
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );
