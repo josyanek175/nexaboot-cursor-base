@@ -12,7 +12,7 @@ import {
   canPauseResumeCampaign,
   type ActingUser,
 } from "@/lib/permissions";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import {
   assertApprovedMetaTemplate,
 } from "@/lib/meta-message-templates.server";
@@ -22,6 +22,12 @@ import {
   isInvalidCampaignPhone,
   isOptOutContact,
 } from "@/lib/campaign-send-policy";
+import {
+  DISPATCH_WINDOW_SKIP_REASON,
+  getCampaignDispatchWindowSettings,
+  loadCompanyDispatchHistory,
+} from "@/lib/campaign-dispatch-window.server";
+import { computeDispatchBlock } from "@/lib/campaign-dispatch-window";
 import { getCampaignTemplate } from "@/lib/campaign-template.server";
 import {
   buildDefaultEvolutionMappings,
@@ -1566,6 +1572,8 @@ export async function addCampaignContacts(
 
   let added = 0;
   let skipped = 0;
+  const dispatchSettings = await getCampaignDispatchWindowSettings(companyId);
+  const dispatchHistory = await loadCompanyDispatchHistory(companyId);
 
   for (const ct of contacts) {
     const phone = normalizePhone(ct.phone);
@@ -1579,6 +1587,19 @@ export async function addCampaignContacts(
     } else if (isOptOutContact({ status: ct.status, tags: ct.tags })) {
       rowStatus = "skipped";
       skipReason = ct.status === "inativo" || ct.status === "merged" ? "contact_inactive" : "opt_out";
+    } else {
+      const hist = dispatchHistory.get(normalizePhoneForMatch(phone));
+      if (hist) {
+        const block = computeDispatchBlock({
+          sendCount: hist.sendCount,
+          lastSentAt: hist.lastSentAt,
+          settings: dispatchSettings,
+        });
+        if (block?.blocked) {
+          rowStatus = "skipped";
+          skipReason = DISPATCH_WINDOW_SKIP_REASON;
+        }
+      }
     }
 
     try {

@@ -10,6 +10,7 @@ export type ImportPreviewData = {
   invalid: number;
   duplicated: number;
   optOut: number;
+  dispatchWindow: number;
   availableTags: string[];
   samplePreview: {
     name: string;
@@ -122,7 +123,8 @@ export function CampaignAudienceImport({
     const validIndices = preview.rows
       .filter((r) => r.status === "valid")
       .map((r) => r.index);
-    if (validIndices.length === 0) {
+    const blockedCount = preview.dispatchWindow ?? 0;
+    if (validIndices.length === 0 && blockedCount === 0) {
       toast.error("Nenhum contato válido para importar");
       return;
     }
@@ -142,7 +144,11 @@ export function CampaignAudienceImport({
         throw new Error(j.error ?? `HTTP ${res.status}`);
       }
       const result = (await res.json()) as { added: number; skipped: number };
-      toast.success(`${result.added} contato(s) importado(s)`);
+      const parts = [`${result.added} contato(s) importado(s)`];
+      if (blockedCount > 0) {
+        parts.push(`${blockedCount} em janela de disparo (não serão enviados)`);
+      }
+      toast.success(parts.join(" · "));
       setPreview(null);
       setRawRows([]);
       setPasteText("");
@@ -213,13 +219,24 @@ export function CampaignAudienceImport({
       {preview && (
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           <p className="text-sm font-medium">Prévia da importação</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <Stat label="Total" value={preview.total} />
             <Stat label="Válidos" value={preview.valid} tone="text-whatsapp" />
             <Stat label="Inválidos" value={preview.invalid} tone="text-destructive" />
             <Stat label="Duplicados" value={preview.duplicated} tone="text-amber-600" />
             <Stat label="Opt-out" value={preview.optOut} tone="text-destructive" />
+            <Stat
+              label="Janela disparo"
+              value={preview.dispatchWindow ?? 0}
+              tone="text-amber-700"
+            />
           </div>
+          {(preview.dispatchWindow ?? 0) > 0 && (
+            <p className="text-xs text-amber-800">
+              Contatos em janela entram na lista como &quot;Número em janela de disparo&quot; e
+              não são enviados.
+            </p>
+          )}
 
           {preview.availableTags.length > 0 && (
             <div>
@@ -246,7 +263,7 @@ export function CampaignAudienceImport({
             </div>
           )}
 
-          {preview.valid > 0 ? (
+          {preview.valid > 0 || (preview.dispatchWindow ?? 0) > 0 ? (
             <button
               type="button"
               disabled={disabled || confirming}
@@ -258,7 +275,10 @@ export function CampaignAudienceImport({
               ) : (
                 <CheckCircle2 className="h-4 w-4" />
               )}
-              Importar {preview.valid} contato(s) válido(s)
+              Importar {preview.valid} válido(s)
+              {(preview.dispatchWindow ?? 0) > 0
+                ? ` + ${preview.dispatchWindow} em janela`
+                : ""}
             </button>
           ) : (
             <p className="flex items-center gap-1 text-xs text-destructive">

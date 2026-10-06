@@ -9,144 +9,136 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermosDeUsoRouteImport } from './routes/termos-de-uso'
-import { Route as RegisterRouteImport } from './routes/register'
-import { Route as PoliticaDePrivacidadeRouteImport } from './routes/politica-de-privacidade'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ExclusaoDeDadosRouteImport } from './routes/exclusao-de-dados'
-import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution'
-import { Route as ApiUsersRouteImport } from './routes/api/users'
-import { Route as ApiPlansRouteImport } from './routes/api/plans'
-import { Route as ApiMessagesRouteImport } from './routes/api/messages'
-import { Route as ApiHealthRouteImport } from './routes/api/health'
-import { Route as ApiDashboardRouteImport } from './routes/api/dashboard'
-import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
-import { Route as ApiContactsRouteImport } from './routes/api/contacts'
-import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
-import { Route as ApiCampaignsRouteImport } from './routes/api/campaigns'
-import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
-import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
-import { Route as AppLogsRouteImport } from './routes/_app.logs'
-import { Route as AppGruposInternosRouteImport } from './routes/_app.grupos-internos'
-import { Route as AppEmpresasRouteImport } from './routes/_app.empresas'
-import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
-import { Route as AppContatosRouteImport } from './routes/_app.contatos'
-import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
-import { Route as AppHorariosAcessoRouteImport } from './routes/_app.horarios-acesso'
-import { Route as AppFluxosRouteImport } from './routes/_app.fluxos'
-import { Route as AppLembretesRouteImport } from './routes/_app.lembretes'
-import { Route as ApiAccessHoursRouteImport } from './routes/api/access-hours'
-import { Route as ApiAutomationFlowsRouteImport } from './routes/api/automation-flows'
-import { Route as AppComunicacaoInternaRouteImport } from './routes/_app.comunicacao-interna'
-import { Route as AppCanaisRouteImport } from './routes/_app.canais'
-import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
-import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as ExclusaoDeDadosRouteImport } from './routes/exclusao-de-dados'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PoliticaDePrivacidadeRouteImport } from './routes/politica-de-privacidade'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as TermosDeUsoRouteImport } from './routes/termos-de-uso'
 import { Route as AppAtendimentoRouteImport } from './routes/_app.atendimento'
+import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
+import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
+import { Route as AppCanaisRouteImport } from './routes/_app.canais'
+import { Route as AppComunicacaoInternaRouteImport } from './routes/_app.comunicacao-interna'
+import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
+import { Route as AppContatosRouteImport } from './routes/_app.contatos'
+import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppEmpresasRouteImport } from './routes/_app.empresas'
+import { Route as AppFluxosRouteImport } from './routes/_app.fluxos'
+import { Route as AppGruposInternosRouteImport } from './routes/_app.grupos-internos'
+import { Route as AppHorariosAcessoRouteImport } from './routes/_app.horarios-acesso'
+import { Route as AppLembretesRouteImport } from './routes/_app.lembretes'
+import { Route as AppLogsRouteImport } from './routes/_app.logs'
+import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
+import { Route as ApiAccessHoursRouteImport } from './routes/api/access-hours'
+import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
+import { Route as ApiAutomationFlowsRouteImport } from './routes/api/automation-flows'
+import { Route as ApiCampaignsRouteImport } from './routes/api/campaigns'
+import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
+import { Route as ApiContactsRouteImport } from './routes/api/contacts'
+import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
+import { Route as ApiDashboardRouteImport } from './routes/api/dashboard'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiMessagesRouteImport } from './routes/api/messages'
+import { Route as ApiPlansRouteImport } from './routes/api/plans'
+import { Route as ApiUsersRouteImport } from './routes/api/users'
+import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution'
 import { Route as AppCampanhasIndexRouteImport } from './routes/_app.campanhas.index'
-import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
-import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
-import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
-import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
-import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
-import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
-import { Route as ApiInternalDbPoolStatusRouteImport } from './routes/api/internal/db-pool-status'
-import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
-import { Route as ApiInternalChatUnreadCountRouteImport } from './routes/api/internal-chat/unread-count'
-import { Route as ApiInternalChatSendRouteImport } from './routes/api/internal-chat/send'
-import { Route as ApiInternalChatMessagesRouteImport } from './routes/api/internal-chat/messages'
-import { Route as ApiInternalChatMarkReadRouteImport } from './routes/api/internal-chat/mark-read'
-import { Route as ApiInternalChatListRouteImport } from './routes/api/internal-chat/list'
-import { Route as ApiInternalChatCreateRouteImport } from './routes/api/internal-chat/create'
-import { Route as ApiEvolutionStatusRouteImport } from './routes/api/evolution/status'
-import { Route as ApiEvolutionSchemaCheckRouteImport } from './routes/api/evolution/schema-check'
-import { Route as ApiEvolutionRegisterChannelRouteImport } from './routes/api/evolution/register-channel'
-import { Route as ApiEvolutionChannelsRouteImport } from './routes/api/evolution/channels'
-import { Route as ApiDebugPlansSelectsRouteImport } from './routes/api/debug/plans-selects'
-import { Route as ApiDebugDbRouteImport } from './routes/api/debug/db'
-import { Route as ApiDebugCurrentUserRouteImport } from './routes/api/debug/current-user'
-import { Route as ApiDebugColsRouteImport } from './routes/api/debug/cols'
-import { Route as ApiDashboardCampaignsRouteImport } from './routes/api/dashboard/campaigns'
-import { Route as ApiConversationsStartRouteImport } from './routes/api/conversations/start'
-import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
-import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
-import { Route as ApiCampaignsTemplatesRouteImport } from './routes/api/campaigns/templates'
-import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
-import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
-import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
-import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
-import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
-import { Route as ApiAttendanceNotificationsRouteImport } from './routes/api/attendance/notifications'
-import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
-import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
-import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
-import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
-import { Route as AppCampanhasModelosRouteImport } from './routes/_app.campanhas.modelos'
 import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
-import { Route as ApiWebhooksMetaWhatsappRouteImport } from './routes/api/webhooks/meta/whatsapp'
-import { Route as ApiWebhooksMetaDiagnosticRouteImport } from './routes/api/webhooks/meta/diagnostic'
-import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
-import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
-import { Route as ApiMetaMessagesSendTextRouteImport } from './routes/api/meta/messages/send-text'
-import { Route as ApiMetaEmbeddedSignupStartRouteImport } from './routes/api/meta/embedded-signup/start'
-import { Route as ApiMetaEmbeddedSignupCompleteRouteImport } from './routes/api/meta/embedded-signup/complete'
-import { Route as ApiMetaCoexistenceExchangeRouteImport } from './routes/api/meta/coexistence/exchange'
-import { Route as ApiMetaCoexistenceConnectRouteImport } from './routes/api/meta/coexistence/connect'
-import { Route as ApiMetaCoexistenceConfigRouteImport } from './routes/api/meta/coexistence/config'
-import { Route as ApiMetaChannelsIdRouteImport } from './routes/api/meta/channels/$id'
-import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
-import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
-import { Route as ApiEvolutionChannelsIdRouteImport } from './routes/api/evolution/channels/$id'
-import { Route as ApiConversationsIdTransferRouteImport } from './routes/api/conversations/$id/transfer'
-import { Route as ApiConversationsIdReopenRouteImport } from './routes/api/conversations/$id/reopen'
-import { Route as ApiConversationsIdReadRouteImport } from './routes/api/conversations/$id/read'
-import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
-import { Route as ApiConversationsIdFinishRouteImport } from './routes/api/conversations/$id/finish'
-import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
-import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
-import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
-import { Route as ApiCampaignsTemplatesFromMetaRouteImport } from './routes/api/campaigns/templates/from-meta'
-import { Route as ApiCampaignsTemplatesIdRouteImport } from './routes/api/campaigns/templates/$id'
-import { Route as ApiCampaignsIdStartRouteImport } from './routes/api/campaigns/$id/start'
-import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaigns/$id/schedule'
-import { Route as ApiCampaignsIdReuseRouteImport } from './routes/api/campaigns/$id/reuse'
-import { Route as ApiCampaignsIdResumeRouteImport } from './routes/api/campaigns/$id/resume'
-import { Route as ApiCampaignsIdPauseRouteImport } from './routes/api/campaigns/$id/pause'
+import { Route as AppCampanhasBloqueadosRouteImport } from './routes/_app.campanhas.bloqueados'
+import { Route as AppCampanhasModelosRouteImport } from './routes/_app.campanhas.modelos'
+import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
+import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
+import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
+import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
+import { Route as ApiAttendanceNotificationsRouteImport } from './routes/api/attendance/notifications'
+import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
+import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
+import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
+import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
+import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
+import { Route as ApiCampaignsDispatchBlocksRouteImport } from './routes/api/campaigns/dispatch-blocks'
+import { Route as ApiCampaignsDispatchWindowRouteImport } from './routes/api/campaigns/dispatch-window'
+import { Route as ApiCampaignsTemplatesRouteImport } from './routes/api/campaigns/templates'
+import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
+import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
+import { Route as ApiConversationsStartRouteImport } from './routes/api/conversations/start'
+import { Route as ApiDashboardCampaignsRouteImport } from './routes/api/dashboard/campaigns'
+import { Route as ApiDebugColsRouteImport } from './routes/api/debug/cols'
+import { Route as ApiDebugCurrentUserRouteImport } from './routes/api/debug/current-user'
+import { Route as ApiDebugDbRouteImport } from './routes/api/debug/db'
+import { Route as ApiDebugPlansSelectsRouteImport } from './routes/api/debug/plans-selects'
+import { Route as ApiEvolutionChannelsRouteImport } from './routes/api/evolution/channels'
+import { Route as ApiEvolutionRegisterChannelRouteImport } from './routes/api/evolution/register-channel'
+import { Route as ApiEvolutionSchemaCheckRouteImport } from './routes/api/evolution/schema-check'
+import { Route as ApiEvolutionStatusRouteImport } from './routes/api/evolution/status'
+import { Route as ApiInternalChatCreateRouteImport } from './routes/api/internal-chat/create'
+import { Route as ApiInternalChatListRouteImport } from './routes/api/internal-chat/list'
+import { Route as ApiInternalChatMarkReadRouteImport } from './routes/api/internal-chat/mark-read'
+import { Route as ApiInternalChatMessagesRouteImport } from './routes/api/internal-chat/messages'
+import { Route as ApiInternalChatSendRouteImport } from './routes/api/internal-chat/send'
+import { Route as ApiInternalChatUnreadCountRouteImport } from './routes/api/internal-chat/unread-count'
+import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
+import { Route as ApiInternalDbPoolStatusRouteImport } from './routes/api/internal/db-pool-status'
+import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
+import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
+import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
+import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
+import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
+import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
 import { Route as ApiCampaignsIdContactsRouteImport } from './routes/api/campaigns/$id/contacts'
-import { Route as ApiMetaChannelsIdTokenRouteImport } from './routes/api/meta/channels/$id/token'
-import { Route as ApiMetaChannelsIdTemplatesRouteImport } from './routes/api/meta/channels/$id/templates'
-import { Route as ApiMetaChannelsIdStatusRouteImport } from './routes/api/meta/channels/$id/status'
-import { Route as ApiMetaChannelsIdConnectionStatusRouteImport } from './routes/api/meta/channels/$id/connection-status'
-import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
-import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
-import { Route as ApiEvolutionChannelsIdStatusRouteImport } from './routes/api/evolution/channels/$id/status'
-import { Route as ApiEvolutionChannelsIdQrcodeRouteImport } from './routes/api/evolution/channels/$id/qrcode'
-import { Route as ApiEvolutionChannelsIdDisconnectRouteImport } from './routes/api/evolution/channels/$id/disconnect'
-import { Route as ApiEvolutionChannelsIdConnectRouteImport } from './routes/api/evolution/channels/$id/connect'
-import { Route as ApiCampaignsIdImportPreviewRouteImport } from './routes/api/campaigns/$id/import/preview'
-import { Route as ApiCampaignsIdImportConfirmRouteImport } from './routes/api/campaigns/$id/import/confirm'
+import { Route as ApiCampaignsIdPauseRouteImport } from './routes/api/campaigns/$id/pause'
+import { Route as ApiCampaignsIdResumeRouteImport } from './routes/api/campaigns/$id/resume'
+import { Route as ApiCampaignsIdReuseRouteImport } from './routes/api/campaigns/$id/reuse'
+import { Route as ApiCampaignsIdScheduleRouteImport } from './routes/api/campaigns/$id/schedule'
+import { Route as ApiCampaignsIdStartRouteImport } from './routes/api/campaigns/$id/start'
+import { Route as ApiCampaignsTemplatesIdRouteImport } from './routes/api/campaigns/templates/$id'
+import { Route as ApiCampaignsTemplatesFromMetaRouteImport } from './routes/api/campaigns/templates/from-meta'
+import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
+import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
+import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
+import { Route as ApiConversationsIdFinishRouteImport } from './routes/api/conversations/$id/finish'
+import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
+import { Route as ApiConversationsIdReadRouteImport } from './routes/api/conversations/$id/read'
+import { Route as ApiConversationsIdReopenRouteImport } from './routes/api/conversations/$id/reopen'
+import { Route as ApiConversationsIdTransferRouteImport } from './routes/api/conversations/$id/transfer'
+import { Route as ApiEvolutionChannelsIdRouteImport } from './routes/api/evolution/channels/$id'
+import { Route as ApiMessagesMessageIdMediaRouteImport } from './routes/api/messages/$messageId/media'
+import { Route as ApiMessagesSendEvolutionRouteImport } from './routes/api/messages/send/evolution'
+import { Route as ApiMetaChannelsIdRouteImport } from './routes/api/meta/channels/$id'
+import { Route as ApiMetaCoexistenceConfigRouteImport } from './routes/api/meta/coexistence/config'
+import { Route as ApiMetaCoexistenceConnectRouteImport } from './routes/api/meta/coexistence/connect'
+import { Route as ApiMetaCoexistenceExchangeRouteImport } from './routes/api/meta/coexistence/exchange'
+import { Route as ApiMetaEmbeddedSignupCompleteRouteImport } from './routes/api/meta/embedded-signup/complete'
+import { Route as ApiMetaEmbeddedSignupStartRouteImport } from './routes/api/meta/embedded-signup/start'
+import { Route as ApiMetaMessagesSendTextRouteImport } from './routes/api/meta/messages/send-text'
+import { Route as ApiPublicWebhooksEvolutionRouteImport } from './routes/api/public/webhooks/evolution'
+import { Route as ApiPublicWebhooksMetaRouteImport } from './routes/api/public/webhooks/meta'
+import { Route as ApiWebhooksMetaDiagnosticRouteImport } from './routes/api/webhooks/meta/diagnostic'
+import { Route as ApiWebhooksMetaWhatsappRouteImport } from './routes/api/webhooks/meta/whatsapp'
 import { Route as ApiCampaignsIdContactsContactRowIdRouteImport } from './routes/api/campaigns/$id/contacts/$contactRowId'
+import { Route as ApiCampaignsIdImportConfirmRouteImport } from './routes/api/campaigns/$id/import/confirm'
+import { Route as ApiCampaignsIdImportPreviewRouteImport } from './routes/api/campaigns/$id/import/preview'
+import { Route as ApiEvolutionChannelsIdConnectRouteImport } from './routes/api/evolution/channels/$id/connect'
+import { Route as ApiEvolutionChannelsIdDisconnectRouteImport } from './routes/api/evolution/channels/$id/disconnect'
+import { Route as ApiEvolutionChannelsIdQrcodeRouteImport } from './routes/api/evolution/channels/$id/qrcode'
+import { Route as ApiEvolutionChannelsIdStatusRouteImport } from './routes/api/evolution/channels/$id/status'
+import { Route as ApiInternalChatMessagesIdAttachmentRouteImport } from './routes/api/internal-chat/messages/$id/attachment'
+import { Route as ApiMessagesSendMediaEvolutionRouteImport } from './routes/api/messages/send/media/evolution'
+import { Route as ApiMetaChannelsIdConnectionStatusRouteImport } from './routes/api/meta/channels/$id/connection-status'
+import { Route as ApiMetaChannelsIdStatusRouteImport } from './routes/api/meta/channels/$id/status'
+import { Route as ApiMetaChannelsIdTemplatesRouteImport } from './routes/api/meta/channels/$id/templates'
+import { Route as ApiMetaChannelsIdTokenRouteImport } from './routes/api/meta/channels/$id/token'
 import { Route as ApiMetaChannelsIdTemplatesSyncRouteImport } from './routes/api/meta/channels/$id/templates.sync'
 
-const TermosDeUsoRoute = TermosDeUsoRouteImport.update({
-  id: '/termos-de-uso',
-  path: '/termos-de-uso',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RegisterRoute = RegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PoliticaDePrivacidadeRoute = PoliticaDePrivacidadeRouteImport.update({
-  id: '/politica-de-privacidade',
-  path: '/politica-de-privacidade',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExclusaoDeDadosRoute = ExclusaoDeDadosRouteImport.update({
@@ -154,143 +146,29 @@ const ExclusaoDeDadosRoute = ExclusaoDeDadosRouteImport.update({
   path: '/exclusao-de-dados',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const PoliticaDePrivacidadeRoute = PoliticaDePrivacidadeRouteImport.update({
+  id: '/politica-de-privacidade',
+  path: '/politica-de-privacidade',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WebhookEvolutionRoute = WebhookEvolutionRouteImport.update({
-  id: '/webhook/evolution',
-  path: '/webhook/evolution',
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiUsersRoute = ApiUsersRouteImport.update({
-  id: '/api/users',
-  path: '/api/users',
+const TermosDeUsoRoute = TermosDeUsoRouteImport.update({
+  id: '/termos-de-uso',
+  path: '/termos-de-uso',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPlansRoute = ApiPlansRouteImport.update({
-  id: '/api/plans',
-  path: '/api/plans',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiMessagesRoute = ApiMessagesRouteImport.update({
-  id: '/api/messages',
-  path: '/api/messages',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiHealthRoute = ApiHealthRouteImport.update({
-  id: '/api/health',
-  path: '/api/health',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDashboardRoute = ApiDashboardRouteImport.update({
-  id: '/api/dashboard',
-  path: '/api/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiConversationsRoute = ApiConversationsRouteImport.update({
-  id: '/api/conversations',
-  path: '/api/conversations',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiContactsRoute = ApiContactsRouteImport.update({
-  id: '/api/contacts',
-  path: '/api/contacts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiCompaniesRoute = ApiCompaniesRouteImport.update({
-  id: '/api/companies',
-  path: '/api/companies',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiCampaignsRoute = ApiCampaignsRouteImport.update({
-  id: '/api/campaigns',
-  path: '/api/campaigns',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAttendantsRoute = ApiAttendantsRouteImport.update({
-  id: '/api/attendants',
-  path: '/api/attendants',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppUsuariosRoute = AppUsuariosRouteImport.update({
-  id: '/usuarios',
-  path: '/usuarios',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLogsRoute = AppLogsRouteImport.update({
-  id: '/logs',
-  path: '/logs',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppGruposInternosRoute = AppGruposInternosRouteImport.update({
-  id: '/grupos-internos',
-  path: '/grupos-internos',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppEmpresasRoute = AppEmpresasRouteImport.update({
-  id: '/empresas',
-  path: '/empresas',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDashboardRoute = AppDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppContatosRoute = AppContatosRouteImport.update({
-  id: '/contatos',
-  path: '/contatos',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppHorariosAcessoRoute = AppHorariosAcessoRouteImport.update({
-  id: '/horarios-acesso',
-  path: '/horarios-acesso',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppFluxosRoute = AppFluxosRouteImport.update({
-  id: '/fluxos',
-  path: '/fluxos',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLembretesRoute = AppLembretesRouteImport.update({
-  id: '/lembretes',
-  path: '/lembretes',
-  getParentRoute: () => AppRoute,
-} as any)
-const ApiAccessHoursRoute = ApiAccessHoursRouteImport.update({
-  id: '/api/access-hours',
-  path: '/api/access-hours',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAutomationFlowsRoute = ApiAutomationFlowsRouteImport.update({
-  id: '/api/automation-flows',
-  path: '/api/automation-flows',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppConfiguracoesRoute = AppConfiguracoesRouteImport.update({
-  id: '/configuracoes',
-  path: '/configuracoes',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppComunicacaoInternaRoute = AppComunicacaoInternaRouteImport.update({
-  id: '/comunicacao-interna',
-  path: '/comunicacao-interna',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCanaisRoute = AppCanaisRouteImport.update({
-  id: '/canais',
-  path: '/canais',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCampanhasRoute = AppCampanhasRouteImport.update({
-  id: '/campanhas',
-  path: '/campanhas',
+const AppAtendimentoRoute = AppAtendimentoRouteImport.update({
+  id: '/atendimento',
+  path: '/atendimento',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAutomacoesRoute = AppAutomacoesRouteImport.update({
@@ -298,177 +176,174 @@ const AppAutomacoesRoute = AppAutomacoesRouteImport.update({
   path: '/automacoes',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAtendimentoRoute = AppAtendimentoRouteImport.update({
-  id: '/atendimento',
-  path: '/atendimento',
+const AppCampanhasRoute = AppCampanhasRouteImport.update({
+  id: '/campanhas',
+  path: '/campanhas',
   getParentRoute: () => AppRoute,
+} as any)
+const AppCanaisRoute = AppCanaisRouteImport.update({
+  id: '/canais',
+  path: '/canais',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppComunicacaoInternaRoute = AppComunicacaoInternaRouteImport.update({
+  id: '/comunicacao-interna',
+  path: '/comunicacao-interna',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppConfiguracoesRoute = AppConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppContatosRoute = AppContatosRouteImport.update({
+  id: '/contatos',
+  path: '/contatos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEmpresasRoute = AppEmpresasRouteImport.update({
+  id: '/empresas',
+  path: '/empresas',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFluxosRoute = AppFluxosRouteImport.update({
+  id: '/fluxos',
+  path: '/fluxos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGruposInternosRoute = AppGruposInternosRouteImport.update({
+  id: '/grupos-internos',
+  path: '/grupos-internos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHorariosAcessoRoute = AppHorariosAcessoRouteImport.update({
+  id: '/horarios-acesso',
+  path: '/horarios-acesso',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLembretesRoute = AppLembretesRouteImport.update({
+  id: '/lembretes',
+  path: '/lembretes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLogsRoute = AppLogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUsuariosRoute = AppUsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
+  getParentRoute: () => AppRoute,
+} as any)
+const ApiAccessHoursRoute = ApiAccessHoursRouteImport.update({
+  id: '/api/access-hours',
+  path: '/api/access-hours',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAttendantsRoute = ApiAttendantsRouteImport.update({
+  id: '/api/attendants',
+  path: '/api/attendants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAutomationFlowsRoute = ApiAutomationFlowsRouteImport.update({
+  id: '/api/automation-flows',
+  path: '/api/automation-flows',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCampaignsRoute = ApiCampaignsRouteImport.update({
+  id: '/api/campaigns',
+  path: '/api/campaigns',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCompaniesRoute = ApiCompaniesRouteImport.update({
+  id: '/api/companies',
+  path: '/api/companies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiContactsRoute = ApiContactsRouteImport.update({
+  id: '/api/contacts',
+  path: '/api/contacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConversationsRoute = ApiConversationsRouteImport.update({
+  id: '/api/conversations',
+  path: '/api/conversations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDashboardRoute = ApiDashboardRouteImport.update({
+  id: '/api/dashboard',
+  path: '/api/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMessagesRoute = ApiMessagesRouteImport.update({
+  id: '/api/messages',
+  path: '/api/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPlansRoute = ApiPlansRouteImport.update({
+  id: '/api/plans',
+  path: '/api/plans',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsersRoute = ApiUsersRouteImport.update({
+  id: '/api/users',
+  path: '/api/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WebhookEvolutionRoute = WebhookEvolutionRouteImport.update({
+  id: '/webhook/evolution',
+  path: '/webhook/evolution',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppCampanhasIndexRoute = AppCampanhasIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppCampanhasRoute,
 } as any)
-const ApiWebhooksMetaRoute = ApiWebhooksMetaRouteImport.update({
-  id: '/api/webhooks/meta',
-  path: '/api/webhooks/meta',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiWebhooksEvolutionRoute = ApiWebhooksEvolutionRouteImport.update({
-  id: '/api/webhooks/evolution',
-  path: '/api/webhooks/evolution',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiUsersIdRoute = ApiUsersIdRouteImport.update({
+const AppCampanhasIdRoute = AppCampanhasIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => ApiUsersRoute,
+  getParentRoute: () => AppCampanhasRoute,
 } as any)
-const ApiMetaChannelsRoute = ApiMetaChannelsRouteImport.update({
-  id: '/api/meta/channels',
-  path: '/api/meta/channels',
+const AppCampanhasBloqueadosRoute = AppCampanhasBloqueadosRouteImport.update({
+  id: '/bloqueados',
+  path: '/bloqueados',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
+const AppCampanhasModelosRoute = AppCampanhasModelosRouteImport.update({
+  id: '/modelos',
+  path: '/modelos',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
+const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
+  id: '/nova',
+  path: '/nova',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
+const ApiAdminAuthCheckRoute = ApiAdminAuthCheckRouteImport.update({
+  id: '/api/admin/auth-check',
+  path: '/api/admin/auth-check',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiMessagesSendMediaRoute = ApiMessagesSendMediaRouteImport.update({
-  id: '/send-media',
-  path: '/send-media',
-  getParentRoute: () => ApiMessagesRoute,
-} as any)
-const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
-  id: '/send',
-  path: '/send',
-  getParentRoute: () => ApiMessagesRoute,
-} as any)
-const ApiInternalDbPoolStatusRoute = ApiInternalDbPoolStatusRouteImport.update({
-  id: '/api/internal/db-pool-status',
-  path: '/api/internal/db-pool-status',
+const ApiAdminResetPasswordRoute = ApiAdminResetPasswordRouteImport.update({
+  id: '/api/admin/reset-password',
+  path: '/api/admin/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiInternalChatUsersRoute = ApiInternalChatUsersRouteImport.update({
-  id: '/api/internal-chat/users',
-  path: '/api/internal-chat/users',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiInternalChatUnreadCountRoute =
-  ApiInternalChatUnreadCountRouteImport.update({
-    id: '/api/internal-chat/unread-count',
-    path: '/api/internal-chat/unread-count',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiInternalChatSendRoute = ApiInternalChatSendRouteImport.update({
-  id: '/api/internal-chat/send',
-  path: '/api/internal-chat/send',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiInternalChatMessagesRoute = ApiInternalChatMessagesRouteImport.update({
-  id: '/api/internal-chat/messages',
-  path: '/api/internal-chat/messages',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiInternalChatMarkReadRoute = ApiInternalChatMarkReadRouteImport.update({
-  id: '/api/internal-chat/mark-read',
-  path: '/api/internal-chat/mark-read',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiInternalChatListRoute = ApiInternalChatListRouteImport.update({
-  id: '/api/internal-chat/list',
-  path: '/api/internal-chat/list',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiInternalChatCreateRoute = ApiInternalChatCreateRouteImport.update({
-  id: '/api/internal-chat/create',
-  path: '/api/internal-chat/create',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiEvolutionStatusRoute = ApiEvolutionStatusRouteImport.update({
-  id: '/api/evolution/status',
-  path: '/api/evolution/status',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiEvolutionSchemaCheckRoute = ApiEvolutionSchemaCheckRouteImport.update({
-  id: '/api/evolution/schema-check',
-  path: '/api/evolution/schema-check',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiEvolutionRegisterChannelRoute =
-  ApiEvolutionRegisterChannelRouteImport.update({
-    id: '/api/evolution/register-channel',
-    path: '/api/evolution/register-channel',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiEvolutionChannelsRoute = ApiEvolutionChannelsRouteImport.update({
-  id: '/api/evolution/channels',
-  path: '/api/evolution/channels',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDebugPlansSelectsRoute = ApiDebugPlansSelectsRouteImport.update({
-  id: '/api/debug/plans-selects',
-  path: '/api/debug/plans-selects',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDebugDbRoute = ApiDebugDbRouteImport.update({
-  id: '/api/debug/db',
-  path: '/api/debug/db',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDebugCurrentUserRoute = ApiDebugCurrentUserRouteImport.update({
-  id: '/api/debug/current-user',
-  path: '/api/debug/current-user',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDebugColsRoute = ApiDebugColsRouteImport.update({
-  id: '/api/debug/cols',
-  path: '/api/debug/cols',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDashboardCampaignsRoute = ApiDashboardCampaignsRouteImport.update({
-  id: '/campaigns',
-  path: '/campaigns',
-  getParentRoute: () => ApiDashboardRoute,
-} as any)
-const ApiConversationsStartRoute = ApiConversationsStartRouteImport.update({
-  id: '/start',
-  path: '/start',
-  getParentRoute: () => ApiConversationsRoute,
-} as any)
-const ApiContactsIdRoute = ApiContactsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ApiContactsRoute,
-} as any)
-const ApiCompaniesIdRoute = ApiCompaniesIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ApiCompaniesRoute,
-} as any)
-const ApiCampaignsTemplatesRoute = ApiCampaignsTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => ApiCampaignsRoute,
-} as any)
-const ApiCampaignsIdRoute = ApiCampaignsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ApiCampaignsRoute,
-} as any)
-const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
-  id: '/api/auth/register',
-  path: '/api/auth/register',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAuthOperationalCompanyRoute =
-  ApiAuthOperationalCompanyRouteImport.update({
-    id: '/api/auth/operational-company',
-    path: '/api/auth/operational-company',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiAuthMeRoute = ApiAuthMeRouteImport.update({
-  id: '/api/auth/me',
-  path: '/api/auth/me',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
-  id: '/api/auth/login',
-  path: '/api/auth/login',
+const ApiAdminSeedDemoRoute = ApiAdminSeedDemoRouteImport.update({
+  id: '/api/admin/seed-demo',
+  path: '/api/admin/seed-demo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAttendanceNotificationsRoute =
@@ -477,136 +352,237 @@ const ApiAttendanceNotificationsRoute =
     path: '/api/attendance/notifications',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiAdminSeedDemoRoute = ApiAdminSeedDemoRouteImport.update({
-  id: '/api/admin/seed-demo',
-  path: '/api/admin/seed-demo',
+const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
+  id: '/api/auth/login',
+  path: '/api/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminResetPasswordRoute = ApiAdminResetPasswordRouteImport.update({
-  id: '/api/admin/reset-password',
-  path: '/api/admin/reset-password',
+const ApiAuthMeRoute = ApiAuthMeRouteImport.update({
+  id: '/api/auth/me',
+  path: '/api/auth/me',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminAuthCheckRoute = ApiAdminAuthCheckRouteImport.update({
-  id: '/api/admin/auth-check',
-  path: '/api/admin/auth-check',
+const ApiAuthOperationalCompanyRoute =
+  ApiAuthOperationalCompanyRouteImport.update({
+    id: '/api/auth/operational-company',
+    path: '/api/auth/operational-company',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
+  id: '/api/auth/register',
+  path: '/api/auth/register',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
-  id: '/nova',
-  path: '/nova',
-  getParentRoute: () => AppCampanhasRoute,
-} as any)
-const AppCampanhasModelosRoute = AppCampanhasModelosRouteImport.update({
-  id: '/modelos',
-  path: '/modelos',
-  getParentRoute: () => AppCampanhasRoute,
-} as any)
-const AppCampanhasIdRoute = AppCampanhasIdRouteImport.update({
+const ApiCampaignsIdRoute = ApiCampaignsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => AppCampanhasRoute,
+  getParentRoute: () => ApiCampaignsRoute,
 } as any)
-const ApiWebhooksMetaWhatsappRoute = ApiWebhooksMetaWhatsappRouteImport.update({
-  id: '/whatsapp',
-  path: '/whatsapp',
-  getParentRoute: () => ApiWebhooksMetaRoute,
+const ApiCampaignsDispatchBlocksRoute =
+  ApiCampaignsDispatchBlocksRouteImport.update({
+    id: '/dispatch-blocks',
+    path: '/dispatch-blocks',
+    getParentRoute: () => ApiCampaignsRoute,
+  } as any)
+const ApiCampaignsDispatchWindowRoute =
+  ApiCampaignsDispatchWindowRouteImport.update({
+    id: '/dispatch-window',
+    path: '/dispatch-window',
+    getParentRoute: () => ApiCampaignsRoute,
+  } as any)
+const ApiCampaignsTemplatesRoute = ApiCampaignsTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => ApiCampaignsRoute,
 } as any)
-const ApiWebhooksMetaDiagnosticRoute =
-  ApiWebhooksMetaDiagnosticRouteImport.update({
-    id: '/diagnostic',
-    path: '/diagnostic',
-    getParentRoute: () => ApiWebhooksMetaRoute,
-  } as any)
-const ApiPublicWebhooksMetaRoute = ApiPublicWebhooksMetaRouteImport.update({
-  id: '/api/public/webhooks/meta',
-  path: '/api/public/webhooks/meta',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicWebhooksEvolutionRoute =
-  ApiPublicWebhooksEvolutionRouteImport.update({
-    id: '/api/public/webhooks/evolution',
-    path: '/api/public/webhooks/evolution',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiMetaMessagesSendTextRoute = ApiMetaMessagesSendTextRouteImport.update({
-  id: '/api/meta/messages/send-text',
-  path: '/api/meta/messages/send-text',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiMetaEmbeddedSignupStartRoute =
-  ApiMetaEmbeddedSignupStartRouteImport.update({
-    id: '/api/meta/embedded-signup/start',
-    path: '/api/meta/embedded-signup/start',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiMetaEmbeddedSignupCompleteRoute =
-  ApiMetaEmbeddedSignupCompleteRouteImport.update({
-    id: '/api/meta/embedded-signup/complete',
-    path: '/api/meta/embedded-signup/complete',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiMetaCoexistenceExchangeRoute =
-  ApiMetaCoexistenceExchangeRouteImport.update({
-    id: '/api/meta/coexistence/exchange',
-    path: '/api/meta/coexistence/exchange',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiMetaCoexistenceConnectRoute =
-  ApiMetaCoexistenceConnectRouteImport.update({
-    id: '/api/meta/coexistence/connect',
-    path: '/api/meta/coexistence/connect',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiMetaCoexistenceConfigRoute =
-  ApiMetaCoexistenceConfigRouteImport.update({
-    id: '/api/meta/coexistence/config',
-    path: '/api/meta/coexistence/config',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiMetaChannelsIdRoute = ApiMetaChannelsIdRouteImport.update({
+const ApiCompaniesIdRoute = ApiCompaniesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => ApiMetaChannelsRoute,
+  getParentRoute: () => ApiCompaniesRoute,
 } as any)
-const ApiMessagesSendEvolutionRoute =
-  ApiMessagesSendEvolutionRouteImport.update({
-    id: '/evolution',
-    path: '/evolution',
-    getParentRoute: () => ApiMessagesSendRoute,
-  } as any)
-const ApiMessagesMessageIdMediaRoute =
-  ApiMessagesMessageIdMediaRouteImport.update({
-    id: '/$messageId/media',
-    path: '/$messageId/media',
-    getParentRoute: () => ApiMessagesRoute,
-  } as any)
-const ApiEvolutionChannelsIdRoute = ApiEvolutionChannelsIdRouteImport.update({
+const ApiContactsIdRoute = ApiContactsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => ApiEvolutionChannelsRoute,
+  getParentRoute: () => ApiContactsRoute,
 } as any)
-const ApiConversationsIdTransferRoute =
-  ApiConversationsIdTransferRouteImport.update({
-    id: '/$id/transfer',
-    path: '/$id/transfer',
-    getParentRoute: () => ApiConversationsRoute,
-  } as any)
-const ApiConversationsIdReopenRoute =
-  ApiConversationsIdReopenRouteImport.update({
-    id: '/$id/reopen',
-    path: '/$id/reopen',
-    getParentRoute: () => ApiConversationsRoute,
-  } as any)
-const ApiConversationsIdReadRoute = ApiConversationsIdReadRouteImport.update({
-  id: '/$id/read',
-  path: '/$id/read',
+const ApiConversationsStartRoute = ApiConversationsStartRouteImport.update({
+  id: '/start',
+  path: '/start',
   getParentRoute: () => ApiConversationsRoute,
 } as any)
-const ApiConversationsIdMessagesRoute =
-  ApiConversationsIdMessagesRouteImport.update({
-    id: '/$id/messages',
-    path: '/$id/messages',
+const ApiDashboardCampaignsRoute = ApiDashboardCampaignsRouteImport.update({
+  id: '/campaigns',
+  path: '/campaigns',
+  getParentRoute: () => ApiDashboardRoute,
+} as any)
+const ApiDebugColsRoute = ApiDebugColsRouteImport.update({
+  id: '/api/debug/cols',
+  path: '/api/debug/cols',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDebugCurrentUserRoute = ApiDebugCurrentUserRouteImport.update({
+  id: '/api/debug/current-user',
+  path: '/api/debug/current-user',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDebugDbRoute = ApiDebugDbRouteImport.update({
+  id: '/api/debug/db',
+  path: '/api/debug/db',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDebugPlansSelectsRoute = ApiDebugPlansSelectsRouteImport.update({
+  id: '/api/debug/plans-selects',
+  path: '/api/debug/plans-selects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEvolutionChannelsRoute = ApiEvolutionChannelsRouteImport.update({
+  id: '/api/evolution/channels',
+  path: '/api/evolution/channels',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEvolutionRegisterChannelRoute =
+  ApiEvolutionRegisterChannelRouteImport.update({
+    id: '/api/evolution/register-channel',
+    path: '/api/evolution/register-channel',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiEvolutionSchemaCheckRoute = ApiEvolutionSchemaCheckRouteImport.update({
+  id: '/api/evolution/schema-check',
+  path: '/api/evolution/schema-check',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEvolutionStatusRoute = ApiEvolutionStatusRouteImport.update({
+  id: '/api/evolution/status',
+  path: '/api/evolution/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalChatCreateRoute = ApiInternalChatCreateRouteImport.update({
+  id: '/api/internal-chat/create',
+  path: '/api/internal-chat/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalChatListRoute = ApiInternalChatListRouteImport.update({
+  id: '/api/internal-chat/list',
+  path: '/api/internal-chat/list',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalChatMarkReadRoute = ApiInternalChatMarkReadRouteImport.update({
+  id: '/api/internal-chat/mark-read',
+  path: '/api/internal-chat/mark-read',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalChatMessagesRoute = ApiInternalChatMessagesRouteImport.update({
+  id: '/api/internal-chat/messages',
+  path: '/api/internal-chat/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalChatSendRoute = ApiInternalChatSendRouteImport.update({
+  id: '/api/internal-chat/send',
+  path: '/api/internal-chat/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalChatUnreadCountRoute =
+  ApiInternalChatUnreadCountRouteImport.update({
+    id: '/api/internal-chat/unread-count',
+    path: '/api/internal-chat/unread-count',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiInternalChatUsersRoute = ApiInternalChatUsersRouteImport.update({
+  id: '/api/internal-chat/users',
+  path: '/api/internal-chat/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalDbPoolStatusRoute = ApiInternalDbPoolStatusRouteImport.update({
+  id: '/api/internal/db-pool-status',
+  path: '/api/internal/db-pool-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
+  id: '/send',
+  path: '/send',
+  getParentRoute: () => ApiMessagesRoute,
+} as any)
+const ApiMessagesSendMediaRoute = ApiMessagesSendMediaRouteImport.update({
+  id: '/send-media',
+  path: '/send-media',
+  getParentRoute: () => ApiMessagesRoute,
+} as any)
+const ApiMetaChannelsRoute = ApiMetaChannelsRouteImport.update({
+  id: '/api/meta/channels',
+  path: '/api/meta/channels',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsersIdRoute = ApiUsersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiUsersRoute,
+} as any)
+const ApiWebhooksEvolutionRoute = ApiWebhooksEvolutionRouteImport.update({
+  id: '/api/webhooks/evolution',
+  path: '/api/webhooks/evolution',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWebhooksMetaRoute = ApiWebhooksMetaRouteImport.update({
+  id: '/api/webhooks/meta',
+  path: '/api/webhooks/meta',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdPauseRoute = ApiCampaignsIdPauseRouteImport.update({
+  id: '/pause',
+  path: '/pause',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdResumeRoute = ApiCampaignsIdResumeRouteImport.update({
+  id: '/resume',
+  path: '/resume',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdReuseRoute = ApiCampaignsIdReuseRouteImport.update({
+  id: '/reuse',
+  path: '/reuse',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdScheduleRoute = ApiCampaignsIdScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsIdStartRoute = ApiCampaignsIdStartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => ApiCampaignsIdRoute,
+} as any)
+const ApiCampaignsTemplatesIdRoute = ApiCampaignsTemplatesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiCampaignsTemplatesRoute,
+} as any)
+const ApiCampaignsTemplatesFromMetaRoute =
+  ApiCampaignsTemplatesFromMetaRouteImport.update({
+    id: '/from-meta',
+    path: '/from-meta',
+    getParentRoute: () => ApiCampaignsTemplatesRoute,
+  } as any)
+const ApiCampaignsWorkerTickRoute = ApiCampaignsWorkerTickRouteImport.update({
+  id: '/worker/tick',
+  path: '/worker/tick',
+  getParentRoute: () => ApiCampaignsRoute,
+} as any)
+const ApiCompaniesIdSubscriptionRoute =
+  ApiCompaniesIdSubscriptionRouteImport.update({
+    id: '/subscription',
+    path: '/subscription',
+    getParentRoute: () => ApiCompaniesIdRoute,
+  } as any)
+const ApiConversationsIdAssumeRoute =
+  ApiConversationsIdAssumeRouteImport.update({
+    id: '/$id/assume',
+    path: '/$id/assume',
     getParentRoute: () => ApiConversationsRoute,
   } as any)
 const ApiConversationsIdFinishRoute =
@@ -615,108 +591,130 @@ const ApiConversationsIdFinishRoute =
     path: '/$id/finish',
     getParentRoute: () => ApiConversationsRoute,
   } as any)
-const ApiConversationsIdAssumeRoute =
-  ApiConversationsIdAssumeRouteImport.update({
-    id: '/$id/assume',
-    path: '/$id/assume',
+const ApiConversationsIdMessagesRoute =
+  ApiConversationsIdMessagesRouteImport.update({
+    id: '/$id/messages',
+    path: '/$id/messages',
     getParentRoute: () => ApiConversationsRoute,
   } as any)
-const ApiCompaniesIdSubscriptionRoute =
-  ApiCompaniesIdSubscriptionRouteImport.update({
-    id: '/subscription',
-    path: '/subscription',
-    getParentRoute: () => ApiCompaniesIdRoute,
-  } as any)
-const ApiCampaignsWorkerTickRoute = ApiCampaignsWorkerTickRouteImport.update({
-  id: '/worker/tick',
-  path: '/worker/tick',
-  getParentRoute: () => ApiCampaignsRoute,
+const ApiConversationsIdReadRoute = ApiConversationsIdReadRouteImport.update({
+  id: '/$id/read',
+  path: '/$id/read',
+  getParentRoute: () => ApiConversationsRoute,
 } as any)
-const ApiCampaignsTemplatesFromMetaRoute =
-  ApiCampaignsTemplatesFromMetaRouteImport.update({
-    id: '/from-meta',
-    path: '/from-meta',
-    getParentRoute: () => ApiCampaignsTemplatesRoute,
+const ApiConversationsIdReopenRoute =
+  ApiConversationsIdReopenRouteImport.update({
+    id: '/$id/reopen',
+    path: '/$id/reopen',
+    getParentRoute: () => ApiConversationsRoute,
   } as any)
-const ApiCampaignsTemplatesIdRoute = ApiCampaignsTemplatesIdRouteImport.update({
+const ApiConversationsIdTransferRoute =
+  ApiConversationsIdTransferRouteImport.update({
+    id: '/$id/transfer',
+    path: '/$id/transfer',
+    getParentRoute: () => ApiConversationsRoute,
+  } as any)
+const ApiEvolutionChannelsIdRoute = ApiEvolutionChannelsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => ApiCampaignsTemplatesRoute,
+  getParentRoute: () => ApiEvolutionChannelsRoute,
 } as any)
-const ApiCampaignsIdStartRoute = ApiCampaignsIdStartRouteImport.update({
-  id: '/start',
-  path: '/start',
-  getParentRoute: () => ApiCampaignsIdRoute,
-} as any)
-const ApiCampaignsIdScheduleRoute = ApiCampaignsIdScheduleRouteImport.update({
-  id: '/schedule',
-  path: '/schedule',
-  getParentRoute: () => ApiCampaignsIdRoute,
-} as any)
-const ApiCampaignsIdReuseRoute = ApiCampaignsIdReuseRouteImport.update({
-  id: '/reuse',
-  path: '/reuse',
-  getParentRoute: () => ApiCampaignsIdRoute,
-} as any)
-const ApiCampaignsIdResumeRoute = ApiCampaignsIdResumeRouteImport.update({
-  id: '/resume',
-  path: '/resume',
-  getParentRoute: () => ApiCampaignsIdRoute,
-} as any)
-const ApiCampaignsIdPauseRoute = ApiCampaignsIdPauseRouteImport.update({
-  id: '/pause',
-  path: '/pause',
-  getParentRoute: () => ApiCampaignsIdRoute,
-} as any)
-const ApiCampaignsIdContactsRoute = ApiCampaignsIdContactsRouteImport.update({
-  id: '/contacts',
-  path: '/contacts',
-  getParentRoute: () => ApiCampaignsIdRoute,
-} as any)
-const ApiMetaChannelsIdTokenRoute = ApiMetaChannelsIdTokenRouteImport.update({
-  id: '/token',
-  path: '/token',
-  getParentRoute: () => ApiMetaChannelsIdRoute,
-} as any)
-const ApiMetaChannelsIdTemplatesRoute =
-  ApiMetaChannelsIdTemplatesRouteImport.update({
-    id: '/templates',
-    path: '/templates',
-    getParentRoute: () => ApiMetaChannelsIdRoute,
+const ApiMessagesMessageIdMediaRoute =
+  ApiMessagesMessageIdMediaRouteImport.update({
+    id: '/$messageId/media',
+    path: '/$messageId/media',
+    getParentRoute: () => ApiMessagesRoute,
   } as any)
-const ApiMetaChannelsIdStatusRoute = ApiMetaChannelsIdStatusRouteImport.update({
-  id: '/status',
-  path: '/status',
-  getParentRoute: () => ApiMetaChannelsIdRoute,
-} as any)
-const ApiMetaChannelsIdConnectionStatusRoute =
-  ApiMetaChannelsIdConnectionStatusRouteImport.update({
-    id: '/connection-status',
-    path: '/connection-status',
-    getParentRoute: () => ApiMetaChannelsIdRoute,
-  } as any)
-const ApiMessagesSendMediaEvolutionRoute =
-  ApiMessagesSendMediaEvolutionRouteImport.update({
-    id: '/media/evolution',
-    path: '/media/evolution',
+const ApiMessagesSendEvolutionRoute =
+  ApiMessagesSendEvolutionRouteImport.update({
+    id: '/evolution',
+    path: '/evolution',
     getParentRoute: () => ApiMessagesSendRoute,
   } as any)
-const ApiInternalChatMessagesIdAttachmentRoute =
-  ApiInternalChatMessagesIdAttachmentRouteImport.update({
-    id: '/$id/attachment',
-    path: '/$id/attachment',
-    getParentRoute: () => ApiInternalChatMessagesRoute,
+const ApiMetaChannelsIdRoute = ApiMetaChannelsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiMetaChannelsRoute,
+} as any)
+const ApiMetaCoexistenceConfigRoute =
+  ApiMetaCoexistenceConfigRouteImport.update({
+    id: '/api/meta/coexistence/config',
+    path: '/api/meta/coexistence/config',
+    getParentRoute: () => rootRouteImport,
   } as any)
-const ApiEvolutionChannelsIdStatusRoute =
-  ApiEvolutionChannelsIdStatusRouteImport.update({
-    id: '/status',
-    path: '/status',
-    getParentRoute: () => ApiEvolutionChannelsIdRoute,
+const ApiMetaCoexistenceConnectRoute =
+  ApiMetaCoexistenceConnectRouteImport.update({
+    id: '/api/meta/coexistence/connect',
+    path: '/api/meta/coexistence/connect',
+    getParentRoute: () => rootRouteImport,
   } as any)
-const ApiEvolutionChannelsIdQrcodeRoute =
-  ApiEvolutionChannelsIdQrcodeRouteImport.update({
-    id: '/qrcode',
-    path: '/qrcode',
+const ApiMetaCoexistenceExchangeRoute =
+  ApiMetaCoexistenceExchangeRouteImport.update({
+    id: '/api/meta/coexistence/exchange',
+    path: '/api/meta/coexistence/exchange',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMetaEmbeddedSignupCompleteRoute =
+  ApiMetaEmbeddedSignupCompleteRouteImport.update({
+    id: '/api/meta/embedded-signup/complete',
+    path: '/api/meta/embedded-signup/complete',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMetaEmbeddedSignupStartRoute =
+  ApiMetaEmbeddedSignupStartRouteImport.update({
+    id: '/api/meta/embedded-signup/start',
+    path: '/api/meta/embedded-signup/start',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMetaMessagesSendTextRoute = ApiMetaMessagesSendTextRouteImport.update({
+  id: '/api/meta/messages/send-text',
+  path: '/api/meta/messages/send-text',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicWebhooksEvolutionRoute =
+  ApiPublicWebhooksEvolutionRouteImport.update({
+    id: '/api/public/webhooks/evolution',
+    path: '/api/public/webhooks/evolution',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksMetaRoute = ApiPublicWebhooksMetaRouteImport.update({
+  id: '/api/public/webhooks/meta',
+  path: '/api/public/webhooks/meta',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWebhooksMetaDiagnosticRoute =
+  ApiWebhooksMetaDiagnosticRouteImport.update({
+    id: '/diagnostic',
+    path: '/diagnostic',
+    getParentRoute: () => ApiWebhooksMetaRoute,
+  } as any)
+const ApiWebhooksMetaWhatsappRoute = ApiWebhooksMetaWhatsappRouteImport.update({
+  id: '/whatsapp',
+  path: '/whatsapp',
+  getParentRoute: () => ApiWebhooksMetaRoute,
+} as any)
+const ApiCampaignsIdContactsContactRowIdRoute =
+  ApiCampaignsIdContactsContactRowIdRouteImport.update({
+    id: '/$contactRowId',
+    path: '/$contactRowId',
+    getParentRoute: () => ApiCampaignsIdContactsRoute,
+  } as any)
+const ApiCampaignsIdImportConfirmRoute =
+  ApiCampaignsIdImportConfirmRouteImport.update({
+    id: '/import/confirm',
+    path: '/import/confirm',
+    getParentRoute: () => ApiCampaignsIdRoute,
+  } as any)
+const ApiCampaignsIdImportPreviewRoute =
+  ApiCampaignsIdImportPreviewRouteImport.update({
+    id: '/import/preview',
+    path: '/import/preview',
+    getParentRoute: () => ApiCampaignsIdRoute,
+  } as any)
+const ApiEvolutionChannelsIdConnectRoute =
+  ApiEvolutionChannelsIdConnectRouteImport.update({
+    id: '/connect',
+    path: '/connect',
     getParentRoute: () => ApiEvolutionChannelsIdRoute,
   } as any)
 const ApiEvolutionChannelsIdDisconnectRoute =
@@ -725,30 +723,52 @@ const ApiEvolutionChannelsIdDisconnectRoute =
     path: '/disconnect',
     getParentRoute: () => ApiEvolutionChannelsIdRoute,
   } as any)
-const ApiEvolutionChannelsIdConnectRoute =
-  ApiEvolutionChannelsIdConnectRouteImport.update({
-    id: '/connect',
-    path: '/connect',
+const ApiEvolutionChannelsIdQrcodeRoute =
+  ApiEvolutionChannelsIdQrcodeRouteImport.update({
+    id: '/qrcode',
+    path: '/qrcode',
     getParentRoute: () => ApiEvolutionChannelsIdRoute,
   } as any)
-const ApiCampaignsIdImportPreviewRoute =
-  ApiCampaignsIdImportPreviewRouteImport.update({
-    id: '/import/preview',
-    path: '/import/preview',
-    getParentRoute: () => ApiCampaignsIdRoute,
+const ApiEvolutionChannelsIdStatusRoute =
+  ApiEvolutionChannelsIdStatusRouteImport.update({
+    id: '/status',
+    path: '/status',
+    getParentRoute: () => ApiEvolutionChannelsIdRoute,
   } as any)
-const ApiCampaignsIdImportConfirmRoute =
-  ApiCampaignsIdImportConfirmRouteImport.update({
-    id: '/import/confirm',
-    path: '/import/confirm',
-    getParentRoute: () => ApiCampaignsIdRoute,
+const ApiInternalChatMessagesIdAttachmentRoute =
+  ApiInternalChatMessagesIdAttachmentRouteImport.update({
+    id: '/$id/attachment',
+    path: '/$id/attachment',
+    getParentRoute: () => ApiInternalChatMessagesRoute,
   } as any)
-const ApiCampaignsIdContactsContactRowIdRoute =
-  ApiCampaignsIdContactsContactRowIdRouteImport.update({
-    id: '/$contactRowId',
-    path: '/$contactRowId',
-    getParentRoute: () => ApiCampaignsIdContactsRoute,
+const ApiMessagesSendMediaEvolutionRoute =
+  ApiMessagesSendMediaEvolutionRouteImport.update({
+    id: '/media/evolution',
+    path: '/media/evolution',
+    getParentRoute: () => ApiMessagesSendRoute,
   } as any)
+const ApiMetaChannelsIdConnectionStatusRoute =
+  ApiMetaChannelsIdConnectionStatusRouteImport.update({
+    id: '/connection-status',
+    path: '/connection-status',
+    getParentRoute: () => ApiMetaChannelsIdRoute,
+  } as any)
+const ApiMetaChannelsIdStatusRoute = ApiMetaChannelsIdStatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => ApiMetaChannelsIdRoute,
+} as any)
+const ApiMetaChannelsIdTemplatesRoute =
+  ApiMetaChannelsIdTemplatesRouteImport.update({
+    id: '/templates',
+    path: '/templates',
+    getParentRoute: () => ApiMetaChannelsIdRoute,
+  } as any)
+const ApiMetaChannelsIdTokenRoute = ApiMetaChannelsIdTokenRouteImport.update({
+  id: '/token',
+  path: '/token',
+  getParentRoute: () => ApiMetaChannelsIdRoute,
+} as any)
 const ApiMetaChannelsIdTemplatesSyncRoute =
   ApiMetaChannelsIdTemplatesSyncRouteImport.update({
     id: '/sync',
@@ -769,17 +789,17 @@ export interface FileRoutesByFullPath {
   '/canais': typeof AppCanaisRoute
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
-  '/horarios-acesso': typeof AppHorariosAcessoRoute
-  '/fluxos': typeof AppFluxosRoute
-  '/lembretes': typeof AppLembretesRoute
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
+  '/fluxos': typeof AppFluxosRoute
   '/grupos-internos': typeof AppGruposInternosRoute
+  '/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/lembretes': typeof AppLembretesRoute
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
-  '/api/attendants': typeof ApiAttendantsRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
@@ -792,6 +812,7 @@ export interface FileRoutesByFullPath {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -803,6 +824,8 @@ export interface FileRoutesByFullPath {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
+  '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
@@ -888,17 +911,17 @@ export interface FileRoutesByTo {
   '/canais': typeof AppCanaisRoute
   '/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/configuracoes': typeof AppConfiguracoesRoute
-  '/horarios-acesso': typeof AppHorariosAcessoRoute
-  '/fluxos': typeof AppFluxosRoute
-  '/lembretes': typeof AppLembretesRoute
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
+  '/fluxos': typeof AppFluxosRoute
   '/grupos-internos': typeof AppGruposInternosRoute
+  '/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/lembretes': typeof AppLembretesRoute
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
-  '/api/attendants': typeof ApiAttendantsRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
@@ -911,6 +934,7 @@ export interface FileRoutesByTo {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -922,6 +946,8 @@ export interface FileRoutesByTo {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
+  '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
@@ -1010,17 +1036,17 @@ export interface FileRoutesById {
   '/_app/canais': typeof AppCanaisRoute
   '/_app/comunicacao-interna': typeof AppComunicacaoInternaRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
-  '/_app/horarios-acesso': typeof AppHorariosAcessoRoute
-  '/_app/fluxos': typeof AppFluxosRoute
-  '/_app/lembretes': typeof AppLembretesRoute
   '/_app/contatos': typeof AppContatosRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/empresas': typeof AppEmpresasRoute
+  '/_app/fluxos': typeof AppFluxosRoute
   '/_app/grupos-internos': typeof AppGruposInternosRoute
+  '/_app/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/_app/lembretes': typeof AppLembretesRoute
   '/_app/logs': typeof AppLogsRoute
   '/_app/usuarios': typeof AppUsuariosRoute
-  '/api/attendants': typeof ApiAttendantsRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
@@ -1033,6 +1059,7 @@ export interface FileRoutesById {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/_app/campanhas/$id': typeof AppCampanhasIdRoute
+  '/_app/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
   '/_app/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/_app/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -1044,6 +1071,8 @@ export interface FileRoutesById {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
+  '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
@@ -1132,17 +1161,17 @@ export interface FileRouteTypes {
     | '/canais'
     | '/comunicacao-interna'
     | '/configuracoes'
-    | '/horarios-acesso'
-    | '/fluxos'
-    | '/lembretes'
     | '/contatos'
     | '/dashboard'
     | '/empresas'
+    | '/fluxos'
     | '/grupos-internos'
+    | '/horarios-acesso'
+    | '/lembretes'
     | '/logs'
     | '/usuarios'
-    | '/api/attendants'
     | '/api/access-hours'
+    | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
@@ -1155,6 +1184,7 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
+    | '/campanhas/bloqueados'
     | '/campanhas/modelos'
     | '/campanhas/nova'
     | '/api/admin/auth-check'
@@ -1166,6 +1196,8 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/dispatch-blocks'
+    | '/api/campaigns/dispatch-window'
     | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
@@ -1251,17 +1283,17 @@ export interface FileRouteTypes {
     | '/canais'
     | '/comunicacao-interna'
     | '/configuracoes'
-    | '/horarios-acesso'
-    | '/fluxos'
-    | '/lembretes'
     | '/contatos'
     | '/dashboard'
     | '/empresas'
+    | '/fluxos'
     | '/grupos-internos'
+    | '/horarios-acesso'
+    | '/lembretes'
     | '/logs'
     | '/usuarios'
-    | '/api/attendants'
     | '/api/access-hours'
+    | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
@@ -1274,6 +1306,7 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
+    | '/campanhas/bloqueados'
     | '/campanhas/modelos'
     | '/campanhas/nova'
     | '/api/admin/auth-check'
@@ -1285,6 +1318,8 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/dispatch-blocks'
+    | '/api/campaigns/dispatch-window'
     | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
@@ -1372,17 +1407,17 @@ export interface FileRouteTypes {
     | '/_app/canais'
     | '/_app/comunicacao-interna'
     | '/_app/configuracoes'
-    | '/_app/horarios-acesso'
-    | '/_app/fluxos'
-    | '/_app/lembretes'
     | '/_app/contatos'
     | '/_app/dashboard'
     | '/_app/empresas'
+    | '/_app/fluxos'
     | '/_app/grupos-internos'
+    | '/_app/horarios-acesso'
+    | '/_app/lembretes'
     | '/_app/logs'
     | '/_app/usuarios'
-    | '/api/attendants'
     | '/api/access-hours'
+    | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
@@ -1395,6 +1430,7 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/_app/campanhas/$id'
+    | '/_app/campanhas/bloqueados'
     | '/_app/campanhas/modelos'
     | '/_app/campanhas/nova'
     | '/api/admin/auth-check'
@@ -1406,6 +1442,8 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/dispatch-blocks'
+    | '/api/campaigns/dispatch-window'
     | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
@@ -1488,8 +1526,8 @@ export interface RootRouteChildren {
   PoliticaDePrivacidadeRoute: typeof PoliticaDePrivacidadeRoute
   RegisterRoute: typeof RegisterRoute
   TermosDeUsoRoute: typeof TermosDeUsoRoute
-  ApiAttendantsRoute: typeof ApiAttendantsRoute
   ApiAccessHoursRoute: typeof ApiAccessHoursRoute
+  ApiAttendantsRoute: typeof ApiAttendantsRoute
   ApiAutomationFlowsRoute: typeof ApiAutomationFlowsRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
@@ -1540,39 +1578,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/termos-de-uso': {
-      id: '/termos-de-uso'
-      path: '/termos-de-uso'
-      fullPath: '/termos-de-uso'
-      preLoaderRoute: typeof TermosDeUsoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/register': {
-      id: '/register'
-      path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof RegisterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/politica-de-privacidade': {
-      id: '/politica-de-privacidade'
-      path: '/politica-de-privacidade'
-      fullPath: '/politica-de-privacidade'
-      preLoaderRoute: typeof PoliticaDePrivacidadeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/exclusao-de-dados': {
-      id: '/exclusao-de-dados'
-      path: '/exclusao-de-dados'
-      fullPath: '/exclusao-de-dados'
-      preLoaderRoute: typeof ExclusaoDeDadosRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -1582,193 +1592,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/exclusao-de-dados': {
+      id: '/exclusao-de-dados'
+      path: '/exclusao-de-dados'
+      fullPath: '/exclusao-de-dados'
+      preLoaderRoute: typeof ExclusaoDeDadosRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/webhook/evolution': {
-      id: '/webhook/evolution'
-      path: '/webhook/evolution'
-      fullPath: '/webhook/evolution'
-      preLoaderRoute: typeof WebhookEvolutionRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/users': {
-      id: '/api/users'
-      path: '/api/users'
-      fullPath: '/api/users'
-      preLoaderRoute: typeof ApiUsersRouteImport
+    '/politica-de-privacidade': {
+      id: '/politica-de-privacidade'
+      path: '/politica-de-privacidade'
+      fullPath: '/politica-de-privacidade'
+      preLoaderRoute: typeof PoliticaDePrivacidadeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/plans': {
-      id: '/api/plans'
-      path: '/api/plans'
-      fullPath: '/api/plans'
-      preLoaderRoute: typeof ApiPlansRouteImport
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/messages': {
-      id: '/api/messages'
-      path: '/api/messages'
-      fullPath: '/api/messages'
-      preLoaderRoute: typeof ApiMessagesRouteImport
+    '/termos-de-uso': {
+      id: '/termos-de-uso'
+      path: '/termos-de-uso'
+      fullPath: '/termos-de-uso'
+      preLoaderRoute: typeof TermosDeUsoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/health': {
-      id: '/api/health'
-      path: '/api/health'
-      fullPath: '/api/health'
-      preLoaderRoute: typeof ApiHealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/dashboard': {
-      id: '/api/dashboard'
-      path: '/api/dashboard'
-      fullPath: '/api/dashboard'
-      preLoaderRoute: typeof ApiDashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/conversations': {
-      id: '/api/conversations'
-      path: '/api/conversations'
-      fullPath: '/api/conversations'
-      preLoaderRoute: typeof ApiConversationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/contacts': {
-      id: '/api/contacts'
-      path: '/api/contacts'
-      fullPath: '/api/contacts'
-      preLoaderRoute: typeof ApiContactsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/companies': {
-      id: '/api/companies'
-      path: '/api/companies'
-      fullPath: '/api/companies'
-      preLoaderRoute: typeof ApiCompaniesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/campaigns': {
-      id: '/api/campaigns'
-      path: '/api/campaigns'
-      fullPath: '/api/campaigns'
-      preLoaderRoute: typeof ApiCampaignsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/attendants': {
-      id: '/api/attendants'
-      path: '/api/attendants'
-      fullPath: '/api/attendants'
-      preLoaderRoute: typeof ApiAttendantsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/usuarios': {
-      id: '/_app/usuarios'
-      path: '/usuarios'
-      fullPath: '/usuarios'
-      preLoaderRoute: typeof AppUsuariosRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/logs': {
-      id: '/_app/logs'
-      path: '/logs'
-      fullPath: '/logs'
-      preLoaderRoute: typeof AppLogsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/grupos-internos': {
-      id: '/_app/grupos-internos'
-      path: '/grupos-internos'
-      fullPath: '/grupos-internos'
-      preLoaderRoute: typeof AppGruposInternosRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/empresas': {
-      id: '/_app/empresas'
-      path: '/empresas'
-      fullPath: '/empresas'
-      preLoaderRoute: typeof AppEmpresasRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/dashboard': {
-      id: '/_app/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AppDashboardRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/contatos': {
-      id: '/_app/contatos'
-      path: '/contatos'
-      fullPath: '/contatos'
-      preLoaderRoute: typeof AppContatosRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/configuracoes': {
-      id: '/_app/configuracoes'
-      path: '/configuracoes'
-      fullPath: '/configuracoes'
-      preLoaderRoute: typeof AppConfiguracoesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/horarios-acesso': {
-      id: '/_app/horarios-acesso'
-      path: '/horarios-acesso'
-      fullPath: '/horarios-acesso'
-      preLoaderRoute: typeof AppHorariosAcessoRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/fluxos': {
-      id: '/_app/fluxos'
-      path: '/fluxos'
-      fullPath: '/fluxos'
-      preLoaderRoute: typeof AppFluxosRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/lembretes': {
-      id: '/_app/lembretes'
-      path: '/lembretes'
-      fullPath: '/lembretes'
-      preLoaderRoute: typeof AppLembretesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/api/access-hours': {
-      id: '/api/access-hours'
-      path: '/api/access-hours'
-      fullPath: '/api/access-hours'
-      preLoaderRoute: typeof ApiAccessHoursRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/automation-flows': {
-      id: '/api/automation-flows'
-      path: '/api/automation-flows'
-      fullPath: '/api/automation-flows'
-      preLoaderRoute: typeof ApiAutomationFlowsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/comunicacao-interna': {
-      id: '/_app/comunicacao-interna'
-      path: '/comunicacao-interna'
-      fullPath: '/comunicacao-interna'
-      preLoaderRoute: typeof AppComunicacaoInternaRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/canais': {
-      id: '/_app/canais'
-      path: '/canais'
-      fullPath: '/canais'
-      preLoaderRoute: typeof AppCanaisRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/campanhas': {
-      id: '/_app/campanhas'
-      path: '/campanhas'
-      fullPath: '/campanhas'
-      preLoaderRoute: typeof AppCampanhasRouteImport
+    '/_app/atendimento': {
+      id: '/_app/atendimento'
+      path: '/atendimento'
+      fullPath: '/atendimento'
+      preLoaderRoute: typeof AppAtendimentoRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/automacoes': {
@@ -1778,284 +1641,193 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAutomacoesRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/atendimento': {
-      id: '/_app/atendimento'
-      path: '/atendimento'
-      fullPath: '/atendimento'
-      preLoaderRoute: typeof AppAtendimentoRouteImport
+    '/_app/campanhas': {
+      id: '/_app/campanhas'
+      path: '/campanhas'
+      fullPath: '/campanhas'
+      preLoaderRoute: typeof AppCampanhasRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/canais': {
+      id: '/_app/canais'
+      path: '/canais'
+      fullPath: '/canais'
+      preLoaderRoute: typeof AppCanaisRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/comunicacao-interna': {
+      id: '/_app/comunicacao-interna'
+      path: '/comunicacao-interna'
+      fullPath: '/comunicacao-interna'
+      preLoaderRoute: typeof AppComunicacaoInternaRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/configuracoes': {
+      id: '/_app/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof AppConfiguracoesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/contatos': {
+      id: '/_app/contatos'
+      path: '/contatos'
+      fullPath: '/contatos'
+      preLoaderRoute: typeof AppContatosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/dashboard': {
+      id: '/_app/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/empresas': {
+      id: '/_app/empresas'
+      path: '/empresas'
+      fullPath: '/empresas'
+      preLoaderRoute: typeof AppEmpresasRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/fluxos': {
+      id: '/_app/fluxos'
+      path: '/fluxos'
+      fullPath: '/fluxos'
+      preLoaderRoute: typeof AppFluxosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/grupos-internos': {
+      id: '/_app/grupos-internos'
+      path: '/grupos-internos'
+      fullPath: '/grupos-internos'
+      preLoaderRoute: typeof AppGruposInternosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/horarios-acesso': {
+      id: '/_app/horarios-acesso'
+      path: '/horarios-acesso'
+      fullPath: '/horarios-acesso'
+      preLoaderRoute: typeof AppHorariosAcessoRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/lembretes': {
+      id: '/_app/lembretes'
+      path: '/lembretes'
+      fullPath: '/lembretes'
+      preLoaderRoute: typeof AppLembretesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/logs': {
+      id: '/_app/logs'
+      path: '/logs'
+      fullPath: '/logs'
+      preLoaderRoute: typeof AppLogsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/usuarios': {
+      id: '/_app/usuarios'
+      path: '/usuarios'
+      fullPath: '/usuarios'
+      preLoaderRoute: typeof AppUsuariosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/access-hours': {
+      id: '/api/access-hours'
+      path: '/api/access-hours'
+      fullPath: '/api/access-hours'
+      preLoaderRoute: typeof ApiAccessHoursRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/attendants': {
+      id: '/api/attendants'
+      path: '/api/attendants'
+      fullPath: '/api/attendants'
+      preLoaderRoute: typeof ApiAttendantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/automation-flows': {
+      id: '/api/automation-flows'
+      path: '/api/automation-flows'
+      fullPath: '/api/automation-flows'
+      preLoaderRoute: typeof ApiAutomationFlowsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/campaigns': {
+      id: '/api/campaigns'
+      path: '/api/campaigns'
+      fullPath: '/api/campaigns'
+      preLoaderRoute: typeof ApiCampaignsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/companies': {
+      id: '/api/companies'
+      path: '/api/companies'
+      fullPath: '/api/companies'
+      preLoaderRoute: typeof ApiCompaniesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/contacts': {
+      id: '/api/contacts'
+      path: '/api/contacts'
+      fullPath: '/api/contacts'
+      preLoaderRoute: typeof ApiContactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/conversations': {
+      id: '/api/conversations'
+      path: '/api/conversations'
+      fullPath: '/api/conversations'
+      preLoaderRoute: typeof ApiConversationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/dashboard': {
+      id: '/api/dashboard'
+      path: '/api/dashboard'
+      fullPath: '/api/dashboard'
+      preLoaderRoute: typeof ApiDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/messages': {
+      id: '/api/messages'
+      path: '/api/messages'
+      fullPath: '/api/messages'
+      preLoaderRoute: typeof ApiMessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/plans': {
+      id: '/api/plans'
+      path: '/api/plans'
+      fullPath: '/api/plans'
+      preLoaderRoute: typeof ApiPlansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/users': {
+      id: '/api/users'
+      path: '/api/users'
+      fullPath: '/api/users'
+      preLoaderRoute: typeof ApiUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/webhook/evolution': {
+      id: '/webhook/evolution'
+      path: '/webhook/evolution'
+      fullPath: '/webhook/evolution'
+      preLoaderRoute: typeof WebhookEvolutionRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/campanhas/': {
       id: '/_app/campanhas/'
       path: '/'
       fullPath: '/campanhas/'
       preLoaderRoute: typeof AppCampanhasIndexRouteImport
-      parentRoute: typeof AppCampanhasRoute
-    }
-    '/api/webhooks/meta': {
-      id: '/api/webhooks/meta'
-      path: '/api/webhooks/meta'
-      fullPath: '/api/webhooks/meta'
-      preLoaderRoute: typeof ApiWebhooksMetaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/webhooks/evolution': {
-      id: '/api/webhooks/evolution'
-      path: '/api/webhooks/evolution'
-      fullPath: '/api/webhooks/evolution'
-      preLoaderRoute: typeof ApiWebhooksEvolutionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/users/$id': {
-      id: '/api/users/$id'
-      path: '/$id'
-      fullPath: '/api/users/$id'
-      preLoaderRoute: typeof ApiUsersIdRouteImport
-      parentRoute: typeof ApiUsersRoute
-    }
-    '/api/meta/channels': {
-      id: '/api/meta/channels'
-      path: '/api/meta/channels'
-      fullPath: '/api/meta/channels'
-      preLoaderRoute: typeof ApiMetaChannelsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/messages/send-media': {
-      id: '/api/messages/send-media'
-      path: '/send-media'
-      fullPath: '/api/messages/send-media'
-      preLoaderRoute: typeof ApiMessagesSendMediaRouteImport
-      parentRoute: typeof ApiMessagesRoute
-    }
-    '/api/messages/send': {
-      id: '/api/messages/send'
-      path: '/send'
-      fullPath: '/api/messages/send'
-      preLoaderRoute: typeof ApiMessagesSendRouteImport
-      parentRoute: typeof ApiMessagesRoute
-    }
-    '/api/internal/db-pool-status': {
-      id: '/api/internal/db-pool-status'
-      path: '/api/internal/db-pool-status'
-      fullPath: '/api/internal/db-pool-status'
-      preLoaderRoute: typeof ApiInternalDbPoolStatusRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/internal-chat/users': {
-      id: '/api/internal-chat/users'
-      path: '/api/internal-chat/users'
-      fullPath: '/api/internal-chat/users'
-      preLoaderRoute: typeof ApiInternalChatUsersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/internal-chat/unread-count': {
-      id: '/api/internal-chat/unread-count'
-      path: '/api/internal-chat/unread-count'
-      fullPath: '/api/internal-chat/unread-count'
-      preLoaderRoute: typeof ApiInternalChatUnreadCountRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/internal-chat/send': {
-      id: '/api/internal-chat/send'
-      path: '/api/internal-chat/send'
-      fullPath: '/api/internal-chat/send'
-      preLoaderRoute: typeof ApiInternalChatSendRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/internal-chat/messages': {
-      id: '/api/internal-chat/messages'
-      path: '/api/internal-chat/messages'
-      fullPath: '/api/internal-chat/messages'
-      preLoaderRoute: typeof ApiInternalChatMessagesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/internal-chat/mark-read': {
-      id: '/api/internal-chat/mark-read'
-      path: '/api/internal-chat/mark-read'
-      fullPath: '/api/internal-chat/mark-read'
-      preLoaderRoute: typeof ApiInternalChatMarkReadRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/internal-chat/list': {
-      id: '/api/internal-chat/list'
-      path: '/api/internal-chat/list'
-      fullPath: '/api/internal-chat/list'
-      preLoaderRoute: typeof ApiInternalChatListRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/internal-chat/create': {
-      id: '/api/internal-chat/create'
-      path: '/api/internal-chat/create'
-      fullPath: '/api/internal-chat/create'
-      preLoaderRoute: typeof ApiInternalChatCreateRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/evolution/status': {
-      id: '/api/evolution/status'
-      path: '/api/evolution/status'
-      fullPath: '/api/evolution/status'
-      preLoaderRoute: typeof ApiEvolutionStatusRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/evolution/schema-check': {
-      id: '/api/evolution/schema-check'
-      path: '/api/evolution/schema-check'
-      fullPath: '/api/evolution/schema-check'
-      preLoaderRoute: typeof ApiEvolutionSchemaCheckRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/evolution/register-channel': {
-      id: '/api/evolution/register-channel'
-      path: '/api/evolution/register-channel'
-      fullPath: '/api/evolution/register-channel'
-      preLoaderRoute: typeof ApiEvolutionRegisterChannelRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/evolution/channels': {
-      id: '/api/evolution/channels'
-      path: '/api/evolution/channels'
-      fullPath: '/api/evolution/channels'
-      preLoaderRoute: typeof ApiEvolutionChannelsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/debug/plans-selects': {
-      id: '/api/debug/plans-selects'
-      path: '/api/debug/plans-selects'
-      fullPath: '/api/debug/plans-selects'
-      preLoaderRoute: typeof ApiDebugPlansSelectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/debug/db': {
-      id: '/api/debug/db'
-      path: '/api/debug/db'
-      fullPath: '/api/debug/db'
-      preLoaderRoute: typeof ApiDebugDbRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/debug/current-user': {
-      id: '/api/debug/current-user'
-      path: '/api/debug/current-user'
-      fullPath: '/api/debug/current-user'
-      preLoaderRoute: typeof ApiDebugCurrentUserRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/debug/cols': {
-      id: '/api/debug/cols'
-      path: '/api/debug/cols'
-      fullPath: '/api/debug/cols'
-      preLoaderRoute: typeof ApiDebugColsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/dashboard/campaigns': {
-      id: '/api/dashboard/campaigns'
-      path: '/campaigns'
-      fullPath: '/api/dashboard/campaigns'
-      preLoaderRoute: typeof ApiDashboardCampaignsRouteImport
-      parentRoute: typeof ApiDashboardRoute
-    }
-    '/api/conversations/start': {
-      id: '/api/conversations/start'
-      path: '/start'
-      fullPath: '/api/conversations/start'
-      preLoaderRoute: typeof ApiConversationsStartRouteImport
-      parentRoute: typeof ApiConversationsRoute
-    }
-    '/api/contacts/$id': {
-      id: '/api/contacts/$id'
-      path: '/$id'
-      fullPath: '/api/contacts/$id'
-      preLoaderRoute: typeof ApiContactsIdRouteImport
-      parentRoute: typeof ApiContactsRoute
-    }
-    '/api/companies/$id': {
-      id: '/api/companies/$id'
-      path: '/$id'
-      fullPath: '/api/companies/$id'
-      preLoaderRoute: typeof ApiCompaniesIdRouteImport
-      parentRoute: typeof ApiCompaniesRoute
-    }
-    '/api/campaigns/templates': {
-      id: '/api/campaigns/templates'
-      path: '/templates'
-      fullPath: '/api/campaigns/templates'
-      preLoaderRoute: typeof ApiCampaignsTemplatesRouteImport
-      parentRoute: typeof ApiCampaignsRoute
-    }
-    '/api/campaigns/$id': {
-      id: '/api/campaigns/$id'
-      path: '/$id'
-      fullPath: '/api/campaigns/$id'
-      preLoaderRoute: typeof ApiCampaignsIdRouteImport
-      parentRoute: typeof ApiCampaignsRoute
-    }
-    '/api/auth/register': {
-      id: '/api/auth/register'
-      path: '/api/auth/register'
-      fullPath: '/api/auth/register'
-      preLoaderRoute: typeof ApiAuthRegisterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/auth/operational-company': {
-      id: '/api/auth/operational-company'
-      path: '/api/auth/operational-company'
-      fullPath: '/api/auth/operational-company'
-      preLoaderRoute: typeof ApiAuthOperationalCompanyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/auth/me': {
-      id: '/api/auth/me'
-      path: '/api/auth/me'
-      fullPath: '/api/auth/me'
-      preLoaderRoute: typeof ApiAuthMeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/auth/login': {
-      id: '/api/auth/login'
-      path: '/api/auth/login'
-      fullPath: '/api/auth/login'
-      preLoaderRoute: typeof ApiAuthLoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/attendance/notifications': {
-      id: '/api/attendance/notifications'
-      path: '/api/attendance/notifications'
-      fullPath: '/api/attendance/notifications'
-      preLoaderRoute: typeof ApiAttendanceNotificationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/admin/seed-demo': {
-      id: '/api/admin/seed-demo'
-      path: '/api/admin/seed-demo'
-      fullPath: '/api/admin/seed-demo'
-      preLoaderRoute: typeof ApiAdminSeedDemoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/admin/reset-password': {
-      id: '/api/admin/reset-password'
-      path: '/api/admin/reset-password'
-      fullPath: '/api/admin/reset-password'
-      preLoaderRoute: typeof ApiAdminResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/admin/auth-check': {
-      id: '/api/admin/auth-check'
-      path: '/api/admin/auth-check'
-      fullPath: '/api/admin/auth-check'
-      preLoaderRoute: typeof ApiAdminAuthCheckRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/campanhas/nova': {
-      id: '/_app/campanhas/nova'
-      path: '/nova'
-      fullPath: '/campanhas/nova'
-      preLoaderRoute: typeof AppCampanhasNovaRouteImport
-      parentRoute: typeof AppCampanhasRoute
-    }
-    '/_app/campanhas/modelos': {
-      id: '/_app/campanhas/modelos'
-      path: '/modelos'
-      fullPath: '/campanhas/modelos'
-      preLoaderRoute: typeof AppCampanhasModelosRouteImport
       parentRoute: typeof AppCampanhasRoute
     }
     '/_app/campanhas/$id': {
@@ -2065,200 +1837,298 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampanhasIdRouteImport
       parentRoute: typeof AppCampanhasRoute
     }
-    '/api/webhooks/meta/whatsapp': {
-      id: '/api/webhooks/meta/whatsapp'
-      path: '/whatsapp'
-      fullPath: '/api/webhooks/meta/whatsapp'
-      preLoaderRoute: typeof ApiWebhooksMetaWhatsappRouteImport
-      parentRoute: typeof ApiWebhooksMetaRoute
+    '/_app/campanhas/bloqueados': {
+      id: '/_app/campanhas/bloqueados'
+      path: '/bloqueados'
+      fullPath: '/campanhas/bloqueados'
+      preLoaderRoute: typeof AppCampanhasBloqueadosRouteImport
+      parentRoute: typeof AppCampanhasRoute
     }
-    '/api/webhooks/meta/diagnostic': {
-      id: '/api/webhooks/meta/diagnostic'
-      path: '/diagnostic'
-      fullPath: '/api/webhooks/meta/diagnostic'
-      preLoaderRoute: typeof ApiWebhooksMetaDiagnosticRouteImport
-      parentRoute: typeof ApiWebhooksMetaRoute
+    '/_app/campanhas/modelos': {
+      id: '/_app/campanhas/modelos'
+      path: '/modelos'
+      fullPath: '/campanhas/modelos'
+      preLoaderRoute: typeof AppCampanhasModelosRouteImport
+      parentRoute: typeof AppCampanhasRoute
     }
-    '/api/public/webhooks/meta': {
-      id: '/api/public/webhooks/meta'
-      path: '/api/public/webhooks/meta'
-      fullPath: '/api/public/webhooks/meta'
-      preLoaderRoute: typeof ApiPublicWebhooksMetaRouteImport
+    '/_app/campanhas/nova': {
+      id: '/_app/campanhas/nova'
+      path: '/nova'
+      fullPath: '/campanhas/nova'
+      preLoaderRoute: typeof AppCampanhasNovaRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
+    '/api/admin/auth-check': {
+      id: '/api/admin/auth-check'
+      path: '/api/admin/auth-check'
+      fullPath: '/api/admin/auth-check'
+      preLoaderRoute: typeof ApiAdminAuthCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/webhooks/evolution': {
-      id: '/api/public/webhooks/evolution'
-      path: '/api/public/webhooks/evolution'
-      fullPath: '/api/public/webhooks/evolution'
-      preLoaderRoute: typeof ApiPublicWebhooksEvolutionRouteImport
+    '/api/admin/reset-password': {
+      id: '/api/admin/reset-password'
+      path: '/api/admin/reset-password'
+      fullPath: '/api/admin/reset-password'
+      preLoaderRoute: typeof ApiAdminResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/meta/messages/send-text': {
-      id: '/api/meta/messages/send-text'
-      path: '/api/meta/messages/send-text'
-      fullPath: '/api/meta/messages/send-text'
-      preLoaderRoute: typeof ApiMetaMessagesSendTextRouteImport
+    '/api/admin/seed-demo': {
+      id: '/api/admin/seed-demo'
+      path: '/api/admin/seed-demo'
+      fullPath: '/api/admin/seed-demo'
+      preLoaderRoute: typeof ApiAdminSeedDemoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/meta/embedded-signup/start': {
-      id: '/api/meta/embedded-signup/start'
-      path: '/api/meta/embedded-signup/start'
-      fullPath: '/api/meta/embedded-signup/start'
-      preLoaderRoute: typeof ApiMetaEmbeddedSignupStartRouteImport
+    '/api/attendance/notifications': {
+      id: '/api/attendance/notifications'
+      path: '/api/attendance/notifications'
+      fullPath: '/api/attendance/notifications'
+      preLoaderRoute: typeof ApiAttendanceNotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/meta/embedded-signup/complete': {
-      id: '/api/meta/embedded-signup/complete'
-      path: '/api/meta/embedded-signup/complete'
-      fullPath: '/api/meta/embedded-signup/complete'
-      preLoaderRoute: typeof ApiMetaEmbeddedSignupCompleteRouteImport
+    '/api/auth/login': {
+      id: '/api/auth/login'
+      path: '/api/auth/login'
+      fullPath: '/api/auth/login'
+      preLoaderRoute: typeof ApiAuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/meta/coexistence/exchange': {
-      id: '/api/meta/coexistence/exchange'
-      path: '/api/meta/coexistence/exchange'
-      fullPath: '/api/meta/coexistence/exchange'
-      preLoaderRoute: typeof ApiMetaCoexistenceExchangeRouteImport
+    '/api/auth/me': {
+      id: '/api/auth/me'
+      path: '/api/auth/me'
+      fullPath: '/api/auth/me'
+      preLoaderRoute: typeof ApiAuthMeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/meta/coexistence/connect': {
-      id: '/api/meta/coexistence/connect'
-      path: '/api/meta/coexistence/connect'
-      fullPath: '/api/meta/coexistence/connect'
-      preLoaderRoute: typeof ApiMetaCoexistenceConnectRouteImport
+    '/api/auth/operational-company': {
+      id: '/api/auth/operational-company'
+      path: '/api/auth/operational-company'
+      fullPath: '/api/auth/operational-company'
+      preLoaderRoute: typeof ApiAuthOperationalCompanyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/meta/coexistence/config': {
-      id: '/api/meta/coexistence/config'
-      path: '/api/meta/coexistence/config'
-      fullPath: '/api/meta/coexistence/config'
-      preLoaderRoute: typeof ApiMetaCoexistenceConfigRouteImport
+    '/api/auth/register': {
+      id: '/api/auth/register'
+      path: '/api/auth/register'
+      fullPath: '/api/auth/register'
+      preLoaderRoute: typeof ApiAuthRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/meta/channels/$id': {
-      id: '/api/meta/channels/$id'
+    '/api/campaigns/$id': {
+      id: '/api/campaigns/$id'
       path: '/$id'
-      fullPath: '/api/meta/channels/$id'
-      preLoaderRoute: typeof ApiMetaChannelsIdRouteImport
-      parentRoute: typeof ApiMetaChannelsRoute
-    }
-    '/api/messages/send/evolution': {
-      id: '/api/messages/send/evolution'
-      path: '/evolution'
-      fullPath: '/api/messages/send/evolution'
-      preLoaderRoute: typeof ApiMessagesSendEvolutionRouteImport
-      parentRoute: typeof ApiMessagesSendRoute
-    }
-    '/api/messages/$messageId/media': {
-      id: '/api/messages/$messageId/media'
-      path: '/$messageId/media'
-      fullPath: '/api/messages/$messageId/media'
-      preLoaderRoute: typeof ApiMessagesMessageIdMediaRouteImport
-      parentRoute: typeof ApiMessagesRoute
-    }
-    '/api/evolution/channels/$id': {
-      id: '/api/evolution/channels/$id'
-      path: '/$id'
-      fullPath: '/api/evolution/channels/$id'
-      preLoaderRoute: typeof ApiEvolutionChannelsIdRouteImport
-      parentRoute: typeof ApiEvolutionChannelsRoute
-    }
-    '/api/conversations/$id/transfer': {
-      id: '/api/conversations/$id/transfer'
-      path: '/$id/transfer'
-      fullPath: '/api/conversations/$id/transfer'
-      preLoaderRoute: typeof ApiConversationsIdTransferRouteImport
-      parentRoute: typeof ApiConversationsRoute
-    }
-    '/api/conversations/$id/reopen': {
-      id: '/api/conversations/$id/reopen'
-      path: '/$id/reopen'
-      fullPath: '/api/conversations/$id/reopen'
-      preLoaderRoute: typeof ApiConversationsIdReopenRouteImport
-      parentRoute: typeof ApiConversationsRoute
-    }
-    '/api/conversations/$id/read': {
-      id: '/api/conversations/$id/read'
-      path: '/$id/read'
-      fullPath: '/api/conversations/$id/read'
-      preLoaderRoute: typeof ApiConversationsIdReadRouteImport
-      parentRoute: typeof ApiConversationsRoute
-    }
-    '/api/conversations/$id/messages': {
-      id: '/api/conversations/$id/messages'
-      path: '/$id/messages'
-      fullPath: '/api/conversations/$id/messages'
-      preLoaderRoute: typeof ApiConversationsIdMessagesRouteImport
-      parentRoute: typeof ApiConversationsRoute
-    }
-    '/api/conversations/$id/finish': {
-      id: '/api/conversations/$id/finish'
-      path: '/$id/finish'
-      fullPath: '/api/conversations/$id/finish'
-      preLoaderRoute: typeof ApiConversationsIdFinishRouteImport
-      parentRoute: typeof ApiConversationsRoute
-    }
-    '/api/conversations/$id/assume': {
-      id: '/api/conversations/$id/assume'
-      path: '/$id/assume'
-      fullPath: '/api/conversations/$id/assume'
-      preLoaderRoute: typeof ApiConversationsIdAssumeRouteImport
-      parentRoute: typeof ApiConversationsRoute
-    }
-    '/api/companies/$id/subscription': {
-      id: '/api/companies/$id/subscription'
-      path: '/subscription'
-      fullPath: '/api/companies/$id/subscription'
-      preLoaderRoute: typeof ApiCompaniesIdSubscriptionRouteImport
-      parentRoute: typeof ApiCompaniesIdRoute
-    }
-    '/api/campaigns/worker/tick': {
-      id: '/api/campaigns/worker/tick'
-      path: '/worker/tick'
-      fullPath: '/api/campaigns/worker/tick'
-      preLoaderRoute: typeof ApiCampaignsWorkerTickRouteImport
+      fullPath: '/api/campaigns/$id'
+      preLoaderRoute: typeof ApiCampaignsIdRouteImport
       parentRoute: typeof ApiCampaignsRoute
     }
-    '/api/campaigns/templates/from-meta': {
-      id: '/api/campaigns/templates/from-meta'
-      path: '/from-meta'
-      fullPath: '/api/campaigns/templates/from-meta'
-      preLoaderRoute: typeof ApiCampaignsTemplatesFromMetaRouteImport
-      parentRoute: typeof ApiCampaignsTemplatesRoute
+    '/api/campaigns/dispatch-blocks': {
+      id: '/api/campaigns/dispatch-blocks'
+      path: '/dispatch-blocks'
+      fullPath: '/api/campaigns/dispatch-blocks'
+      preLoaderRoute: typeof ApiCampaignsDispatchBlocksRouteImport
+      parentRoute: typeof ApiCampaignsRoute
     }
-    '/api/campaigns/templates/$id': {
-      id: '/api/campaigns/templates/$id'
+    '/api/campaigns/dispatch-window': {
+      id: '/api/campaigns/dispatch-window'
+      path: '/dispatch-window'
+      fullPath: '/api/campaigns/dispatch-window'
+      preLoaderRoute: typeof ApiCampaignsDispatchWindowRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/templates': {
+      id: '/api/campaigns/templates'
+      path: '/templates'
+      fullPath: '/api/campaigns/templates'
+      preLoaderRoute: typeof ApiCampaignsTemplatesRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/companies/$id': {
+      id: '/api/companies/$id'
       path: '/$id'
-      fullPath: '/api/campaigns/templates/$id'
-      preLoaderRoute: typeof ApiCampaignsTemplatesIdRouteImport
-      parentRoute: typeof ApiCampaignsTemplatesRoute
+      fullPath: '/api/companies/$id'
+      preLoaderRoute: typeof ApiCompaniesIdRouteImport
+      parentRoute: typeof ApiCompaniesRoute
     }
-    '/api/campaigns/$id/start': {
-      id: '/api/campaigns/$id/start'
+    '/api/contacts/$id': {
+      id: '/api/contacts/$id'
+      path: '/$id'
+      fullPath: '/api/contacts/$id'
+      preLoaderRoute: typeof ApiContactsIdRouteImport
+      parentRoute: typeof ApiContactsRoute
+    }
+    '/api/conversations/start': {
+      id: '/api/conversations/start'
       path: '/start'
-      fullPath: '/api/campaigns/$id/start'
-      preLoaderRoute: typeof ApiCampaignsIdStartRouteImport
-      parentRoute: typeof ApiCampaignsIdRoute
+      fullPath: '/api/conversations/start'
+      preLoaderRoute: typeof ApiConversationsStartRouteImport
+      parentRoute: typeof ApiConversationsRoute
     }
-    '/api/campaigns/$id/schedule': {
-      id: '/api/campaigns/$id/schedule'
-      path: '/schedule'
-      fullPath: '/api/campaigns/$id/schedule'
-      preLoaderRoute: typeof ApiCampaignsIdScheduleRouteImport
-      parentRoute: typeof ApiCampaignsIdRoute
+    '/api/dashboard/campaigns': {
+      id: '/api/dashboard/campaigns'
+      path: '/campaigns'
+      fullPath: '/api/dashboard/campaigns'
+      preLoaderRoute: typeof ApiDashboardCampaignsRouteImport
+      parentRoute: typeof ApiDashboardRoute
     }
-    '/api/campaigns/$id/reuse': {
-      id: '/api/campaigns/$id/reuse'
-      path: '/reuse'
-      fullPath: '/api/campaigns/$id/reuse'
-      preLoaderRoute: typeof ApiCampaignsIdReuseRouteImport
-      parentRoute: typeof ApiCampaignsIdRoute
+    '/api/debug/cols': {
+      id: '/api/debug/cols'
+      path: '/api/debug/cols'
+      fullPath: '/api/debug/cols'
+      preLoaderRoute: typeof ApiDebugColsRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/api/campaigns/$id/resume': {
-      id: '/api/campaigns/$id/resume'
-      path: '/resume'
-      fullPath: '/api/campaigns/$id/resume'
-      preLoaderRoute: typeof ApiCampaignsIdResumeRouteImport
+    '/api/debug/current-user': {
+      id: '/api/debug/current-user'
+      path: '/api/debug/current-user'
+      fullPath: '/api/debug/current-user'
+      preLoaderRoute: typeof ApiDebugCurrentUserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/debug/db': {
+      id: '/api/debug/db'
+      path: '/api/debug/db'
+      fullPath: '/api/debug/db'
+      preLoaderRoute: typeof ApiDebugDbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/debug/plans-selects': {
+      id: '/api/debug/plans-selects'
+      path: '/api/debug/plans-selects'
+      fullPath: '/api/debug/plans-selects'
+      preLoaderRoute: typeof ApiDebugPlansSelectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/channels': {
+      id: '/api/evolution/channels'
+      path: '/api/evolution/channels'
+      fullPath: '/api/evolution/channels'
+      preLoaderRoute: typeof ApiEvolutionChannelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/register-channel': {
+      id: '/api/evolution/register-channel'
+      path: '/api/evolution/register-channel'
+      fullPath: '/api/evolution/register-channel'
+      preLoaderRoute: typeof ApiEvolutionRegisterChannelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/schema-check': {
+      id: '/api/evolution/schema-check'
+      path: '/api/evolution/schema-check'
+      fullPath: '/api/evolution/schema-check'
+      preLoaderRoute: typeof ApiEvolutionSchemaCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/evolution/status': {
+      id: '/api/evolution/status'
+      path: '/api/evolution/status'
+      fullPath: '/api/evolution/status'
+      preLoaderRoute: typeof ApiEvolutionStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/create': {
+      id: '/api/internal-chat/create'
+      path: '/api/internal-chat/create'
+      fullPath: '/api/internal-chat/create'
+      preLoaderRoute: typeof ApiInternalChatCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/list': {
+      id: '/api/internal-chat/list'
+      path: '/api/internal-chat/list'
+      fullPath: '/api/internal-chat/list'
+      preLoaderRoute: typeof ApiInternalChatListRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/mark-read': {
+      id: '/api/internal-chat/mark-read'
+      path: '/api/internal-chat/mark-read'
+      fullPath: '/api/internal-chat/mark-read'
+      preLoaderRoute: typeof ApiInternalChatMarkReadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/messages': {
+      id: '/api/internal-chat/messages'
+      path: '/api/internal-chat/messages'
+      fullPath: '/api/internal-chat/messages'
+      preLoaderRoute: typeof ApiInternalChatMessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/send': {
+      id: '/api/internal-chat/send'
+      path: '/api/internal-chat/send'
+      fullPath: '/api/internal-chat/send'
+      preLoaderRoute: typeof ApiInternalChatSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/unread-count': {
+      id: '/api/internal-chat/unread-count'
+      path: '/api/internal-chat/unread-count'
+      fullPath: '/api/internal-chat/unread-count'
+      preLoaderRoute: typeof ApiInternalChatUnreadCountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-chat/users': {
+      id: '/api/internal-chat/users'
+      path: '/api/internal-chat/users'
+      fullPath: '/api/internal-chat/users'
+      preLoaderRoute: typeof ApiInternalChatUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal/db-pool-status': {
+      id: '/api/internal/db-pool-status'
+      path: '/api/internal/db-pool-status'
+      fullPath: '/api/internal/db-pool-status'
+      preLoaderRoute: typeof ApiInternalDbPoolStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/messages/send': {
+      id: '/api/messages/send'
+      path: '/send'
+      fullPath: '/api/messages/send'
+      preLoaderRoute: typeof ApiMessagesSendRouteImport
+      parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/messages/send-media': {
+      id: '/api/messages/send-media'
+      path: '/send-media'
+      fullPath: '/api/messages/send-media'
+      preLoaderRoute: typeof ApiMessagesSendMediaRouteImport
+      parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/meta/channels': {
+      id: '/api/meta/channels'
+      path: '/api/meta/channels'
+      fullPath: '/api/meta/channels'
+      preLoaderRoute: typeof ApiMetaChannelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/users/$id': {
+      id: '/api/users/$id'
+      path: '/$id'
+      fullPath: '/api/users/$id'
+      preLoaderRoute: typeof ApiUsersIdRouteImport
+      parentRoute: typeof ApiUsersRoute
+    }
+    '/api/webhooks/evolution': {
+      id: '/api/webhooks/evolution'
+      path: '/api/webhooks/evolution'
+      fullPath: '/api/webhooks/evolution'
+      preLoaderRoute: typeof ApiWebhooksEvolutionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/webhooks/meta': {
+      id: '/api/webhooks/meta'
+      path: '/api/webhooks/meta'
+      fullPath: '/api/webhooks/meta'
+      preLoaderRoute: typeof ApiWebhooksMetaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/campaigns/$id/contacts': {
+      id: '/api/campaigns/$id/contacts'
+      path: '/contacts'
+      fullPath: '/api/campaigns/$id/contacts'
+      preLoaderRoute: typeof ApiCampaignsIdContactsRouteImport
       parentRoute: typeof ApiCampaignsIdRoute
     }
     '/api/campaigns/$id/pause': {
@@ -2268,67 +2138,228 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCampaignsIdPauseRouteImport
       parentRoute: typeof ApiCampaignsIdRoute
     }
-    '/api/campaigns/$id/contacts': {
-      id: '/api/campaigns/$id/contacts'
-      path: '/contacts'
-      fullPath: '/api/campaigns/$id/contacts'
-      preLoaderRoute: typeof ApiCampaignsIdContactsRouteImport
+    '/api/campaigns/$id/resume': {
+      id: '/api/campaigns/$id/resume'
+      path: '/resume'
+      fullPath: '/api/campaigns/$id/resume'
+      preLoaderRoute: typeof ApiCampaignsIdResumeRouteImport
       parentRoute: typeof ApiCampaignsIdRoute
     }
-    '/api/meta/channels/$id/token': {
-      id: '/api/meta/channels/$id/token'
-      path: '/token'
-      fullPath: '/api/meta/channels/$id/token'
-      preLoaderRoute: typeof ApiMetaChannelsIdTokenRouteImport
-      parentRoute: typeof ApiMetaChannelsIdRoute
+    '/api/campaigns/$id/reuse': {
+      id: '/api/campaigns/$id/reuse'
+      path: '/reuse'
+      fullPath: '/api/campaigns/$id/reuse'
+      preLoaderRoute: typeof ApiCampaignsIdReuseRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
     }
-    '/api/meta/channels/$id/templates': {
-      id: '/api/meta/channels/$id/templates'
-      path: '/templates'
-      fullPath: '/api/meta/channels/$id/templates'
-      preLoaderRoute: typeof ApiMetaChannelsIdTemplatesRouteImport
-      parentRoute: typeof ApiMetaChannelsIdRoute
+    '/api/campaigns/$id/schedule': {
+      id: '/api/campaigns/$id/schedule'
+      path: '/schedule'
+      fullPath: '/api/campaigns/$id/schedule'
+      preLoaderRoute: typeof ApiCampaignsIdScheduleRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
     }
-    '/api/meta/channels/$id/status': {
-      id: '/api/meta/channels/$id/status'
-      path: '/status'
-      fullPath: '/api/meta/channels/$id/status'
-      preLoaderRoute: typeof ApiMetaChannelsIdStatusRouteImport
-      parentRoute: typeof ApiMetaChannelsIdRoute
+    '/api/campaigns/$id/start': {
+      id: '/api/campaigns/$id/start'
+      path: '/start'
+      fullPath: '/api/campaigns/$id/start'
+      preLoaderRoute: typeof ApiCampaignsIdStartRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
     }
-    '/api/meta/channels/$id/connection-status': {
-      id: '/api/meta/channels/$id/connection-status'
-      path: '/connection-status'
-      fullPath: '/api/meta/channels/$id/connection-status'
-      preLoaderRoute: typeof ApiMetaChannelsIdConnectionStatusRouteImport
-      parentRoute: typeof ApiMetaChannelsIdRoute
+    '/api/campaigns/templates/$id': {
+      id: '/api/campaigns/templates/$id'
+      path: '/$id'
+      fullPath: '/api/campaigns/templates/$id'
+      preLoaderRoute: typeof ApiCampaignsTemplatesIdRouteImport
+      parentRoute: typeof ApiCampaignsTemplatesRoute
     }
-    '/api/messages/send/media/evolution': {
-      id: '/api/messages/send/media/evolution'
-      path: '/media/evolution'
-      fullPath: '/api/messages/send/media/evolution'
-      preLoaderRoute: typeof ApiMessagesSendMediaEvolutionRouteImport
+    '/api/campaigns/templates/from-meta': {
+      id: '/api/campaigns/templates/from-meta'
+      path: '/from-meta'
+      fullPath: '/api/campaigns/templates/from-meta'
+      preLoaderRoute: typeof ApiCampaignsTemplatesFromMetaRouteImport
+      parentRoute: typeof ApiCampaignsTemplatesRoute
+    }
+    '/api/campaigns/worker/tick': {
+      id: '/api/campaigns/worker/tick'
+      path: '/worker/tick'
+      fullPath: '/api/campaigns/worker/tick'
+      preLoaderRoute: typeof ApiCampaignsWorkerTickRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/companies/$id/subscription': {
+      id: '/api/companies/$id/subscription'
+      path: '/subscription'
+      fullPath: '/api/companies/$id/subscription'
+      preLoaderRoute: typeof ApiCompaniesIdSubscriptionRouteImport
+      parentRoute: typeof ApiCompaniesIdRoute
+    }
+    '/api/conversations/$id/assume': {
+      id: '/api/conversations/$id/assume'
+      path: '/$id/assume'
+      fullPath: '/api/conversations/$id/assume'
+      preLoaderRoute: typeof ApiConversationsIdAssumeRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/finish': {
+      id: '/api/conversations/$id/finish'
+      path: '/$id/finish'
+      fullPath: '/api/conversations/$id/finish'
+      preLoaderRoute: typeof ApiConversationsIdFinishRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/messages': {
+      id: '/api/conversations/$id/messages'
+      path: '/$id/messages'
+      fullPath: '/api/conversations/$id/messages'
+      preLoaderRoute: typeof ApiConversationsIdMessagesRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/read': {
+      id: '/api/conversations/$id/read'
+      path: '/$id/read'
+      fullPath: '/api/conversations/$id/read'
+      preLoaderRoute: typeof ApiConversationsIdReadRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/reopen': {
+      id: '/api/conversations/$id/reopen'
+      path: '/$id/reopen'
+      fullPath: '/api/conversations/$id/reopen'
+      preLoaderRoute: typeof ApiConversationsIdReopenRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/conversations/$id/transfer': {
+      id: '/api/conversations/$id/transfer'
+      path: '/$id/transfer'
+      fullPath: '/api/conversations/$id/transfer'
+      preLoaderRoute: typeof ApiConversationsIdTransferRouteImport
+      parentRoute: typeof ApiConversationsRoute
+    }
+    '/api/evolution/channels/$id': {
+      id: '/api/evolution/channels/$id'
+      path: '/$id'
+      fullPath: '/api/evolution/channels/$id'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdRouteImport
+      parentRoute: typeof ApiEvolutionChannelsRoute
+    }
+    '/api/messages/$messageId/media': {
+      id: '/api/messages/$messageId/media'
+      path: '/$messageId/media'
+      fullPath: '/api/messages/$messageId/media'
+      preLoaderRoute: typeof ApiMessagesMessageIdMediaRouteImport
+      parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/messages/send/evolution': {
+      id: '/api/messages/send/evolution'
+      path: '/evolution'
+      fullPath: '/api/messages/send/evolution'
+      preLoaderRoute: typeof ApiMessagesSendEvolutionRouteImport
       parentRoute: typeof ApiMessagesSendRoute
     }
-    '/api/internal-chat/messages/$id/attachment': {
-      id: '/api/internal-chat/messages/$id/attachment'
-      path: '/$id/attachment'
-      fullPath: '/api/internal-chat/messages/$id/attachment'
-      preLoaderRoute: typeof ApiInternalChatMessagesIdAttachmentRouteImport
-      parentRoute: typeof ApiInternalChatMessagesRoute
+    '/api/meta/channels/$id': {
+      id: '/api/meta/channels/$id'
+      path: '/$id'
+      fullPath: '/api/meta/channels/$id'
+      preLoaderRoute: typeof ApiMetaChannelsIdRouteImport
+      parentRoute: typeof ApiMetaChannelsRoute
     }
-    '/api/evolution/channels/$id/status': {
-      id: '/api/evolution/channels/$id/status'
-      path: '/status'
-      fullPath: '/api/evolution/channels/$id/status'
-      preLoaderRoute: typeof ApiEvolutionChannelsIdStatusRouteImport
-      parentRoute: typeof ApiEvolutionChannelsIdRoute
+    '/api/meta/coexistence/config': {
+      id: '/api/meta/coexistence/config'
+      path: '/api/meta/coexistence/config'
+      fullPath: '/api/meta/coexistence/config'
+      preLoaderRoute: typeof ApiMetaCoexistenceConfigRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/api/evolution/channels/$id/qrcode': {
-      id: '/api/evolution/channels/$id/qrcode'
-      path: '/qrcode'
-      fullPath: '/api/evolution/channels/$id/qrcode'
-      preLoaderRoute: typeof ApiEvolutionChannelsIdQrcodeRouteImport
+    '/api/meta/coexistence/connect': {
+      id: '/api/meta/coexistence/connect'
+      path: '/api/meta/coexistence/connect'
+      fullPath: '/api/meta/coexistence/connect'
+      preLoaderRoute: typeof ApiMetaCoexistenceConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/coexistence/exchange': {
+      id: '/api/meta/coexistence/exchange'
+      path: '/api/meta/coexistence/exchange'
+      fullPath: '/api/meta/coexistence/exchange'
+      preLoaderRoute: typeof ApiMetaCoexistenceExchangeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/embedded-signup/complete': {
+      id: '/api/meta/embedded-signup/complete'
+      path: '/api/meta/embedded-signup/complete'
+      fullPath: '/api/meta/embedded-signup/complete'
+      preLoaderRoute: typeof ApiMetaEmbeddedSignupCompleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/embedded-signup/start': {
+      id: '/api/meta/embedded-signup/start'
+      path: '/api/meta/embedded-signup/start'
+      fullPath: '/api/meta/embedded-signup/start'
+      preLoaderRoute: typeof ApiMetaEmbeddedSignupStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/meta/messages/send-text': {
+      id: '/api/meta/messages/send-text'
+      path: '/api/meta/messages/send-text'
+      fullPath: '/api/meta/messages/send-text'
+      preLoaderRoute: typeof ApiMetaMessagesSendTextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/evolution': {
+      id: '/api/public/webhooks/evolution'
+      path: '/api/public/webhooks/evolution'
+      fullPath: '/api/public/webhooks/evolution'
+      preLoaderRoute: typeof ApiPublicWebhooksEvolutionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/meta': {
+      id: '/api/public/webhooks/meta'
+      path: '/api/public/webhooks/meta'
+      fullPath: '/api/public/webhooks/meta'
+      preLoaderRoute: typeof ApiPublicWebhooksMetaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/webhooks/meta/diagnostic': {
+      id: '/api/webhooks/meta/diagnostic'
+      path: '/diagnostic'
+      fullPath: '/api/webhooks/meta/diagnostic'
+      preLoaderRoute: typeof ApiWebhooksMetaDiagnosticRouteImport
+      parentRoute: typeof ApiWebhooksMetaRoute
+    }
+    '/api/webhooks/meta/whatsapp': {
+      id: '/api/webhooks/meta/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/api/webhooks/meta/whatsapp'
+      preLoaderRoute: typeof ApiWebhooksMetaWhatsappRouteImport
+      parentRoute: typeof ApiWebhooksMetaRoute
+    }
+    '/api/campaigns/$id/contacts/$contactRowId': {
+      id: '/api/campaigns/$id/contacts/$contactRowId'
+      path: '/$contactRowId'
+      fullPath: '/api/campaigns/$id/contacts/$contactRowId'
+      preLoaderRoute: typeof ApiCampaignsIdContactsContactRowIdRouteImport
+      parentRoute: typeof ApiCampaignsIdContactsRoute
+    }
+    '/api/campaigns/$id/import/confirm': {
+      id: '/api/campaigns/$id/import/confirm'
+      path: '/import/confirm'
+      fullPath: '/api/campaigns/$id/import/confirm'
+      preLoaderRoute: typeof ApiCampaignsIdImportConfirmRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
+    '/api/campaigns/$id/import/preview': {
+      id: '/api/campaigns/$id/import/preview'
+      path: '/import/preview'
+      fullPath: '/api/campaigns/$id/import/preview'
+      preLoaderRoute: typeof ApiCampaignsIdImportPreviewRouteImport
+      parentRoute: typeof ApiCampaignsIdRoute
+    }
+    '/api/evolution/channels/$id/connect': {
+      id: '/api/evolution/channels/$id/connect'
+      path: '/connect'
+      fullPath: '/api/evolution/channels/$id/connect'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdConnectRouteImport
       parentRoute: typeof ApiEvolutionChannelsIdRoute
     }
     '/api/evolution/channels/$id/disconnect': {
@@ -2338,33 +2369,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiEvolutionChannelsIdDisconnectRouteImport
       parentRoute: typeof ApiEvolutionChannelsIdRoute
     }
-    '/api/evolution/channels/$id/connect': {
-      id: '/api/evolution/channels/$id/connect'
-      path: '/connect'
-      fullPath: '/api/evolution/channels/$id/connect'
-      preLoaderRoute: typeof ApiEvolutionChannelsIdConnectRouteImport
+    '/api/evolution/channels/$id/qrcode': {
+      id: '/api/evolution/channels/$id/qrcode'
+      path: '/qrcode'
+      fullPath: '/api/evolution/channels/$id/qrcode'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdQrcodeRouteImport
       parentRoute: typeof ApiEvolutionChannelsIdRoute
     }
-    '/api/campaigns/$id/import/preview': {
-      id: '/api/campaigns/$id/import/preview'
-      path: '/import/preview'
-      fullPath: '/api/campaigns/$id/import/preview'
-      preLoaderRoute: typeof ApiCampaignsIdImportPreviewRouteImport
-      parentRoute: typeof ApiCampaignsIdRoute
+    '/api/evolution/channels/$id/status': {
+      id: '/api/evolution/channels/$id/status'
+      path: '/status'
+      fullPath: '/api/evolution/channels/$id/status'
+      preLoaderRoute: typeof ApiEvolutionChannelsIdStatusRouteImport
+      parentRoute: typeof ApiEvolutionChannelsIdRoute
     }
-    '/api/campaigns/$id/import/confirm': {
-      id: '/api/campaigns/$id/import/confirm'
-      path: '/import/confirm'
-      fullPath: '/api/campaigns/$id/import/confirm'
-      preLoaderRoute: typeof ApiCampaignsIdImportConfirmRouteImport
-      parentRoute: typeof ApiCampaignsIdRoute
+    '/api/internal-chat/messages/$id/attachment': {
+      id: '/api/internal-chat/messages/$id/attachment'
+      path: '/$id/attachment'
+      fullPath: '/api/internal-chat/messages/$id/attachment'
+      preLoaderRoute: typeof ApiInternalChatMessagesIdAttachmentRouteImport
+      parentRoute: typeof ApiInternalChatMessagesRoute
     }
-    '/api/campaigns/$id/contacts/$contactRowId': {
-      id: '/api/campaigns/$id/contacts/$contactRowId'
-      path: '/$contactRowId'
-      fullPath: '/api/campaigns/$id/contacts/$contactRowId'
-      preLoaderRoute: typeof ApiCampaignsIdContactsContactRowIdRouteImport
-      parentRoute: typeof ApiCampaignsIdContactsRoute
+    '/api/messages/send/media/evolution': {
+      id: '/api/messages/send/media/evolution'
+      path: '/media/evolution'
+      fullPath: '/api/messages/send/media/evolution'
+      preLoaderRoute: typeof ApiMessagesSendMediaEvolutionRouteImport
+      parentRoute: typeof ApiMessagesSendRoute
+    }
+    '/api/meta/channels/$id/connection-status': {
+      id: '/api/meta/channels/$id/connection-status'
+      path: '/connection-status'
+      fullPath: '/api/meta/channels/$id/connection-status'
+      preLoaderRoute: typeof ApiMetaChannelsIdConnectionStatusRouteImport
+      parentRoute: typeof ApiMetaChannelsIdRoute
+    }
+    '/api/meta/channels/$id/status': {
+      id: '/api/meta/channels/$id/status'
+      path: '/status'
+      fullPath: '/api/meta/channels/$id/status'
+      preLoaderRoute: typeof ApiMetaChannelsIdStatusRouteImport
+      parentRoute: typeof ApiMetaChannelsIdRoute
+    }
+    '/api/meta/channels/$id/templates': {
+      id: '/api/meta/channels/$id/templates'
+      path: '/templates'
+      fullPath: '/api/meta/channels/$id/templates'
+      preLoaderRoute: typeof ApiMetaChannelsIdTemplatesRouteImport
+      parentRoute: typeof ApiMetaChannelsIdRoute
+    }
+    '/api/meta/channels/$id/token': {
+      id: '/api/meta/channels/$id/token'
+      path: '/token'
+      fullPath: '/api/meta/channels/$id/token'
+      preLoaderRoute: typeof ApiMetaChannelsIdTokenRouteImport
+      parentRoute: typeof ApiMetaChannelsIdRoute
     }
     '/api/meta/channels/$id/templates/sync': {
       id: '/api/meta/channels/$id/templates/sync'
@@ -2378,6 +2437,7 @@ declare module '@tanstack/react-router' {
 
 interface AppCampanhasRouteChildren {
   AppCampanhasIdRoute: typeof AppCampanhasIdRoute
+  AppCampanhasBloqueadosRoute: typeof AppCampanhasBloqueadosRoute
   AppCampanhasModelosRoute: typeof AppCampanhasModelosRoute
   AppCampanhasNovaRoute: typeof AppCampanhasNovaRoute
   AppCampanhasIndexRoute: typeof AppCampanhasIndexRoute
@@ -2385,6 +2445,7 @@ interface AppCampanhasRouteChildren {
 
 const AppCampanhasRouteChildren: AppCampanhasRouteChildren = {
   AppCampanhasIdRoute: AppCampanhasIdRoute,
+  AppCampanhasBloqueadosRoute: AppCampanhasBloqueadosRoute,
   AppCampanhasModelosRoute: AppCampanhasModelosRoute,
   AppCampanhasNovaRoute: AppCampanhasNovaRoute,
   AppCampanhasIndexRoute: AppCampanhasIndexRoute,
@@ -2401,13 +2462,13 @@ interface AppRouteChildren {
   AppCanaisRoute: typeof AppCanaisRoute
   AppComunicacaoInternaRoute: typeof AppComunicacaoInternaRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
-  AppHorariosAcessoRoute: typeof AppHorariosAcessoRoute
-  AppFluxosRoute: typeof AppFluxosRoute
-  AppLembretesRoute: typeof AppLembretesRoute
   AppContatosRoute: typeof AppContatosRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppEmpresasRoute: typeof AppEmpresasRoute
+  AppFluxosRoute: typeof AppFluxosRoute
   AppGruposInternosRoute: typeof AppGruposInternosRoute
+  AppHorariosAcessoRoute: typeof AppHorariosAcessoRoute
+  AppLembretesRoute: typeof AppLembretesRoute
   AppLogsRoute: typeof AppLogsRoute
   AppUsuariosRoute: typeof AppUsuariosRoute
 }
@@ -2419,13 +2480,13 @@ const AppRouteChildren: AppRouteChildren = {
   AppCanaisRoute: AppCanaisRoute,
   AppComunicacaoInternaRoute: AppComunicacaoInternaRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,
-  AppHorariosAcessoRoute: AppHorariosAcessoRoute,
-  AppFluxosRoute: AppFluxosRoute,
-  AppLembretesRoute: AppLembretesRoute,
   AppContatosRoute: AppContatosRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppEmpresasRoute: AppEmpresasRoute,
+  AppFluxosRoute: AppFluxosRoute,
   AppGruposInternosRoute: AppGruposInternosRoute,
+  AppHorariosAcessoRoute: AppHorariosAcessoRoute,
+  AppLembretesRoute: AppLembretesRoute,
   AppLogsRoute: AppLogsRoute,
   AppUsuariosRoute: AppUsuariosRoute,
 }
@@ -2490,12 +2551,16 @@ const ApiCampaignsTemplatesRouteWithChildren =
 
 interface ApiCampaignsRouteChildren {
   ApiCampaignsIdRoute: typeof ApiCampaignsIdRouteWithChildren
+  ApiCampaignsDispatchBlocksRoute: typeof ApiCampaignsDispatchBlocksRoute
+  ApiCampaignsDispatchWindowRoute: typeof ApiCampaignsDispatchWindowRoute
   ApiCampaignsTemplatesRoute: typeof ApiCampaignsTemplatesRouteWithChildren
   ApiCampaignsWorkerTickRoute: typeof ApiCampaignsWorkerTickRoute
 }
 
 const ApiCampaignsRouteChildren: ApiCampaignsRouteChildren = {
   ApiCampaignsIdRoute: ApiCampaignsIdRouteWithChildren,
+  ApiCampaignsDispatchBlocksRoute: ApiCampaignsDispatchBlocksRoute,
+  ApiCampaignsDispatchWindowRoute: ApiCampaignsDispatchWindowRoute,
   ApiCampaignsTemplatesRoute: ApiCampaignsTemplatesRouteWithChildren,
   ApiCampaignsWorkerTickRoute: ApiCampaignsWorkerTickRoute,
 }
@@ -2730,8 +2795,8 @@ const rootRouteChildren: RootRouteChildren = {
   PoliticaDePrivacidadeRoute: PoliticaDePrivacidadeRoute,
   RegisterRoute: RegisterRoute,
   TermosDeUsoRoute: TermosDeUsoRoute,
-  ApiAttendantsRoute: ApiAttendantsRoute,
   ApiAccessHoursRoute: ApiAccessHoursRoute,
+  ApiAttendantsRoute: ApiAttendantsRoute,
   ApiAutomationFlowsRoute: ApiAutomationFlowsRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
@@ -2782,13 +2847,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

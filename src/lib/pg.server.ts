@@ -1184,6 +1184,21 @@ async function applyCampaignsSchema(db: ReturnType<typeof sql>): Promise<void> {
       ON public.campaign_contacts (company_id, sent_at DESC)
       WHERE sent_at IS NOT NULL;
 
+    -- Janela progressiva entre campanhas (config por empresa).
+    CREATE TABLE IF NOT EXISTS public.company_campaign_dispatch_settings (
+      company_id UUID PRIMARY KEY REFERENCES public.companies(id) ON DELETE CASCADE,
+      first_window_days INT NOT NULL DEFAULT 7,
+      second_window_days INT NOT NULL DEFAULT 10,
+      third_window_days INT NOT NULL DEFAULT 30,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      CONSTRAINT company_campaign_dispatch_settings_days_check CHECK (
+        first_window_days BETWEEN 1 AND 365
+        AND second_window_days BETWEEN 1 AND 365
+        AND third_window_days BETWEEN 1 AND 365
+      )
+    );
+
     CREATE INDEX IF NOT EXISTS idx_campaign_contacts_company_responded
       ON public.campaign_contacts (company_id, responded_at DESC)
       WHERE responded_at IS NOT NULL;

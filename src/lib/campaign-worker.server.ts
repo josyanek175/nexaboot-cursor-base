@@ -18,6 +18,11 @@ import {
 } from "@/lib/campaign.server";
 import { getCampaignTemplate } from "@/lib/campaign-template.server";
 import { isPhoneInOptOutList } from "@/lib/campaign-response.server";
+import {
+  DISPATCH_WINDOW_SKIP_REASON,
+  isPhoneInCampaignDispatchWindow,
+} from "@/lib/campaign-dispatch-window.server";
+import { DISPATCH_WINDOW_LABEL } from "@/lib/campaign-dispatch-window";
 import { sendMetaTemplateMessage } from "@/lib/meta-send-message.server";
 import {
   assertApprovedMetaTemplate,
@@ -1271,6 +1276,33 @@ export async function processCampaignWorkerTick(
         contactId: contact.id,
         delayMs: 200,
         message: "Opt-out — ignorado",
+      };
+    }
+
+    if (await isPhoneInCampaignDispatchWindow(campaign.company_id, phone, db)) {
+      await markContactSkipped(
+        db,
+        campaign.company_id,
+        contact.id,
+        DISPATCH_WINDOW_SKIP_REASON,
+      );
+      await syncCampaignContactCounters(campaign.id, campaign.company_id, db);
+      await insertCampaignEvent(
+        campaign.company_id,
+        campaign.id,
+        "contact.skipped",
+        null,
+        { reason: DISPATCH_WINDOW_SKIP_REASON, phone },
+        contact.id,
+        db,
+      );
+      return {
+        ok: true,
+        action: "failed",
+        campaignId: campaign.id,
+        contactId: contact.id,
+        delayMs: 200,
+        message: DISPATCH_WINDOW_LABEL,
       };
     }
 

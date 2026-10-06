@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Megaphone, Plus, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Megaphone, Plus, Loader2, Pencil, Trash2, ShieldBan } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import {
@@ -143,22 +143,30 @@ function CampanhasPage() {
             </p>
           </div>
         </div>
-        {canManage && (
-          <div className="flex items-center gap-2">
-            <Link
-              to="/campanhas/modelos"
-              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
-            >
-              <Megaphone className="h-4 w-4" /> Modelos
-            </Link>
-            <Link
-              to="/campanhas/nova"
-              className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
-            >
-              <Plus className="h-4 w-4" /> Nova campanha
-            </Link>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Link
+            to="/campanhas/bloqueados"
+            className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            <ShieldBan className="h-4 w-4" /> Bloqueados
+          </Link>
+          {canManage && (
+            <>
+              <Link
+                to="/campanhas/modelos"
+                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                <Megaphone className="h-4 w-4" /> Modelos
+              </Link>
+              <Link
+                to="/campanhas/nova"
+                className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
+              >
+                <Plus className="h-4 w-4" /> Nova campanha
+              </Link>
+            </>
+          )}
+        </div>
       </header>
 
       <div className="flex-1 overflow-auto p-6">

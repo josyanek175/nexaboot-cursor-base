@@ -1214,7 +1214,9 @@ function EditarCampanhaPage() {
                                     ? "Opt-out"
                                     : row.skip_reason === "contact_inactive"
                                       ? "Inativo"
-                                      : "Ignorado"}
+                                      : row.skip_reason === "dispatch_window"
+                                        ? "Número em janela de disparo"
+                                        : "Ignorado"}
                               </span>
                             ) : row.status === "responded" ? (
                               <span className="text-primary">Respondido</span>

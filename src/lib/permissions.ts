@@ -123,6 +123,11 @@ export function canDeleteCampaign(actor: ActingUser): boolean {
   );
 }
 
+/** Configurar janela de disparo entre campanhas (GERENTE+). */
+export function canConfigureCampaignDispatchWindow(actor: ActingUser): boolean {
+  return canDeleteCampaign(actor);
+}
+
 /**
  * Pausar/retomar disparo.
  * ATENDENTE: somente campanhas que ele criou.
