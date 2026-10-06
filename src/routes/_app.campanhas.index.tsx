@@ -1,12 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Megaphone, Plus, Loader2, Pencil, Trash2, ShieldBan } from "lucide-react";
+import {
+  Megaphone,
+  Plus,
+  Loader2,
+  Pencil,
+  Trash2,
+  ShieldBan,
+  CircleDollarSign,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import {
   canAccessCampaignsModule,
   canManageCampaigns,
   canDeleteCampaign,
+  canViewCampaignCosts,
   actingUserFromAuth,
 } from "@/lib/permissions";
 import { apiDelete } from "@/lib/api";
@@ -64,6 +73,7 @@ function CampanhasPage() {
   const canAccess = canAccessCampaignsModule(actor, companyValid);
   const canManage = canManageCampaigns(actor);
   const canDelete = canDeleteCampaign(actor);
+  const canCosts = canViewCampaignCosts(actor);
 
   async function reload() {
     setLoading(true);
@@ -150,6 +160,14 @@ function CampanhasPage() {
           >
             <ShieldBan className="h-4 w-4" /> Bloqueados
           </Link>
+          {canCosts && (
+            <Link
+              to="/campanhas/custos"
+              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              <CircleDollarSign className="h-4 w-4" /> Custos
+            </Link>
+          )}
           {canManage && (
             <>
               <Link

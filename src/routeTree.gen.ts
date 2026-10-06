@@ -47,6 +47,7 @@ import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution
 import { Route as AppCampanhasIndexRouteImport } from './routes/_app.campanhas.index'
 import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
 import { Route as AppCampanhasBloqueadosRouteImport } from './routes/_app.campanhas.bloqueados'
+import { Route as AppCampanhasCustosRouteImport } from './routes/_app.campanhas.custos'
 import { Route as AppCampanhasModelosRouteImport } from './routes/_app.campanhas.modelos'
 import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
@@ -58,6 +59,7 @@ import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
+import { Route as ApiCampaignsCostsRouteImport } from './routes/api/campaigns/costs'
 import { Route as ApiCampaignsDispatchBlocksRouteImport } from './routes/api/campaigns/dispatch-blocks'
 import { Route as ApiCampaignsDispatchWindowRouteImport } from './routes/api/campaigns/dispatch-window'
 import { Route as ApiCampaignsTemplatesRouteImport } from './routes/api/campaigns/templates'
@@ -321,6 +323,11 @@ const AppCampanhasBloqueadosRoute = AppCampanhasBloqueadosRouteImport.update({
   path: '/bloqueados',
   getParentRoute: () => AppCampanhasRoute,
 } as any)
+const AppCampanhasCustosRoute = AppCampanhasCustosRouteImport.update({
+  id: '/custos',
+  path: '/custos',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
 const AppCampanhasModelosRoute = AppCampanhasModelosRouteImport.update({
   id: '/modelos',
   path: '/modelos',
@@ -376,6 +383,11 @@ const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
 const ApiCampaignsIdRoute = ApiCampaignsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
+  getParentRoute: () => ApiCampaignsRoute,
+} as any)
+const ApiCampaignsCostsRoute = ApiCampaignsCostsRouteImport.update({
+  id: '/costs',
+  path: '/costs',
   getParentRoute: () => ApiCampaignsRoute,
 } as any)
 const ApiCampaignsDispatchBlocksRoute =
@@ -813,6 +825,7 @@ export interface FileRoutesByFullPath {
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
   '/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
+  '/campanhas/custos': typeof AppCampanhasCustosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -824,6 +837,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
   '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
   '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
@@ -935,6 +949,7 @@ export interface FileRoutesByTo {
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
   '/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
+  '/campanhas/custos': typeof AppCampanhasCustosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -946,6 +961,7 @@ export interface FileRoutesByTo {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
   '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
   '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
@@ -1060,6 +1076,7 @@ export interface FileRoutesById {
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/_app/campanhas/$id': typeof AppCampanhasIdRoute
   '/_app/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
+  '/_app/campanhas/custos': typeof AppCampanhasCustosRoute
   '/_app/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/_app/campanhas/nova': typeof AppCampanhasNovaRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
@@ -1071,6 +1088,7 @@ export interface FileRoutesById {
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
   '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
   '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
@@ -1185,6 +1203,7 @@ export interface FileRouteTypes {
     | '/webhook/evolution'
     | '/campanhas/$id'
     | '/campanhas/bloqueados'
+    | '/campanhas/custos'
     | '/campanhas/modelos'
     | '/campanhas/nova'
     | '/api/admin/auth-check'
@@ -1196,6 +1215,7 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/costs'
     | '/api/campaigns/dispatch-blocks'
     | '/api/campaigns/dispatch-window'
     | '/api/campaigns/templates'
@@ -1307,6 +1327,7 @@ export interface FileRouteTypes {
     | '/webhook/evolution'
     | '/campanhas/$id'
     | '/campanhas/bloqueados'
+    | '/campanhas/custos'
     | '/campanhas/modelos'
     | '/campanhas/nova'
     | '/api/admin/auth-check'
@@ -1318,6 +1339,7 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/costs'
     | '/api/campaigns/dispatch-blocks'
     | '/api/campaigns/dispatch-window'
     | '/api/campaigns/templates'
@@ -1431,6 +1453,7 @@ export interface FileRouteTypes {
     | '/webhook/evolution'
     | '/_app/campanhas/$id'
     | '/_app/campanhas/bloqueados'
+    | '/_app/campanhas/custos'
     | '/_app/campanhas/modelos'
     | '/_app/campanhas/nova'
     | '/api/admin/auth-check'
@@ -1442,6 +1465,7 @@ export interface FileRouteTypes {
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/costs'
     | '/api/campaigns/dispatch-blocks'
     | '/api/campaigns/dispatch-window'
     | '/api/campaigns/templates'
@@ -1844,6 +1868,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampanhasBloqueadosRouteImport
       parentRoute: typeof AppCampanhasRoute
     }
+    '/_app/campanhas/custos': {
+      id: '/_app/campanhas/custos'
+      path: '/custos'
+      fullPath: '/campanhas/custos'
+      preLoaderRoute: typeof AppCampanhasCustosRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
     '/_app/campanhas/modelos': {
       id: '/_app/campanhas/modelos'
       path: '/modelos'
@@ -1919,6 +1950,13 @@ declare module '@tanstack/react-router' {
       path: '/$id'
       fullPath: '/api/campaigns/$id'
       preLoaderRoute: typeof ApiCampaignsIdRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/costs': {
+      id: '/api/campaigns/costs'
+      path: '/costs'
+      fullPath: '/api/campaigns/costs'
+      preLoaderRoute: typeof ApiCampaignsCostsRouteImport
       parentRoute: typeof ApiCampaignsRoute
     }
     '/api/campaigns/dispatch-blocks': {
@@ -2438,6 +2476,7 @@ declare module '@tanstack/react-router' {
 interface AppCampanhasRouteChildren {
   AppCampanhasIdRoute: typeof AppCampanhasIdRoute
   AppCampanhasBloqueadosRoute: typeof AppCampanhasBloqueadosRoute
+  AppCampanhasCustosRoute: typeof AppCampanhasCustosRoute
   AppCampanhasModelosRoute: typeof AppCampanhasModelosRoute
   AppCampanhasNovaRoute: typeof AppCampanhasNovaRoute
   AppCampanhasIndexRoute: typeof AppCampanhasIndexRoute
@@ -2446,6 +2485,7 @@ interface AppCampanhasRouteChildren {
 const AppCampanhasRouteChildren: AppCampanhasRouteChildren = {
   AppCampanhasIdRoute: AppCampanhasIdRoute,
   AppCampanhasBloqueadosRoute: AppCampanhasBloqueadosRoute,
+  AppCampanhasCustosRoute: AppCampanhasCustosRoute,
   AppCampanhasModelosRoute: AppCampanhasModelosRoute,
   AppCampanhasNovaRoute: AppCampanhasNovaRoute,
   AppCampanhasIndexRoute: AppCampanhasIndexRoute,
@@ -2551,6 +2591,7 @@ const ApiCampaignsTemplatesRouteWithChildren =
 
 interface ApiCampaignsRouteChildren {
   ApiCampaignsIdRoute: typeof ApiCampaignsIdRouteWithChildren
+  ApiCampaignsCostsRoute: typeof ApiCampaignsCostsRoute
   ApiCampaignsDispatchBlocksRoute: typeof ApiCampaignsDispatchBlocksRoute
   ApiCampaignsDispatchWindowRoute: typeof ApiCampaignsDispatchWindowRoute
   ApiCampaignsTemplatesRoute: typeof ApiCampaignsTemplatesRouteWithChildren
@@ -2559,6 +2600,7 @@ interface ApiCampaignsRouteChildren {
 
 const ApiCampaignsRouteChildren: ApiCampaignsRouteChildren = {
   ApiCampaignsIdRoute: ApiCampaignsIdRouteWithChildren,
+  ApiCampaignsCostsRoute: ApiCampaignsCostsRoute,
   ApiCampaignsDispatchBlocksRoute: ApiCampaignsDispatchBlocksRoute,
   ApiCampaignsDispatchWindowRoute: ApiCampaignsDispatchWindowRoute,
   ApiCampaignsTemplatesRoute: ApiCampaignsTemplatesRouteWithChildren,
