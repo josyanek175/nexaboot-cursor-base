@@ -7,8 +7,9 @@ import {
   UserPlus, ArrowRightLeft, CheckCircle, RotateCcw, StickyNote, History,
   Filter, PanelRightClose, PanelRightOpen, Image as ImageIcon, FileVideo, FileAudio,
   Wifi, WifiOff, ContactRound,
-  Megaphone,
+  Megaphone, FileStack,
 } from "lucide-react";
+import { SendTemplateModal } from "@/components/send-template-modal";
 import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { canSeeAllConversations, inTenantScope } from "@/lib/permissions";
@@ -678,6 +679,7 @@ function AtendimentoPage() {
   );
   const [draft, setDraft] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   // Envio real de mídia (imagem/áudio) via input de arquivo escondido.
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const mediaKindRef = useRef<"image" | "audio" | "document">("image");
@@ -1942,9 +1944,28 @@ function AtendimentoPage() {
               onSend={() => sendText(draft)}
               onAttach={sendAttachment}
               onInternalNote={() => setNoteOpen(true)}
+              onSendTemplate={
+                channels.find((c) => c.id === selected.channelId)?.provider === "META"
+                  ? () => setTemplateOpen(true)
+                  : undefined
+              }
               disabled={selected.status === "finished"}
               onReopen={reopen}
             />
+            {templateOpen && (
+              <SendTemplateModal
+                open={templateOpen}
+                conversationId={selected.id}
+                contactName={
+                  contacts.find((c) => c.id === selected.contactId)?.name ?? null
+                }
+                onClose={() => setTemplateOpen(false)}
+                onSent={() => {
+                  void reloadMessages(selected.id, { silent: true });
+                  void reloadConversations({ silent: true });
+                }}
+              />
+            )}
           </>
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
@@ -2834,13 +2855,14 @@ function DocumentPreviewPanel({
 
 // ───────── Composer ─────────
 function ChatComposer({
-  value, onChange, onSend, onAttach, onInternalNote, disabled, onReopen,
+  value, onChange, onSend, onAttach, onInternalNote, onSendTemplate, disabled, onReopen,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
   onAttach: (type: "image" | "video" | "audio" | "document") => void;
   onInternalNote: () => void;
+  onSendTemplate?: () => void;
   disabled?: boolean;
   onReopen: () => void;
 }) {
@@ -2872,6 +2894,16 @@ function ChatComposer({
         <button onClick={onInternalNote} className="rounded-md p-2 text-internal hover:bg-internal/10" title="Nota interna">
           <StickyNote className="h-5 w-5" />
         </button>
+        {onSendTemplate && (
+          <button
+            type="button"
+            onClick={onSendTemplate}
+            className="rounded-md p-2 text-primary hover:bg-primary/10"
+            title="Enviar template"
+          >
+            <FileStack className="h-5 w-5" />
+          </button>
+        )}
         <button className="rounded-md p-2 text-muted-foreground hover:bg-muted" title="Emojis"><Smile className="h-5 w-5" /></button>
 
         <div ref={ref} className="relative">

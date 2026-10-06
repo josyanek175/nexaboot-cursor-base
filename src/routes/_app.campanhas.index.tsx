@@ -161,12 +161,20 @@ function CampanhasPage() {
             <ShieldBan className="h-4 w-4" /> Bloqueados
           </Link>
           {canCosts && (
-            <Link
-              to="/campanhas/custos"
-              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
-            >
-              <CircleDollarSign className="h-4 w-4" /> Custos
-            </Link>
+            <>
+              <Link
+                to="/campanhas/custos"
+                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                <CircleDollarSign className="h-4 w-4" /> Custos
+              </Link>
+              <Link
+                to="/campanhas/templates-atendimento"
+                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                Templates atendimento
+              </Link>
+            </>
           )}
           {canManage && (
             <>

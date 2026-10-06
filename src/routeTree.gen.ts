@@ -50,10 +50,12 @@ import { Route as AppCampanhasBloqueadosRouteImport } from './routes/_app.campan
 import { Route as AppCampanhasCustosRouteImport } from './routes/_app.campanhas.custos'
 import { Route as AppCampanhasModelosRouteImport } from './routes/_app.campanhas.modelos'
 import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
+import { Route as AppCampanhasTemplatesAtendimentoRouteImport } from './routes/_app.campanhas.templates-atendimento'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
 import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
 import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
 import { Route as ApiAttendanceNotificationsRouteImport } from './routes/api/attendance/notifications'
+import { Route as ApiAttendanceTemplatesRouteImport } from './routes/api/attendance/templates'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
@@ -85,6 +87,7 @@ import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-
 import { Route as ApiInternalDbPoolStatusRouteImport } from './routes/api/internal/db-pool-status'
 import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
 import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
+import { Route as ApiMessagesSendTemplateRouteImport } from './routes/api/messages/send-template'
 import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
@@ -338,6 +341,12 @@ const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
   path: '/nova',
   getParentRoute: () => AppCampanhasRoute,
 } as any)
+const AppCampanhasTemplatesAtendimentoRoute =
+  AppCampanhasTemplatesAtendimentoRouteImport.update({
+    id: '/templates-atendimento',
+    path: '/templates-atendimento',
+    getParentRoute: () => AppCampanhasRoute,
+  } as any)
 const ApiAdminAuthCheckRoute = ApiAdminAuthCheckRouteImport.update({
   id: '/api/admin/auth-check',
   path: '/api/admin/auth-check',
@@ -359,6 +368,11 @@ const ApiAttendanceNotificationsRoute =
     path: '/api/attendance/notifications',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAttendanceTemplatesRoute = ApiAttendanceTemplatesRouteImport.update({
+  id: '/api/attendance/templates',
+  path: '/api/attendance/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
   id: '/api/auth/login',
   path: '/api/auth/login',
@@ -517,6 +531,11 @@ const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
 const ApiMessagesSendMediaRoute = ApiMessagesSendMediaRouteImport.update({
   id: '/send-media',
   path: '/send-media',
+  getParentRoute: () => ApiMessagesRoute,
+} as any)
+const ApiMessagesSendTemplateRoute = ApiMessagesSendTemplateRouteImport.update({
+  id: '/send-template',
+  path: '/send-template',
   getParentRoute: () => ApiMessagesRoute,
 } as any)
 const ApiMetaChannelsRoute = ApiMetaChannelsRouteImport.update({
@@ -828,10 +847,12 @@ export interface FileRoutesByFullPath {
   '/campanhas/custos': typeof AppCampanhasCustosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/campanhas/templates-atendimento': typeof AppCampanhasTemplatesAtendimentoRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
+  '/api/attendance/templates': typeof ApiAttendanceTemplatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
@@ -863,6 +884,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
+  '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -952,10 +974,12 @@ export interface FileRoutesByTo {
   '/campanhas/custos': typeof AppCampanhasCustosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/campanhas/templates-atendimento': typeof AppCampanhasTemplatesAtendimentoRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
+  '/api/attendance/templates': typeof ApiAttendanceTemplatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
@@ -987,6 +1011,7 @@ export interface FileRoutesByTo {
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
+  '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -1079,10 +1104,12 @@ export interface FileRoutesById {
   '/_app/campanhas/custos': typeof AppCampanhasCustosRoute
   '/_app/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/_app/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/_app/campanhas/templates-atendimento': typeof AppCampanhasTemplatesAtendimentoRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
+  '/api/attendance/templates': typeof ApiAttendanceTemplatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
@@ -1114,6 +1141,7 @@ export interface FileRoutesById {
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
+  '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
@@ -1206,10 +1234,12 @@ export interface FileRouteTypes {
     | '/campanhas/custos'
     | '/campanhas/modelos'
     | '/campanhas/nova'
+    | '/campanhas/templates-atendimento'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/attendance/notifications'
+    | '/api/attendance/templates'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
@@ -1241,6 +1271,7 @@ export interface FileRouteTypes {
     | '/api/internal/db-pool-status'
     | '/api/messages/send'
     | '/api/messages/send-media'
+    | '/api/messages/send-template'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1330,10 +1361,12 @@ export interface FileRouteTypes {
     | '/campanhas/custos'
     | '/campanhas/modelos'
     | '/campanhas/nova'
+    | '/campanhas/templates-atendimento'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/attendance/notifications'
+    | '/api/attendance/templates'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
@@ -1365,6 +1398,7 @@ export interface FileRouteTypes {
     | '/api/internal/db-pool-status'
     | '/api/messages/send'
     | '/api/messages/send-media'
+    | '/api/messages/send-template'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1456,10 +1490,12 @@ export interface FileRouteTypes {
     | '/_app/campanhas/custos'
     | '/_app/campanhas/modelos'
     | '/_app/campanhas/nova'
+    | '/_app/campanhas/templates-atendimento'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/attendance/notifications'
+    | '/api/attendance/templates'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
@@ -1491,6 +1527,7 @@ export interface FileRouteTypes {
     | '/api/internal/db-pool-status'
     | '/api/messages/send'
     | '/api/messages/send-media'
+    | '/api/messages/send-template'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
@@ -1567,6 +1604,7 @@ export interface RootRouteChildren {
   ApiAdminResetPasswordRoute: typeof ApiAdminResetPasswordRoute
   ApiAdminSeedDemoRoute: typeof ApiAdminSeedDemoRoute
   ApiAttendanceNotificationsRoute: typeof ApiAttendanceNotificationsRoute
+  ApiAttendanceTemplatesRoute: typeof ApiAttendanceTemplatesRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthOperationalCompanyRoute: typeof ApiAuthOperationalCompanyRoute
@@ -1889,6 +1927,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampanhasNovaRouteImport
       parentRoute: typeof AppCampanhasRoute
     }
+    '/_app/campanhas/templates-atendimento': {
+      id: '/_app/campanhas/templates-atendimento'
+      path: '/templates-atendimento'
+      fullPath: '/campanhas/templates-atendimento'
+      preLoaderRoute: typeof AppCampanhasTemplatesAtendimentoRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
     '/api/admin/auth-check': {
       id: '/api/admin/auth-check'
       path: '/api/admin/auth-check'
@@ -1915,6 +1960,13 @@ declare module '@tanstack/react-router' {
       path: '/api/attendance/notifications'
       fullPath: '/api/attendance/notifications'
       preLoaderRoute: typeof ApiAttendanceNotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/attendance/templates': {
+      id: '/api/attendance/templates'
+      path: '/api/attendance/templates'
+      fullPath: '/api/attendance/templates'
+      preLoaderRoute: typeof ApiAttendanceTemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/login': {
@@ -2132,6 +2184,13 @@ declare module '@tanstack/react-router' {
       path: '/send-media'
       fullPath: '/api/messages/send-media'
       preLoaderRoute: typeof ApiMessagesSendMediaRouteImport
+      parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/messages/send-template': {
+      id: '/api/messages/send-template'
+      path: '/send-template'
+      fullPath: '/api/messages/send-template'
+      preLoaderRoute: typeof ApiMessagesSendTemplateRouteImport
       parentRoute: typeof ApiMessagesRoute
     }
     '/api/meta/channels': {
@@ -2479,6 +2538,7 @@ interface AppCampanhasRouteChildren {
   AppCampanhasCustosRoute: typeof AppCampanhasCustosRoute
   AppCampanhasModelosRoute: typeof AppCampanhasModelosRoute
   AppCampanhasNovaRoute: typeof AppCampanhasNovaRoute
+  AppCampanhasTemplatesAtendimentoRoute: typeof AppCampanhasTemplatesAtendimentoRoute
   AppCampanhasIndexRoute: typeof AppCampanhasIndexRoute
 }
 
@@ -2488,6 +2548,7 @@ const AppCampanhasRouteChildren: AppCampanhasRouteChildren = {
   AppCampanhasCustosRoute: AppCampanhasCustosRoute,
   AppCampanhasModelosRoute: AppCampanhasModelosRoute,
   AppCampanhasNovaRoute: AppCampanhasNovaRoute,
+  AppCampanhasTemplatesAtendimentoRoute: AppCampanhasTemplatesAtendimentoRoute,
   AppCampanhasIndexRoute: AppCampanhasIndexRoute,
 }
 
@@ -2699,12 +2760,14 @@ const ApiMessagesSendRouteWithChildren = ApiMessagesSendRoute._addFileChildren(
 interface ApiMessagesRouteChildren {
   ApiMessagesSendRoute: typeof ApiMessagesSendRouteWithChildren
   ApiMessagesSendMediaRoute: typeof ApiMessagesSendMediaRoute
+  ApiMessagesSendTemplateRoute: typeof ApiMessagesSendTemplateRoute
   ApiMessagesMessageIdMediaRoute: typeof ApiMessagesMessageIdMediaRoute
 }
 
 const ApiMessagesRouteChildren: ApiMessagesRouteChildren = {
   ApiMessagesSendRoute: ApiMessagesSendRouteWithChildren,
   ApiMessagesSendMediaRoute: ApiMessagesSendMediaRoute,
+  ApiMessagesSendTemplateRoute: ApiMessagesSendTemplateRoute,
   ApiMessagesMessageIdMediaRoute: ApiMessagesMessageIdMediaRoute,
 }
 
@@ -2854,6 +2917,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminResetPasswordRoute: ApiAdminResetPasswordRoute,
   ApiAdminSeedDemoRoute: ApiAdminSeedDemoRoute,
   ApiAttendanceNotificationsRoute: ApiAttendanceNotificationsRoute,
+  ApiAttendanceTemplatesRoute: ApiAttendanceTemplatesRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthOperationalCompanyRoute: ApiAuthOperationalCompanyRoute,
