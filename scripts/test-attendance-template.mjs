@@ -3,12 +3,15 @@
  * Uso: npx tsx scripts/test-attendance-template.mjs
  */
 import {
+  ATTENDANCE_TEMPLATE_SYNC_FRESH_MS,
   buildOrderedTemplateParameters,
   evaluateAttendanceTemplateSendGuards,
+  inferVariablesFromBodyTemplate,
   mergeAttendanceTemplateRawPayload,
   normalizeAttendanceVariables,
   previewAttendanceTemplateBody,
   resolveAttendanceVariableDefaults,
+  shouldRefreshMetaTemplates,
 } from "../src/lib/attendance-template.ts";
 
 let failed = 0;
@@ -124,6 +127,67 @@ const crmFirst = mergeAttendanceTemplateRawPayload(
 assert(
   "crm then echo keeps attendance",
   crmFirst.origin === "attendance_template" && crmFirst.sent_by === "u1",
+);
+
+// freshness / auto-sync
+const now = new Date("2026-10-06T12:00:00.000Z");
+assert(
+  "refresh when empty local",
+  shouldRefreshMetaTemplates({ localCount: 0, lastSyncedAt: now, now }) === true,
+);
+assert(
+  "refresh when never synced",
+  shouldRefreshMetaTemplates({ localCount: 3, lastSyncedAt: null, now }) === true,
+);
+assert(
+  "refresh when stale (>5min)",
+  shouldRefreshMetaTemplates({
+    localCount: 2,
+    lastSyncedAt: new Date(now.getTime() - ATTENDANCE_TEMPLATE_SYNC_FRESH_MS - 1),
+    now,
+  }) === true,
+);
+assert(
+  "skip refresh when fresh",
+  shouldRefreshMetaTemplates({
+    localCount: 2,
+    lastSyncedAt: new Date(now.getTime() - ATTENDANCE_TEMPLATE_SYNC_FRESH_MS + 1000),
+    now,
+  }) === false,
+);
+assert(
+  "force always refreshes",
+  shouldRefreshMetaTemplates({
+    force: true,
+    localCount: 5,
+    lastSyncedAt: now,
+    now,
+  }) === true,
+);
+
+// fallback sem overlay: infer variables do body Meta
+const inferred = inferVariablesFromBodyTemplate(
+  "Olá, {{1}}! Sobre {{2}}. Detalhe: {{3}}.",
+);
+assert(
+  "infer 3 vars labels",
+  inferred.length === 3 &&
+    inferred[0].label === "Variável 1" &&
+    inferred[1].label === "Variável 2" &&
+    inferred[2].label === "Variável 3",
+);
+assert(
+  "infer vars manual+required",
+  inferred.every((v) => v.source === "manual" && v.required === true),
+);
+assert(
+  "infer empty body",
+  inferVariablesFromBodyTemplate("Sem variáveis").length === 0,
+);
+assert(
+  "infer dedupe positions",
+  inferVariablesFromBodyTemplate("{{2}} e {{1}} e {{2}}").map((v) => v.position).join(",") ===
+    "1,2",
 );
 
 if (failed > 0) {

@@ -1,4 +1,5 @@
-// GET /api/attendance/templates?conversationId= — presets ativos do canal Meta da conversa.
+// GET /api/attendance/templates?conversationId= — templates APPROVED do canal (+ auto-sync Meta).
+// GET /api/attendance/templates?conversationId=&forceSync=1 — força sync Meta.
 // GET /api/attendance/templates?admin=1 — lista admin da empresa.
 // POST /api/attendance/templates — cria/atualiza preset (admin/gerente).
 import { createFileRoute } from "@tanstack/react-router";
@@ -54,6 +55,9 @@ export const Route = createFileRoute("/api/attendance/templates")({
         const url = new URL(request.url);
         const admin = url.searchParams.get("admin") === "1";
         const conversationId = url.searchParams.get("conversationId");
+        const forceSync =
+          url.searchParams.get("forceSync") === "1" ||
+          url.searchParams.get("forceSync") === "true";
 
         if (admin) {
           const actor = await loadActor(company);
@@ -74,14 +78,23 @@ export const Route = createFileRoute("/api/attendance/templates")({
         const result = await listAttendanceTemplatesForConversation({
           companyId: company,
           conversationId,
+          forceSync,
         });
         if (!result.ok) {
-          return Response.json({ error: result.error }, { status: result.status });
+          return Response.json(
+            {
+              error: result.error,
+              message: result.message ?? result.error,
+            },
+            { status: result.status },
+          );
         }
         return Response.json({
           channelType: result.channelType,
           contactName: result.contactName,
           templates: result.templates,
+          synced: result.synced,
+          syncError: result.syncError,
         });
       },
 

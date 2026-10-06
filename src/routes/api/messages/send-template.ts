@@ -1,4 +1,4 @@
-// POST /api/messages/send-template — envia HSM Meta a partir de preset do atendimento.
+// POST /api/messages/send-template — envia HSM Meta (meta_message_templates + overlay opcional).
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { requireCompanyId } from "@/lib/company.server";
@@ -8,7 +8,8 @@ import { sendAttendanceWhatsappTemplate } from "@/lib/attendance-template.server
 
 const Body = z.object({
   conversationId: z.string().uuid(),
-  attendanceTemplateId: z.string().uuid(),
+  metaTemplateId: z.string().uuid(),
+  attendanceTemplateId: z.string().uuid().optional().nullable(),
   variableValues: z.record(z.string(), z.string()).default({}),
 });
 
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/api/messages/send-template")({
         const result = await sendAttendanceWhatsappTemplate({
           companyId: company,
           conversationId: parsed.data.conversationId,
+          metaTemplateId: parsed.data.metaTemplateId,
           attendanceTemplateId: parsed.data.attendanceTemplateId,
           variableValues: parsed.data.variableValues,
           sentByUserId: attendant?.id ?? uid,

@@ -5,15 +5,18 @@ import { sql } from "@/lib/pg.server";
 import type { PgSql } from "@/lib/pg-types";
 import { sendMetaTemplateMessage } from "@/lib/meta-send-message.server";
 import { extractBodyText, renderMetaTemplateFromComponents } from "@/lib/meta-template-render";
+import { syncMetaTemplatesForChannel } from "@/lib/meta-message-templates.server";
 import { bumpConversationAfterOutboundMessage } from "@/lib/crm-outbound.server";
 import { tryApplyHumanReplyFromMessage } from "@/lib/campaign-service-status.server";
 import { normalizePhoneE164, isValidE164Digits } from "@/lib/phone";
 import {
   buildOrderedTemplateParameters,
   evaluateAttendanceTemplateSendGuards,
+  inferVariablesFromBodyTemplate,
   normalizeAttendanceVariables,
   previewAttendanceTemplateBody,
   resolveAttendanceVariableDefaults,
+  shouldRefreshMetaTemplates,
   type AttendanceTemplateVariable,
 } from "@/lib/attendance-template";
 
@@ -34,6 +37,22 @@ export type AttendanceWhatsappTemplateRow = {
   status?: string;
   body_text?: string | null;
   channel_id?: string;
+};
+
+/** Item do modal: Meta APPROVED + overlay opcional. */
+export type AttendanceChatTemplateOption = {
+  /** Sempre o id de meta_message_templates (chave de envio). */
+  id: string;
+  metaTemplateId: string;
+  attendanceTemplateId: string | null;
+  hasOverlay: boolean;
+  name: string;
+  description: string | null;
+  variables: AttendanceTemplateVariable[];
+  body_text: string | null;
+  meta_template_name: string;
+  language_code: string;
+  category: string | null;
 };
 
 let _schemaReady: Promise<void> | null = null;
@@ -94,13 +113,115 @@ function mapRow(r: Record<string, unknown>): AttendanceWhatsappTemplateRow {
   };
 }
 
-/** Lista presets ativos APPROVED do canal Meta da conversa. */
+async function loadChannelTemplateSyncState(
+  companyId: string,
+  channelId: string,
+): Promise<{ localCount: number; lastSyncedAt: Date | null }> {
+  const s = sql();
+  const rows = await s<{ cnt: number; last_synced: Date | string | null }[]>`
+    SELECT
+      COUNT(*)::int AS cnt,
+      MAX(last_synced_at) AS last_synced
+    FROM public.meta_message_templates
+    WHERE company_id = ${companyId}::uuid
+      AND channel_id = ${channelId}::uuid
+  `;
+  const last = rows[0]?.last_synced;
+  return {
+    localCount: Number(rows[0]?.cnt ?? 0) || 0,
+    lastSyncedAt: last ? new Date(last) : null,
+  };
+}
+
+async function loadApprovedChatTemplatesForChannel(opts: {
+  companyId: string;
+  channelId: string;
+}): Promise<AttendanceChatTemplateOption[]> {
+  await ensureAttendanceWhatsappTemplatesSchema();
+  const s = sql();
+  const rows = await s<
+    {
+      meta_id: string;
+      template_name: string;
+      language_code: string;
+      category: string | null;
+      components: unknown;
+      overlay_id: string | null;
+      overlay_name: string | null;
+      overlay_description: string | null;
+      overlay_variables: unknown;
+      overlay_active: boolean | null;
+    }[]
+  >`
+    SELECT
+      m.id AS meta_id,
+      m.template_name,
+      m.language_code,
+      m.category,
+      m.components,
+      a.id AS overlay_id,
+      a.name AS overlay_name,
+      a.description AS overlay_description,
+      a.variables AS overlay_variables,
+      a.active AS overlay_active
+    FROM public.meta_message_templates m
+    LEFT JOIN public.attendance_whatsapp_templates a
+      ON a.meta_template_id = m.id
+     AND a.company_id = m.company_id
+     AND a.active = true
+    WHERE m.company_id = ${opts.companyId}::uuid
+      AND m.channel_id = ${opts.channelId}::uuid
+      AND m.active = true
+      AND upper(m.status) = 'APPROVED'
+    ORDER BY COALESCE(a.name, m.template_name) ASC
+  `;
+
+  return rows.map((r) => {
+    const body = extractBodyText(r.components);
+    const hasOverlay = !!r.overlay_id && r.overlay_active !== false;
+    const variables = hasOverlay
+      ? normalizeAttendanceVariables(r.overlay_variables)
+      : inferVariablesFromBodyTemplate(body);
+    return {
+      id: r.meta_id,
+      metaTemplateId: r.meta_id,
+      attendanceTemplateId: hasOverlay ? String(r.overlay_id) : null,
+      hasOverlay,
+      name: hasOverlay
+        ? String(r.overlay_name ?? r.template_name)
+        : String(r.template_name),
+      description: hasOverlay
+        ? r.overlay_description != null
+          ? String(r.overlay_description)
+          : null
+        : null,
+      variables,
+      body_text: body,
+      meta_template_name: r.template_name,
+      language_code: r.language_code,
+      category: r.category,
+    };
+  });
+}
+
+/**
+ * Lista templates APPROVED do canal (overlay opcional) + auto-sync Meta com freshness.
+ */
 export async function listAttendanceTemplatesForConversation(opts: {
   companyId: string;
   conversationId: string;
+  forceSync?: boolean;
 }): Promise<
-  | { ok: true; channelType: string; templates: AttendanceWhatsappTemplateRow[]; contactName: string | null }
-  | { ok: false; error: string; status: number }
+  | {
+      ok: true;
+      channelType: string;
+      channelId: string;
+      templates: AttendanceChatTemplateOption[];
+      contactName: string | null;
+      synced: boolean;
+      syncError: string | null;
+    }
+  | { ok: false; error: string; status: number; message?: string }
 > {
   await ensureAttendanceWhatsappTemplatesSchema();
   const s = sql();
@@ -130,42 +251,55 @@ export async function listAttendanceTemplatesForConversation(opts: {
   const row = conv[0];
   if (!row) return { ok: false, error: "conversation_not_found", status: 404 };
   if (!row.channel_id || row.channel_type !== "meta") {
-    return { ok: false, error: "channel_not_meta", status: 400 };
+    return {
+      ok: false,
+      error: "channel_not_meta",
+      status: 400,
+      message: "Envio de template disponível apenas em conversas Meta.",
+    };
   }
 
-  const templates = await s<Record<string, unknown>[]>`
-    SELECT
-      a.id, a.company_id, a.meta_template_id, a.name, a.description,
-      a.variables, a.active, a.created_at, a.updated_at,
-      m.template_name AS meta_template_name,
-      m.language_code,
-      m.category,
-      m.status,
-      m.channel_id,
-      m.components
-    FROM public.attendance_whatsapp_templates a
-    INNER JOIN public.meta_message_templates m
-      ON m.id = a.meta_template_id
-     AND m.company_id = a.company_id
-    WHERE a.company_id = ${opts.companyId}::uuid
-      AND a.active = true
-      AND m.active = true
-      AND upper(m.status) = 'APPROVED'
-      AND m.channel_id = ${row.channel_id}::uuid
-    ORDER BY a.name ASC
-  `;
+  const state = await loadChannelTemplateSyncState(opts.companyId, row.channel_id);
+  let synced = false;
+  let syncError: string | null = null;
 
-  const mapped = templates.map((t) => {
-    const base = mapRow(t);
-    base.body_text = extractBodyText(t.components);
-    return base;
+  if (
+    shouldRefreshMetaTemplates({
+      force: opts.forceSync,
+      localCount: state.localCount,
+      lastSyncedAt: state.lastSyncedAt,
+    })
+  ) {
+    const sync = await syncMetaTemplatesForChannel(opts.companyId, row.channel_id);
+    if (sync.ok) {
+      synced = true;
+    } else {
+      syncError = sync.error;
+    }
+  }
+
+  const templates = await loadApprovedChatTemplatesForChannel({
+    companyId: opts.companyId,
+    channelId: row.channel_id,
   });
+
+  if (templates.length === 0 && syncError) {
+    return {
+      ok: false,
+      error: "sync_failed",
+      status: 502,
+      message: "Não foi possível atualizar os templates da Meta.",
+    };
+  }
 
   return {
     ok: true,
     channelType: "meta",
-    templates: mapped,
+    channelId: row.channel_id,
+    templates,
     contactName: row.contact_name,
+    synced,
+    syncError,
   };
 }
 
@@ -419,7 +553,10 @@ export async function upsertAttendanceTemplateOutboundMessage(opts: {
 export async function sendAttendanceWhatsappTemplate(opts: {
   companyId: string;
   conversationId: string;
-  attendanceTemplateId: string;
+  /** Id em meta_message_templates (obrigatório). */
+  metaTemplateId: string;
+  /** Overlay opcional — se informado, deve apontar para o mesmo metaTemplateId. */
+  attendanceTemplateId?: string | null;
   /** Valores por posição: { "1": "Maria", "2": "..." } */
   variableValues: Record<string, string>;
   sentByUserId: string | null;
@@ -468,50 +605,94 @@ export async function sendAttendanceWhatsappTemplate(opts: {
     };
   }
 
-  const presetRows = await s<
+  const metaRows = await s<
     {
       id: string;
       company_id: string;
-      meta_template_id: string;
-      name: string;
-      variables: unknown;
-      active: boolean;
+      channel_id: string;
       template_name: string;
       language_code: string;
       status: string;
-      meta_active: boolean;
-      meta_company_id: string;
-      meta_channel_id: string;
+      active: boolean;
       components: unknown;
     }[]
   >`
-    SELECT
-      a.id, a.company_id, a.meta_template_id, a.name, a.variables, a.active,
-      m.template_name, m.language_code, m.status, m.active AS meta_active,
-      m.company_id AS meta_company_id, m.channel_id AS meta_channel_id,
-      m.components
-    FROM public.attendance_whatsapp_templates a
-    INNER JOIN public.meta_message_templates m ON m.id = a.meta_template_id
-    WHERE a.id = ${opts.attendanceTemplateId}::uuid
-      AND a.company_id = ${opts.companyId}::uuid
+    SELECT id, company_id, channel_id, template_name, language_code, status, active, components
+    FROM public.meta_message_templates
+    WHERE id = ${opts.metaTemplateId}::uuid
+      AND company_id = ${opts.companyId}::uuid
     LIMIT 1
   `;
-  const preset = presetRows[0];
-  if (!preset) {
+  const meta = metaRows[0];
+  if (!meta) {
     return { ok: false, error: "template_not_found", status: 404, message: "Template não encontrado." };
+  }
+
+  let overlay: {
+    id: string;
+    name: string;
+    variables: unknown;
+    active: boolean;
+    meta_template_id: string;
+  } | null = null;
+
+  if (opts.attendanceTemplateId) {
+    const overlayRows = await s<
+      {
+        id: string;
+        name: string;
+        variables: unknown;
+        active: boolean;
+        meta_template_id: string;
+        company_id: string;
+      }[]
+    >`
+      SELECT id, name, variables, active, meta_template_id, company_id
+      FROM public.attendance_whatsapp_templates
+      WHERE id = ${opts.attendanceTemplateId}::uuid
+        AND company_id = ${opts.companyId}::uuid
+      LIMIT 1
+    `;
+    overlay = overlayRows[0] ?? null;
+    if (!overlay || overlay.meta_template_id !== meta.id) {
+      return {
+        ok: false,
+        error: "overlay_mismatch",
+        status: 400,
+        message: "Preset de atendimento não corresponde ao template Meta.",
+      };
+    }
+  } else {
+    const overlayRows = await s<
+      {
+        id: string;
+        name: string;
+        variables: unknown;
+        active: boolean;
+        meta_template_id: string;
+      }[]
+    >`
+      SELECT id, name, variables, active, meta_template_id
+      FROM public.attendance_whatsapp_templates
+      WHERE company_id = ${opts.companyId}::uuid
+        AND meta_template_id = ${meta.id}::uuid
+        AND active = true
+      LIMIT 1
+    `;
+    overlay = overlayRows[0] ?? null;
   }
 
   const guard = evaluateAttendanceTemplateSendGuards({
     authCompanyId: opts.companyId,
     conversationCompanyId: conversation.company_id,
-    presetCompanyId: preset.company_id,
-    metaCompanyId: preset.meta_company_id,
+    presetCompanyId: opts.companyId,
+    metaCompanyId: meta.company_id,
     channelType: conversation.channel_type,
     conversationChannelId: conversation.channel_id,
-    metaChannelId: preset.meta_channel_id,
-    presetActive: preset.active,
-    metaActive: preset.meta_active,
-    metaStatus: preset.status,
+    metaChannelId: meta.channel_id,
+    presetActive: overlay ? overlay.active : true,
+    metaActive: meta.active,
+    metaStatus: meta.status,
   });
   if (!guard.ok) {
     const messages: Record<string, string> = {
@@ -535,7 +716,11 @@ export async function sendAttendanceWhatsappTemplate(opts: {
     };
   }
 
-  const variables = normalizeAttendanceVariables(preset.variables);
+  const bodyTemplate = extractBodyText(meta.components) ?? "";
+  const variables = overlay
+    ? normalizeAttendanceVariables(overlay.variables)
+    : inferVariablesFromBodyTemplate(bodyTemplate);
+
   const valuesByPosition: Record<number, string> = {};
   for (const [k, v] of Object.entries(opts.variableValues ?? {})) {
     const pos = Number(k);
@@ -569,8 +754,8 @@ export async function sendAttendanceWhatsappTemplate(opts: {
     companyId: opts.companyId,
     channelId: conversation.channel_id,
     toPhone: phone,
-    templateName: preset.template_name,
-    languageCode: preset.language_code,
+    templateName: meta.template_name,
+    languageCode: meta.language_code,
     bodyParameters: built.parameters,
   });
 
@@ -584,25 +769,25 @@ export async function sendAttendanceWhatsappTemplate(opts: {
   }
 
   const rendered = renderMetaTemplateFromComponents({
-    components: preset.components,
+    components: meta.components,
     parameters: built.parameters,
   });
-  const bodyTemplate = extractBodyText(preset.components) ?? "";
+  const friendlyName = overlay?.name ?? meta.template_name;
   const messageText =
     rendered.body?.trim() ||
     previewAttendanceTemplateBody(bodyTemplate, built.parameters) ||
-    `[Template] ${preset.name}`;
+    `[Template] ${friendlyName}`;
 
   const wamid = send.wamid?.trim() || null;
   const rawPayload = {
     origin: "attendance_template",
-    attendance_template_id: preset.id,
-    meta_template_row_id: preset.meta_template_id,
-    meta_template_name: preset.template_name,
-    meta_language_code: preset.language_code,
+    attendance_template_id: overlay?.id ?? null,
+    meta_template_row_id: meta.id,
+    meta_template_name: meta.template_name,
+    meta_language_code: meta.language_code,
     template_parameters: built.parameters,
     sent_by_user_id: opts.sentByUserId,
-    friendly_name: preset.name,
+    friendly_name: friendlyName,
   };
 
   let message: Record<string, unknown> | null = null;

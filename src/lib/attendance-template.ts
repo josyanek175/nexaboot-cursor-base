@@ -20,6 +20,47 @@ export type AttendanceTemplateVariable = {
   required: boolean;
 };
 
+/** Freshness do auto-sync Meta no modal (5 minutos). */
+export const ATTENDANCE_TEMPLATE_SYNC_FRESH_MS = 5 * 60 * 1000;
+
+export function shouldRefreshMetaTemplates(opts: {
+  force?: boolean;
+  localCount: number;
+  lastSyncedAt?: Date | string | null;
+  now?: Date;
+  freshMs?: number;
+}): boolean {
+  if (opts.force) return true;
+  if (!opts.localCount || opts.localCount <= 0) return true;
+  if (!opts.lastSyncedAt) return true;
+  const last =
+    opts.lastSyncedAt instanceof Date
+      ? opts.lastSyncedAt
+      : new Date(opts.lastSyncedAt);
+  if (Number.isNaN(last.getTime())) return true;
+  const now = opts.now ?? new Date();
+  const freshMs = opts.freshMs ?? ATTENDANCE_TEMPLATE_SYNC_FRESH_MS;
+  return now.getTime() - last.getTime() > freshMs;
+}
+
+/** Infere variables a partir do body Meta quando não há overlay. */
+export function inferVariablesFromBodyTemplate(
+  bodyTemplate: string | null | undefined,
+): AttendanceTemplateVariable[] {
+  const body = String(bodyTemplate ?? "");
+  const positions = [...body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+  const uniq = [...new Set(positions.filter((n) => Number.isFinite(n) && n >= 1))].sort(
+    (a, b) => a - b,
+  );
+  return uniq.map((position) => ({
+    position,
+    label: `Variável ${position}`,
+    type: "text" as const,
+    source: "manual" as const,
+    required: true,
+  }));
+}
+
 export function normalizeAttendanceVariables(raw: unknown): AttendanceTemplateVariable[] {
   if (!Array.isArray(raw)) return [];
   const out: AttendanceTemplateVariable[] = [];
