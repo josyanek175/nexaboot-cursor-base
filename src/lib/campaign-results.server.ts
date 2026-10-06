@@ -75,8 +75,9 @@ export async function getCampaignResultsReport(
      AND cc.company_id = c.company_id
     WHERE c.company_id = ${companyId}::uuid
       AND c.deleted_at IS NULL
-      AND cc.status = 'sent'
+      -- Inclui 'responded': após resposta o status deixa de ser 'sent'.
       AND cc.sent_at IS NOT NULL
+      AND cc.status IN ('sent', 'responded')
       AND cc.sent_at >= (${period.from}::date AT TIME ZONE 'America/Sao_Paulo')
       AND cc.sent_at < ((${period.to}::date + 1) AT TIME ZONE 'America/Sao_Paulo')
     GROUP BY c.id, c.name, c.status

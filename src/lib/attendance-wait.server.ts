@@ -152,50 +152,83 @@ export async function getAttendanceWaitReport(
     }))
     .sort((a, b) => b.assumedCount - a.assumedCount);
 
-  const queueRows = await s<
-    {
-      conversation_id: string;
-      contact_name: string | null;
-      phone: string | null;
-      last_inbound_at: Date | string;
-      waiting_seconds: number;
-    }[]
-  >`
-    SELECT
-      c.id AS conversation_id,
-      ct.name AS contact_name,
-      ct.phone,
-      lm.created_at AS last_inbound_at,
-      EXTRACT(EPOCH FROM (now() - lm.created_at))::int AS waiting_seconds
-    FROM public.conversations c
-    INNER JOIN public.contacts ct ON ct.id = c.contact_id
-    LEFT JOIN public.conversation_assignments a
-      ON a.conversation_id = c.id
-     AND a.active = true
-     AND a.unassigned_at IS NULL
-    INNER JOIN LATERAL (
-      SELECT m.created_at, m.direction, m.from_me
-      FROM public.messages m
-      WHERE m.conversation_id = c.id
-        AND COALESCE(m.message_type, '') IS DISTINCT FROM 'system'
-        AND COALESCE(m.direction, '') IS DISTINCT FROM 'system'
-      ORDER BY m.created_at DESC
-      LIMIT 1
-    ) lm ON true
-    WHERE c.company_id = ${companyId}::uuid
-      AND c.status IS DISTINCT FROM 'merged'
-      AND c.status IS DISTINCT FROM 'archived'
-      AND c.status IS DISTINCT FROM 'finished'
-      AND c.status IS DISTINCT FROM 'closed'
-      AND c.status IS DISTINCT FROM 'resolved'
-      AND a.id IS NULL
-      AND (
-        lm.direction IN ('in', 'inbound')
-        OR lm.from_me = false
-      )
-    ORDER BY lm.created_at ASC
-    LIMIT 50
-  `;
+  const [waitingCountRows, queueRows] = await Promise.all([
+    s<{ cnt: number }[]>`
+      SELECT COUNT(*)::int AS cnt
+      FROM (
+        SELECT c.id
+        FROM public.conversations c
+        LEFT JOIN public.conversation_assignments a
+          ON a.conversation_id = c.id
+         AND a.active = true
+         AND a.unassigned_at IS NULL
+        INNER JOIN LATERAL (
+          SELECT m.direction, m.from_me
+          FROM public.messages m
+          WHERE m.conversation_id = c.id
+            AND COALESCE(m.message_type, '') IS DISTINCT FROM 'system'
+            AND COALESCE(m.direction, '') IS DISTINCT FROM 'system'
+          ORDER BY m.created_at DESC
+          LIMIT 1
+        ) lm ON true
+        WHERE c.company_id = ${companyId}::uuid
+          AND c.status IS DISTINCT FROM 'merged'
+          AND c.status IS DISTINCT FROM 'archived'
+          AND c.status IS DISTINCT FROM 'finished'
+          AND c.status IS DISTINCT FROM 'closed'
+          AND c.status IS DISTINCT FROM 'resolved'
+          AND a.id IS NULL
+          AND (
+            lm.direction IN ('in', 'inbound')
+            OR lm.from_me = false
+          )
+      ) q
+    `,
+    s<
+      {
+        conversation_id: string;
+        contact_name: string | null;
+        phone: string | null;
+        last_inbound_at: Date | string;
+        waiting_seconds: number;
+      }[]
+    >`
+      SELECT
+        c.id AS conversation_id,
+        ct.name AS contact_name,
+        ct.phone,
+        lm.created_at AS last_inbound_at,
+        EXTRACT(EPOCH FROM (now() - lm.created_at))::int AS waiting_seconds
+      FROM public.conversations c
+      INNER JOIN public.contacts ct ON ct.id = c.contact_id
+      LEFT JOIN public.conversation_assignments a
+        ON a.conversation_id = c.id
+       AND a.active = true
+       AND a.unassigned_at IS NULL
+      INNER JOIN LATERAL (
+        SELECT m.created_at, m.direction, m.from_me
+        FROM public.messages m
+        WHERE m.conversation_id = c.id
+          AND COALESCE(m.message_type, '') IS DISTINCT FROM 'system'
+          AND COALESCE(m.direction, '') IS DISTINCT FROM 'system'
+        ORDER BY m.created_at DESC
+        LIMIT 1
+      ) lm ON true
+      WHERE c.company_id = ${companyId}::uuid
+        AND c.status IS DISTINCT FROM 'merged'
+        AND c.status IS DISTINCT FROM 'archived'
+        AND c.status IS DISTINCT FROM 'finished'
+        AND c.status IS DISTINCT FROM 'closed'
+        AND c.status IS DISTINCT FROM 'resolved'
+        AND a.id IS NULL
+        AND (
+          lm.direction IN ('in', 'inbound')
+          OR lm.from_me = false
+        )
+      ORDER BY lm.created_at ASC
+      LIMIT 50
+    `,
+  ]);
 
   const queue: AttendanceWaitQueueRow[] = queueRows.map((r) => ({
     conversationId: r.conversation_id,
@@ -211,7 +244,7 @@ export async function getAttendanceWaitReport(
       assumedCount,
       avgWaitSeconds: averageSeconds(totalWait, assumedCount),
       medianWaitSeconds,
-      waitingNowCount: queue.length,
+      waitingNowCount: Number(waitingCountRows[0]?.cnt ?? 0) || 0,
     },
     queue,
     agents,

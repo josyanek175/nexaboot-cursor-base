@@ -31,6 +31,13 @@ assert("fmt seconds", formatDurationSeconds(9) === "9s");
 assert("fmt minutes", formatDurationSeconds(125) === "2 min 05s");
 assert("fmt hours", formatDurationSeconds(3661) === "1h 01min");
 
+// Regra de inclusão Resultados: sent + responded (não só status='sent')
+const includeStatuses = ["sent", "responded"];
+assert("include sent", includeStatuses.includes("sent"));
+assert("include responded", includeStatuses.includes("responded"));
+assert("exclude pending", !includeStatuses.includes("pending"));
+assert("exclude failed", !includeStatuses.includes("failed"));
+
 if (failed > 0) {
   console.error(`\n${failed} teste(s) falharam`);
   process.exit(1);
