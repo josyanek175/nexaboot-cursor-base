@@ -22,6 +22,7 @@ import {
 import { canManageInternalGroups } from "@/lib/current-user";
 import {
   canAccessCampaignsModule,
+  canViewCampaignCosts,
   actingUserFromAuth,
 } from "@/lib/permissions";
 import { useEffect, useState } from "react";
@@ -59,6 +60,7 @@ type NavItem = {
   badgeKey?: UnreadKey;
   adminOnly?: boolean;
   campaignsOnly?: boolean;
+  waitOnly?: boolean;
   accessHours?: boolean;
   flows?: boolean;
   reminders?: boolean;
@@ -68,6 +70,7 @@ type CompanyOption = { id: string; name: string };
 
 const nav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/espera", label: "Tempo de espera", icon: Clock3, waitOnly: true },
   {
     to: "/atendimento",
     label: "Atendimento",
@@ -264,6 +267,11 @@ function Shell() {
               if (!item.campaignsOnly) return true;
               if (!actor) return false;
               return canAccessCampaignsModule(actor, companyValid);
+            })
+            .filter((item) => {
+              if (!item.waitOnly) return true;
+              if (!actor) return false;
+              return companyValid && canViewCampaignCosts(actor);
             })
             .map((item) => {
               const { to, label, icon: Icon, badgeKey } = item;
