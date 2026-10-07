@@ -18,6 +18,7 @@ import {
   UsersRound,
   Megaphone,
   Clock3,
+  ChartColumn,
 } from "lucide-react";
 import { canManageInternalGroups } from "@/lib/current-user";
 import {
@@ -48,7 +49,13 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 const roleLabel = (r: Role) => ROLE_LABELS[r] ?? r;
 
-const OPERATIONAL_PREFIXES = ["/atendimento", "/contatos", "/canais", "/campanhas"];
+const OPERATIONAL_PREFIXES = [
+  "/atendimento",
+  "/contatos",
+  "/canais",
+  "/campanhas",
+  "/gerencial",
+];
 function isOperationalPath(pathname: string): boolean {
   return OPERATIONAL_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
@@ -60,6 +67,7 @@ type NavItem = {
   badgeKey?: UnreadKey;
   adminOnly?: boolean;
   campaignsOnly?: boolean;
+  gerencialOnly?: boolean;
   waitOnly?: boolean;
   accessHours?: boolean;
   flows?: boolean;
@@ -86,6 +94,7 @@ const nav: NavItem[] = [
   { to: "/grupos-internos", label: "Grupos Internos", icon: UsersRound, adminOnly: true },
   { to: "/contatos", label: "Contatos", icon: Contact2 },
   { to: "/campanhas", label: "Campanhas", icon: Megaphone, campaignsOnly: true },
+  { to: "/gerencial", label: "Gerencial", icon: ChartColumn, gerencialOnly: true },
   { to: "/fluxos", label: "Fluxos", icon: Waypoints, flows: true },
   { to: "/lembretes", label: "Lembretes", icon: Bell, reminders: true },
   { to: "/empresas", label: "Empresas", icon: Building2 },
@@ -270,6 +279,11 @@ function Shell() {
             })
             .filter((item) => {
               if (!item.waitOnly) return true;
+              if (!actor) return false;
+              return companyValid && canViewCampaignCosts(actor);
+            })
+            .filter((item) => {
+              if (!item.gerencialOnly) return true;
               if (!actor) return false;
               return companyValid && canViewCampaignCosts(actor);
             })

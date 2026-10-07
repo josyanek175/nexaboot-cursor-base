@@ -6,9 +6,6 @@ import {
   Loader2,
   Pencil,
   Trash2,
-  ShieldBan,
-  CircleDollarSign,
-  ChartColumn,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -155,33 +152,13 @@ function CampanhasPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            to="/campanhas/bloqueados"
-            className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
-          >
-            <ShieldBan className="h-4 w-4" /> Bloqueados
-          </Link>
           {canCosts && (
-            <>
-              <Link
-                to="/campanhas/custos"
-                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
-              >
-                <CircleDollarSign className="h-4 w-4" /> Custos
-              </Link>
-              <Link
-                to="/campanhas/resultados"
-                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
-              >
-                <ChartColumn className="h-4 w-4" /> Resultados
-              </Link>
-              <Link
-                to="/campanhas/templates-atendimento"
-                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
-              >
-                Templates atendimento
-              </Link>
-            </>
+            <Link
+              to="/campanhas/templates-atendimento"
+              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+            >
+              Templates atendimento
+            </Link>
           )}
           {canManage && (
             <>
