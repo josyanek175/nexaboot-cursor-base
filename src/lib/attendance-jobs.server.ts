@@ -2,21 +2,46 @@ import { ATTENDANCE_LIFECYCLE_SCHEMA } from "@/lib/attendance-lifecycle-schema";
 import { getSql } from "@/lib/pg.server";
 import { onAutomationInbound } from "@/lib/automation-flow.server";
 
-let ready: Promise<void> | null = null;
-export function ensureAttendanceLifecycleSchema(): Promise<void> {
-  if (!ready)
+let ready: Promise<boolean> | null = null;
+let readyMode: string | undefined;
+let checkedAt = 0;
+let schemaAvailable = false;
+/** Missing optional schema must never stop the existing inbound path. */
+export function ensureAttendanceLifecycleSchema(): Promise<boolean> {
+  const mode = process.env.NODE_ENV;
+  if (readyMode !== mode || (!schemaAvailable && Date.now() - checkedAt > 15000)) ready = null;
+  if (!ready) {
+    readyMode = mode;
+    checkedAt = Date.now();
     ready = (async () => {
-      if (process.env.NODE_ENV === "production") {
-        // Production migrations remain an explicit operational step.
+      if (mode === "production") {
+        // Read-only readiness check. Production DDL stays an explicit operation.
         await getSql()`SELECT whatsapp_profile_name FROM public.contacts LIMIT 0`;
-        await getSql()`SELECT sequence_id FROM public.attendance_automation_jobs LIMIT 0`;
+        await getSql()`SELECT message_source FROM public.messages LIMIT 0`;
+        await getSql()`SELECT id, sequence_id, company_id, channel_id, conversation_id,
+          contact_id, message_id, text, is_media, status, attempts, available_at,
+          lease_until, claim_token, last_error FROM public.attendance_automation_jobs LIMIT 0`;
       } else {
         await getSql().unsafe(ATTENDANCE_LIFECYCLE_SCHEMA);
       }
-    })().catch((error) => {
+      schemaAvailable = true;
+      return true;
+    })().catch((error: unknown) => {
+      schemaAvailable = false;
+      const code = (error as { code?: string })?.code;
+      if (code === "42703" || code === "42P01") {
+        console.error("[ATTENDANCE_SCHEMA_NOT_READY]", {
+          code,
+          mode: "legacy_inbound",
+          message:
+            "Receiving messages without the optional lifecycle schema. Apply the recovery migration to the application's database.",
+        });
+        return false;
+      }
       ready = null;
       throw error;
     });
+  }
   return ready;
 }
 
@@ -33,7 +58,7 @@ type Job = {
 
 /** Claims in FIFO order per cycle. The transaction ends before Meta is called. */
 export async function drainAttendanceJobs(conversationId?: string, limit = 20): Promise<number> {
-  await ensureAttendanceLifecycleSchema();
+  if (!(await ensureAttendanceLifecycleSchema())) return 0;
   let processed = 0;
   for (let i = 0; i < limit; i++) {
     const rows = await getSql().begin(async (tx) => {

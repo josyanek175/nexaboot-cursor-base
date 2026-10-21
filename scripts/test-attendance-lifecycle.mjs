@@ -143,13 +143,115 @@ try {
   `);
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = "production";
-  await assert.rejects(api.ensureAttendanceLifecycleSchema());
+  assert.equal(await api.ensureAttendanceLifecycleSchema(), false);
   assert.equal(
     (
       await db`SELECT count(*)::int AS n FROM information_schema.columns
     WHERE table_schema='public' AND table_name='contacts' AND column_name='whatsapp_profile_name'`
     )[0].n,
     0,
+  );
+  // Reproduce production incident: no profile column, no source column, no queue.
+  const legacy = await api.commitMetaAttendanceMessage(
+    input("legacy-1", { phone: "5511000000001" }),
+  );
+  assert.ok(legacy.messageId);
+  await db`UPDATE contacts SET name='Cadastro confirmado', name_source='manual' WHERE id=${legacy.contactId}`;
+  const legacyExisting = await api.commitMetaAttendanceMessage(
+    input("legacy-2", { phone: "5511000000001", profileName: "Outro perfil" }),
+  );
+  assert.ok(legacyExisting.messageId);
+  assert.equal(
+    (await db`SELECT name FROM contacts WHERE id=${legacy.contactId}`)[0].name,
+    "Cadastro confirmado",
+  );
+  const legacyEcho = await api.commitMetaAttendanceMessage(
+    input("legacy-echo", { phone: "5511000000001", echo: true }),
+  );
+  assert.ok(legacyEcho.messageId);
+  assert.equal(await api.drainAttendanceJobs(legacy.conversationId), 0);
+  const legacyReplay = await api.commitMetaAttendanceMessage(
+    input("legacy-1", { phone: "5511000000001" }),
+  );
+  assert.equal(legacyReplay.messageId, null);
+  const legacyMedia = await api.commitMetaAttendanceMessage(
+    input("legacy-media", {
+      phone: "5511000000001",
+      text: "[áudio]",
+      media: {
+        mediaType: "audio",
+        messageText: "[áudio]",
+        caption: null,
+        mimeType: "audio/ogg",
+        filename: null,
+        mediaBase64: null,
+        mediaError: null,
+        mediaSize: null,
+        rawPayload: {},
+      },
+    }),
+  );
+  assert.ok(legacyMedia.messageId);
+  assert.equal(
+    (await db`SELECT to_regclass('public.attendance_automation_jobs') AS name`)[0].name,
+    null,
+  );
+  console.log(
+    "PASS recovery: production without optional schema receives text, media and echoes; preserves manual names and deduplicates.",
+  );
+  // Recovery must not fail on the legacy active duplicates that can abort the original migration.
+  await db`INSERT INTO conversations(company_id,contact_id,whatsapp_channel_id,status)
+    VALUES (${companyId},${legacy.contactId},${channelId},'open')`;
+  const failedMigrationConnection = await db.reserve();
+  try {
+    await assert.rejects(
+      failedMigrationConnection.unsafe(
+        readFileSync("scripts/migrations/20261020_attendance_lifecycle.sql", "utf8"),
+      ),
+      (error) => error.code === "23505",
+    );
+    await failedMigrationConnection.unsafe("ROLLBACK");
+  } finally {
+    failedMigrationConnection.release();
+  }
+  assert.equal(
+    (
+      await db`SELECT count(*)::int AS n FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='contacts' AND column_name='whatsapp_profile_name'`
+    )[0].n,
+    0,
+  );
+  const afterFailedMigration = await api.commitMetaAttendanceMessage(
+    input("after-failed-migration", { phone: "5511000000001" }),
+  );
+  assert.ok(afterFailedMigration.messageId);
+  const recoveryConnection = await db.reserve();
+  try {
+    await recoveryConnection.unsafe(
+      readFileSync("scripts/migrations/20261021_attendance_recovery.sql", "utf8"),
+    );
+    await recoveryConnection.unsafe(
+      readFileSync("scripts/migrations/20261021_attendance_recovery.sql", "utf8"),
+    );
+  } finally {
+    recoveryConnection.release();
+  }
+  const actualNow = Date.now;
+  try {
+    Date.now = () => actualNow() + 16000;
+    assert.equal(await api.ensureAttendanceLifecycleSchema(), true);
+  } finally {
+    Date.now = actualNow;
+  }
+  assert.equal(
+    (
+      await db`SELECT count(*)::int AS n FROM messages WHERE conversation_id=${legacy.conversationId}`
+    )[0].n,
+    5,
+  );
+  await db`UPDATE conversations SET status='finished' WHERE contact_id=${legacy.contactId}`;
+  console.log(
+    "PASS recovery: additive migration applied twice despite legacy duplicates; schema readiness recovers without restarting.",
   );
   if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = previousNodeEnv;

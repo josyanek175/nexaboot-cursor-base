@@ -23,6 +23,7 @@ export async function upsertInboundContact(params: {
   externalJid: string;
   name?: string;
   fromMe?: boolean;
+  persistProfile?: boolean;
 }): Promise<string> {
   const { companyId, phone, externalJid, fromMe = false } = params;
   const name = fromMe ? null : validProfileName(params.name);
@@ -41,7 +42,7 @@ export async function upsertInboundContact(params: {
 
   if (existing[0]) {
     const c = existing[0];
-    if (name) {
+    if (name && params.persistProfile !== false) {
       await s`UPDATE public.contacts SET whatsapp_profile_name = ${name}, updated_at = now()
         WHERE id = ${c.id}::uuid AND whatsapp_profile_name IS DISTINCT FROM ${name}`;
     }
@@ -66,7 +67,15 @@ export async function upsertInboundContact(params: {
   const nameSource = !fromMe && name && name.trim() ? "whatsapp" : "auto";
 
   try {
-    const inserted = await s<{ id: string }[]>`
+    const inserted =
+      params.persistProfile === false
+        ? await s<{ id: string }[]>`
+          INSERT INTO public.contacts
+            (company_id, phone, phone_match, name, name_source, external_jid, contact_type)
+          VALUES (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
+          ON CONFLICT DO NOTHING RETURNING id
+        `
+        : await s<{ id: string }[]>`
       INSERT INTO public.contacts
         (company_id, phone, phone_match, name, name_source, external_jid, contact_type, whatsapp_profile_name)
       VALUES
@@ -248,10 +257,23 @@ export async function insertWhatsappBusinessAppEcho(params: {
   messageType: string;
   messageText: string | null;
   rawPayload: unknown;
+  persistSource?: boolean;
 }): Promise<string | null> {
   const { conversationId, externalMessageId, messageType, messageText, rawPayload } = params;
   const s = executor(params.sql);
-  const inserted = await s<{ id: string }[]>`
+  const inserted =
+    params.persistSource === false
+      ? await s<{ id: string }[]>`
+      INSERT INTO public.messages (
+        conversation_id, external_id, external_message_id, direction,
+        message_type, message_text, from_me, raw_payload, status
+      ) VALUES (
+        ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'out',
+        ${messageType}, ${messageText}, true, ${rawPayload}::jsonb, 'received'
+      ) ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
+      DO NOTHING RETURNING id
+    `
+      : await s<{ id: string }[]>`
     INSERT INTO public.messages (
       conversation_id, external_id, external_message_id, direction,
       message_type, message_text, from_me, raw_payload, status, message_source

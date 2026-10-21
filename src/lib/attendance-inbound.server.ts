@@ -29,12 +29,16 @@ type MessageInput = {
 };
 /** Commit contact + cycle + message + automation work before any external send. */
 export async function commitMetaAttendanceMessage(input: MessageInput) {
-  await ensureAttendanceLifecycleSchema();
+  const lifecycleAvailable = await ensureAttendanceLifecycleSchema();
   return getSql().begin(async (transaction) =>
-    persistMetaAttendanceMessage(transaction as unknown as CrmSql, input),
+    persistMetaAttendanceMessage(transaction as unknown as CrmSql, input, lifecycleAvailable),
   );
 }
-export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInput) {
+export async function persistMetaAttendanceMessage(
+  tx: CrmSql,
+  input: MessageInput,
+  lifecycleAvailable = true,
+) {
   // One lock even when the contact does not exist yet. Scope includes the tenant.
   await tx`SELECT pg_advisory_xact_lock(hashtextextended(${input.companyId + ":" + normalizePhoneForMatch(input.phone)}, 0))`;
   const contactId = await upsertInboundContact({
@@ -44,6 +48,7 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
     externalJid: input.phone,
     name: input.profileName ?? undefined,
     fromMe: !!input.echo,
+    persistProfile: lifecycleAvailable,
   });
   // Cross-cycle dedup: checking only (conversation_id, wamid) can reopen on replay.
   const duplicate = await tx<{ conversation_id: string }[]>`
@@ -60,7 +65,7 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
     companyId: input.companyId,
     channelId: input.channelId,
     contactId,
-    newCycle: true,
+    newCycle: lifecycleAvailable,
     echo: input.echo,
   });
   const messageId = input.echo
@@ -71,6 +76,7 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
         messageType: input.messageType ?? "text",
         messageText: input.text,
         rawPayload: input.rawPayload,
+        persistSource: lifecycleAvailable,
       })
     : input.media
       ? await insertInboundMediaMessage({
@@ -99,7 +105,8 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
       conversationId,
       lastMessageText: input.text,
     });
-    await tx`INSERT INTO public.attendance_automation_jobs
+    if (lifecycleAvailable)
+      await tx`INSERT INTO public.attendance_automation_jobs
       (company_id, channel_id, conversation_id, contact_id, message_id, text, is_media)
       VALUES (${input.companyId}::uuid, ${input.channelId}::uuid, ${conversationId}::uuid,
         ${contactId}::uuid, ${messageId}::uuid, ${input.media ? (input.media.caption ?? "") : input.text}, ${!!input.media})

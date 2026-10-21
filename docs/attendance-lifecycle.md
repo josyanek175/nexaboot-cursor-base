@@ -1,3 +1,18 @@
+## Recuperação de recebimento com migração ausente ou incompleta
+
+O erro `column "whatsapp_profile_name" does not exist` significa que o banco acessado pelo serviço web não contém a coluna esperada. O build da aplicação pode ter concluído normalmente. O log não determina se a migração falhou, foi desfeita por outro erro na transação ou foi aplicada em outro banco.
+
+O hotfix mantém a entrada Meta disponível mesmo quando faltam os campos ou a fila novos. Nesse caso, registra `[ATTENDANCE_SCHEMA_NOT_READY]` com `mode: legacy_inbound`, grava texto/mídia/echo com a estrutura anterior e mantém a deduplicação. Os novos ciclos e o fluxo automático ficam suspensos até a estrutura estar completa. A disponibilidade da estrutura é verificada novamente a cada 15 segundos; nenhuma DDL é executada automaticamente em produção. Erros de conexão/permissão não são mascarados como ausência de migração.
+
+Procedimento:
+
+1. Atualizar o serviço `nexaboot-web` para o hotfix da `main` e confirmar que uma mensagem nova é gravada (`saved: 1`).
+2. Identificar o banco usado pela `DATABASE_URL` desse serviço, sem publicar a credencial.
+3. Se a estrutura estiver incompleta, aplicar explicitamente `scripts/migrations/20261021_attendance_recovery.sql` nesse mesmo banco. Ele é aditivo, não mescla conversas e não cria o índice único global que pode conflitar com duplicados legados. Se algum comando falhar, verificar o erro antes de continuar.
+4. A verificação final do script deve retornar `profile_ready = true` e `queue_table = attendance_automation_jobs` (possivelmente com prefixo `public.`). Depois de até 15 segundos, testar um novo atendimento e o fluxo configurado.
+
+A recuperação foi testada em PostgreSQL real: ausência de todas as estruturas opcionais, nomes manuais, texto, mídia, echo, reentrega duplicada e migração aditiva reaplicada duas vezes com duplicados ativos legados. Não houve acesso nem migração de produção pelo agente.
+
 # Ciclos de atendimento Meta e nome do perfil
 
 A implementação parte de `origin/main` em `157e854`. Não inclui as alterações locais não commitadas da branch `dev`.

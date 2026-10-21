@@ -349,7 +349,8 @@ async function loadContactVars(contactId: string, collected: Collected): Promise
     phone: string | null;
     reference: string | null;
   }[]>`
-    SELECT name, name_source, whatsapp_profile_name, phone, reference FROM public.contacts WHERE id = ${contactId}::uuid LIMIT 1
+    SELECT name, name_source, to_jsonb(ct)->>'whatsapp_profile_name' AS whatsapp_profile_name, phone, reference
+    FROM public.contacts ct WHERE id = ${contactId}::uuid LIMIT 1
   `;
   const contact = rows[0];
   return {
