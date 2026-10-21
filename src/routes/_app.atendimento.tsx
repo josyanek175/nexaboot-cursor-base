@@ -2434,9 +2434,8 @@ function BubbleInner({ m, onRetryDocument }: { m: Message; onRetryDocument?: (id
     );
   }
   const isMedia = m.type === "image" || m.type === "audio" || m.type === "video" || m.type === "document";
-  // Estratégia definitiva: media_url já vem salvo pelo webhook (storage público).
-  // Não tentamos mais resolver via proxy/base64 sob demanda.
-  const resolvedUrl: string | undefined = m.mediaUrl;
+  // Imagens antigas e ecos podem não ter media_url; a rota valida a empresa.
+  const resolvedUrl: string | undefined = m.mediaUrl || (isMedia ? `/api/messages/${encodeURIComponent(m.id)}/media` : undefined);
   const loadingMedia = false;
   const [previewOpen, setPreviewOpen] = useState(false);
 

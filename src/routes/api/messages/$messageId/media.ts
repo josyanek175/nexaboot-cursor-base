@@ -9,6 +9,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { downloadMetaMedia } from "@/lib/meta-media-download.server";
+import { loadChannelForCompany } from "@/lib/whatsapp/whatsapp-provider-router.server";
+import { resolveStoredMetaMedia } from "@/lib/stored-meta-media";
 import { messageMediaContentDisposition } from "@/lib/message-media.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,7 +39,7 @@ export const Route = createFileRoute("/api/messages/$messageId/media")({
         const rows = isUuid
           ? await s<any[]>`
               SELECT m.id, m.media_base64, m.mime_type, m.media_mimetype,
-                     m.media_filename, m.media_error
+                     m.media_filename, m.media_error, m.raw_payload, c.whatsapp_channel_id
               FROM public.messages m
               JOIN public.conversations c ON c.id = m.conversation_id
               WHERE (m.id = ${messageId}::uuid OR m.external_id = ${messageId})
@@ -45,7 +48,7 @@ export const Route = createFileRoute("/api/messages/$messageId/media")({
             `
           : await s<any[]>`
               SELECT m.id, m.media_base64, m.mime_type, m.media_mimetype,
-                     m.media_filename, m.media_error
+                     m.media_filename, m.media_error, m.raw_payload, c.whatsapp_channel_id
               FROM public.messages m
               JOIN public.conversations c ON c.id = m.conversation_id
               WHERE m.external_id = ${messageId}
@@ -56,6 +59,43 @@ export const Route = createFileRoute("/api/messages/$messageId/media")({
         const msg = rows[0];
         if (!msg) return jsonErr({ error: "Mensagem não encontrada", requestedId: messageId }, 404);
 
+        if (!msg.media_base64) {
+          const media = resolveStoredMetaMedia(msg.raw_payload);
+          const channel =
+            media && msg.whatsapp_channel_id
+              ? await loadChannelForCompany(msg.whatsapp_channel_id, companyId)
+              : null;
+          if (media && channel?.channelType === "meta" && channel.phoneNumberId) {
+            try {
+              const downloaded = await downloadMetaMedia({
+                channelId: channel.id,
+                companyId,
+                phoneNumberId: channel.phoneNumberId,
+                mediaId: media.id,
+                mediaType: media.type,
+                messageId: msg.id,
+                mimeHint: media.mimeType,
+                filenameHint: media.filename,
+              });
+              if (downloaded.ok) {
+                await s`
+                  UPDATE public.messages m
+                  SET media_base64 = ${downloaded.base64}, mime_type = ${downloaded.mimeType},
+                      media_mimetype = ${downloaded.mimeType}, media_error = NULL,
+                      media_size = ${downloaded.fileSize},
+                      media_url = ${`/api/messages/${msg.id}/media`}
+                  FROM public.conversations c
+                  WHERE m.id = ${msg.id}::uuid AND c.id = m.conversation_id
+                    AND c.company_id = ${companyId}::uuid AND m.media_base64 IS NULL
+                `;
+                msg.media_base64 = downloaded.base64;
+                msg.mime_type = downloaded.mimeType;
+              }
+            } catch {
+              console.error("[MESSAGE_MEDIA_RECOVERY_FAILED]", { messageId: msg.id });
+            }
+          }
+        }
         if (!msg.media_base64) {
           return jsonErr(
             { error: "Mídia não disponível", messageId: msg.id, media_error: msg.media_error },
@@ -72,11 +112,17 @@ export const Route = createFileRoute("/api/messages/$messageId/media")({
             "Content-Type": mime,
             "Cache-Control": "private, max-age=86400",
           };
-          headers["Content-Disposition"] = messageMediaContentDisposition(mime, msg.media_filename ?? null);
+          headers["Content-Disposition"] = messageMediaContentDisposition(
+            mime,
+            msg.media_filename ?? null,
+          );
           return new Response(bytes, { status: 200, headers });
         } catch (e) {
           return jsonErr(
-            { error: "Falha ao decodificar base64", detail: e instanceof Error ? e.message : String(e) },
+            {
+              error: "Falha ao decodificar base64",
+              detail: e instanceof Error ? e.message : String(e),
+            },
             500,
           );
         }
