@@ -37,7 +37,7 @@ export function FlowStepEditor({
       {"text" in step && (
         <label className="mb-3 block text-xs">
           {step.type === "end" ? "Mensagem final" : "Mensagem"}
-          <textarea
+          <textarea maxLength={step.type === "buttons" || step.type === "reminder" ? 1024 : 2000}
             value={step.text}
             onChange={(event) => onChange({ ...step, text: event.target.value })}
             className="mt-1 min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"

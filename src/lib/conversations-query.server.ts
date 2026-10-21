@@ -259,6 +259,14 @@ export async function listConversationsForCompany(opts: {
       AND a.unassigned_at IS NULL
     LEFT JOIN public.users au ON au.id = a.user_id
     WHERE c.company_id = ${opts.companyId}::uuid
+      AND (${campaignQueue} OR c.id = (
+        SELECT latest.id FROM public.conversations latest
+        WHERE latest.company_id=c.company_id AND latest.contact_id=c.contact_id
+          AND latest.whatsapp_channel_id=c.whatsapp_channel_id
+          AND latest.status IS DISTINCT FROM 'merged' AND latest.status IS DISTINCT FROM 'archived'
+        ORDER BY (latest.status IN ('open','waiting')) DESC,latest.last_message_at DESC NULLS LAST,latest.created_at DESC,latest.id DESC
+        LIMIT 1
+      ))
       AND c.status IS DISTINCT FROM 'merged'
       AND c.status IS DISTINCT FROM 'archived'
       AND ct.status IS DISTINCT FROM 'merged'

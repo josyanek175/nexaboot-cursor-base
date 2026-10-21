@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
-import { getSessionUserId } from "@/lib/session.server";
+import { requireSession } from "@/lib/session.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 import {
   buildOperationalCompanySetCookie,
@@ -21,8 +21,9 @@ export const Route = createFileRoute("/api/auth/operational-company")({
     handlers: {
       /** Lista empresas reais ativas (plataforma) + empresa operacional atual. */
       GET: async () => {
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthenticated" }, { status: 401 });
+        const session = await requireSession();
+        if (session instanceof Response) return session;
+        const uid = session.userId;
 
         const role = await getActorRole(uid);
         if (!role || !isPlatformRole(role)) {
@@ -45,8 +46,9 @@ export const Route = createFileRoute("/api/auth/operational-company")({
       },
 
       POST: async ({ request }) => {
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthenticated" }, { status: 401 });
+        const session = await requireSession();
+        if (session instanceof Response) return session;
+        const uid = session.userId;
 
         const role = await getActorRole(uid);
         if (!role || !isPlatformRole(role)) {
@@ -80,8 +82,9 @@ export const Route = createFileRoute("/api/auth/operational-company")({
       },
 
       DELETE: async () => {
-        const uid = getSessionUserId();
-        if (!uid) return Response.json({ error: "unauthenticated" }, { status: 401 });
+        const session = await requireSession();
+        if (session instanceof Response) return session;
+        const uid = session.userId;
 
         const role = await getActorRole(uid);
         if (!role || !isPlatformRole(role)) {

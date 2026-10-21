@@ -28,7 +28,7 @@ export const Route = createFileRoute("/api/messages/send")({
 
         const { conversationId, text } = parsed.data;
 
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         const s = sql();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`

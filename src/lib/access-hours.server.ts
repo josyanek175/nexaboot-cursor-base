@@ -107,7 +107,7 @@ export async function accessAllowedNow(opts: {
 }): Promise<{ allowed: true } | ({ allowed: false; forceLogout: boolean } & AccessHoursNotice)> {
   // Produção: só o perfil ATENDENTE pode ser barrado por horário.
   if (String(opts.role ?? "").toUpperCase() !== "ATENDENTE") return { allowed: true };
-  if (!opts.companyId || !isAccessProfile(opts.role)) return { allowed: true };
+  if (!opts.companyId || !isAccessProfile(opts.role ?? "")) return { allowed: true };
   try {
     const view = await loadAccessHours(opts.companyId);
     const profile = view.profiles.find((item) => item.profile === opts.role);

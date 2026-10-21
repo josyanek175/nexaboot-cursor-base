@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 export type AuditAction =
+  | "auth.login.blocked_no_company"
   | "user.create"
   | "user.update"
   | "user.password_change"

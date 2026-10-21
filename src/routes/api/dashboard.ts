@@ -62,6 +62,7 @@ export const Route = createFileRoute("/api/dashboard")({
             WHERE m.conversation_id = c.id
               AND COALESCE(m.message_type, '') IS DISTINCT FROM 'system'
               AND COALESCE(m.direction, '') IS DISTINCT FROM 'system'
+              AND COALESCE(m.sent_by_name,'') <> 'Fluxo'
             ORDER BY m.created_at DESC
             LIMIT 1
           ) lm ON true
@@ -145,8 +146,9 @@ export const Route = createFileRoute("/api/dashboard")({
           return false;
         };
 
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
+        const todayParts = new Intl.DateTimeFormat("en-CA", {timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+        const datePart = (name: string) => todayParts.find(part => part.type === name)!.value;
+        const startOfToday = new Date(`${datePart("year")}-${datePart("month")}-${datePart("day")}T00:00:00-03:00`);
         const todayIso = startOfToday.toISOString();
 
         const finishedToday = base.filter((r) => {
@@ -187,8 +189,8 @@ export const Route = createFileRoute("/api/dashboard")({
 
         const channels = {
           total: channelRows.length,
-          connected: channelRows.filter((c) => String(c.status).toLowerCase() === "connected").length,
-          disconnected: channelRows.filter((c) => String(c.status).toLowerCase() !== "connected").length,
+          connected: channelRows.filter((c) => ["connected","active"].includes(String(c.status).toLowerCase())).length,
+          disconnected: channelRows.filter((c) => !["connected","active"].includes(String(c.status).toLowerCase())).length,
           items: channelRows.map((c) => ({
             id: c.id,
             name: c.name || c.evolution_instance_name || "Canal",

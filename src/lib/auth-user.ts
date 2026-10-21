@@ -31,9 +31,8 @@ export function normalizeAuthUser(raw: MeUserPayload): AuthUser {
   const companyId = raw.company_id ?? raw.companyId ?? null;
   const companyName = raw.company_name ?? raw.companyName ?? null;
   const companyValid = raw.company_valid ?? raw.companyValid ?? false;
-  const platformAccess =
-    raw.platform_access ?? raw.platformAccess ?? isPlatformRole(raw.role);
-  const tenantId = raw.tenant_id ?? raw.tenantId ?? "default";
+  const platformAccess = raw.platform_access ?? raw.platformAccess ?? isPlatformRole(raw.role);
+  const tenantId = companyId ?? ""; // Operational client scope must match the server company, never a shared legacy tenant.
 
   return {
     id: raw.id,

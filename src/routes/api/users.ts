@@ -3,9 +3,10 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { canAssignUserRole } from "@/lib/user-role-policy";
 import { requireCompanyId } from "@/lib/company.server";
 
-const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI"]);
+const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI", "SUPER_ADMIN"]);
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(120),
@@ -19,7 +20,7 @@ const CreateBody = z.object({
 });
 
 async function getActor() {
-  const uid = getSessionUserId();
+  const uid = await getSessionUserId();
   if (!uid) return null;
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id, active
@@ -70,6 +71,8 @@ export const Route = createFileRoute("/api/users")({
           );
         }
 
+        if (!canAssignUserRole(String(actor.role), parsed.data.role))
+          return Response.json({ error: "role_not_allowed" }, { status: 403 });
         const email = parsed.data.email.toLowerCase();
         // Empresa do novo usuário é SEMPRE a do administrador logado.
         // Nunca cria usuário operacional sem empresa, nunca em outra empresa.

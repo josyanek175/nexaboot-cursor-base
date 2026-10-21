@@ -63,7 +63,9 @@ let _pgReservePending = 0;
  * Cliente postgres.js original (sem Proxy).
  * Nunca wrappear tagged templates — fragments/ORDER BY dinâmico quebram.
  */
-export function sql(strings?: TemplateStringsArray, ...values: unknown[]) {
+export function sql<T extends readonly object[] = postgres.Row[]>(strings: TemplateStringsArray, ...values: unknown[]): postgres.PendingQuery<T>;
+export function sql(): ReturnType<typeof postgres>;
+export function sql(strings?: TemplateStringsArray, ...values: unknown[]): unknown {
   if (!_sql) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL não configurada");
@@ -471,7 +473,7 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
         SET contact_id = ${ct[0].id}::uuid, updated_at = now()
         WHERE id = ${oc.id}::uuid
       `;
-      console.warn("[CONVERSATION_RELINKED]", { conversation: oc.id, phone, contact: ct[0].id });
+      console.warn("[CONVERSATION_RELINKED]", { conversation: oc.id, phone: oc.remote_jid, contact: ct[0].id });
     }
   }
 
@@ -746,6 +748,33 @@ export async function ensureCrmSchema() {
       // Atribuição de atendimento + notificações de transferência.
       await ensureAttendanceSchema(s);
       await ensureAccessHoursSchema(s);
+
+      // Sessões server-side (Fase 1). Idempotente.
+      await s.unsafe(`
+        CREATE TABLE IF NOT EXISTS public.user_sessions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+          company_id UUID NULL REFERENCES public.companies(id) ON DELETE SET NULL,
+          token_hash TEXT NOT NULL UNIQUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          expires_at TIMESTAMPTZ NOT NULL,
+          revoked_at TIMESTAMPTZ NULL,
+          revoked_reason TEXT NULL,
+          ip INET NULL,
+          user_agent TEXT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash
+          ON public.user_sessions (token_hash);
+
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id
+          ON public.user_sessions (user_id);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_one_active_per_user
+          ON public.user_sessions (user_id)
+          WHERE revoked_at IS NULL;
+      `);
 
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {

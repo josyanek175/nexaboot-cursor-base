@@ -23,12 +23,16 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
-        if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
+        if (!UUID_RE.test(params.id))
+          return Response.json({ error: "invalid_id" }, { status: 400 });
 
         const url = new URL(request.url);
         const limit = parseLimit(url.searchParams.get("limit"));
         // before = ISO timestamp — carrega mensagens mais antigas que este ponto.
         const before = url.searchParams.get("before")?.trim() || null;
+        const beforeId = url.searchParams.get("before_id") || null;
+        if ((before && Number.isNaN(Date.parse(before))) || (beforeId && !UUID_RE.test(beforeId)))
+          return Response.json({ error: "invalid_cursor" }, { status: 400 });
 
         return withApiTiming(
           {
@@ -39,18 +43,24 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
           },
           async (perf) => {
             const s = sql();
-            const owns = await perf.timedDb("conversation_ownership", () => s`
-              SELECT 1 FROM public.conversations
+            const owns = await perf.timedDb(
+              "conversation_ownership",
+              () => s`
+              SELECT contact_id,whatsapp_channel_id FROM public.conversations
               WHERE id = ${params.id}::uuid AND company_id = ${companyId}::uuid
               LIMIT 1
-            `);
+            `,
+            );
             if (!owns[0]) return Response.json({ error: "not_found" }, { status: 404 });
 
             // Últimas N mensagens (DESC + reordena ASC) — nunca o histórico inteiro.
-            const messages = await perf.timedDb("list_messages", () => s`
+            const messages = await perf.timedDb(
+              "list_messages",
+              () => s`
               SELECT * FROM (
                 SELECT
                   m.id,
+                  to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_created_at,
                   m.external_id,
                   m.external_message_id,
                   m.conversation_id,
@@ -73,18 +83,30 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
                   m.sent_by_name,
                   m.reaction_emoji,
                   m.reaction_to_message_id,
-                  (m.raw_payload IS NOT NULL) AS has_raw_payload
+                  (m.raw_payload IS NOT NULL) AS has_raw_payload,
+                  jsonb_build_object('interactive',m.raw_payload->'interactive','meta_template',m.raw_payload->'meta_template') AS raw_payload
                 FROM public.messages m
-                WHERE m.conversation_id = ${params.id}::uuid
-                  AND (${before}::timestamptz IS NULL OR m.created_at < ${before}::timestamptz)
-                ORDER BY m.created_at DESC
+                WHERE m.conversation_id IN (
+                    SELECT h.id FROM public.conversations h
+                    WHERE h.company_id=${companyId}::uuid
+                      AND (h.id=${params.id}::uuid OR (h.contact_id=${owns[0].contact_id}::uuid
+                        AND h.whatsapp_channel_id=${owns[0].whatsapp_channel_id}::uuid))
+                  )
+                  AND (${before}::text::timestamptz IS NULL OR m.created_at < ${before}::text::timestamptz
+                    OR (m.created_at=${before}::text::timestamptz AND ${beforeId}::uuid IS NOT NULL AND m.id<${beforeId}::uuid))
+                ORDER BY m.created_at DESC,m.id DESC
                 LIMIT ${limit}
               ) recent
-              ORDER BY created_at ASC
-            `);
+              ORDER BY created_at ASC,id ASC
+            `,
+            );
             perf.setResultCount(messages.length);
             return Response.json({
               messages,
+              history_scope: "contact_channel",
+              nextCursor: messages[0]
+                ? { before: messages[0].cursor_created_at, id: messages[0].id }
+                : null,
               limit,
               hasMore: messages.length >= limit,
             });

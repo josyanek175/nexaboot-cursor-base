@@ -7,7 +7,7 @@ export const Route = createFileRoute("/_app")({
 });
 
 function GuardedApp() {
-  const { isAuthenticated, hydrated, companyValid, companyMessage, platformAccess, logout } =
+  const { isAuthenticated, hydrated, companyValid, companyMessage, platformAccess, companyId, logout } =
     useAuth();
 
   // Aguarda hidratação do localStorage para evitar redirect indevido na primeira renderização.
@@ -49,5 +49,5 @@ function GuardedApp() {
     );
   }
 
-  return <AppShell />;
+  return <AppShell key={companyId ?? "platform"} />;
 }

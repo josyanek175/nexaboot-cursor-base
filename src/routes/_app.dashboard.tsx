@@ -22,6 +22,7 @@ import {
   Ban,
   XCircle,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { apiGet, apiPost } from "@/lib/api";
 
 export const Route = createFileRoute("/_app/dashboard")({
@@ -210,6 +211,7 @@ const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
 };
 
 function DashboardPage() {
+  const {companyName} = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -325,9 +327,9 @@ function DashboardPage() {
     <div className="h-full overflow-y-auto p-4 md:p-6">
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <h1 className="text-2xl font-semibold">Visão do atendimento</h1>
           <p className="text-sm text-muted-foreground">
-            Visão operacional do atendimento WhatsApp
+            {companyName ?? "Empresa selecionada"} · Atendimento WhatsApp
             {data.scope === "attendant" ? " · foco nos seus atendimentos e fila sem responsável" : " · empresa inteira"}
           </p>
         </div>

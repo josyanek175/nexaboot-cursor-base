@@ -8,7 +8,7 @@ export const Route = createFileRoute("/api/debug/current-user")({
     handlers: {
       GET: async () => {
         const auth_source = "postgres-cookie-session";
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         if (!uid) {
           return Response.json({ auth_source, user: null, note: "Sem sessão ativa." });
         }

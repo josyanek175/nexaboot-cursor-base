@@ -89,6 +89,7 @@ export interface WhatsAppProvider {
     _channel: WhatsAppChannelRecord,
     _to: string,
     _body: string,
+    _buttons?: Array<{ id: string; title: string }>,
   ): Promise<ProviderSendResult>;
 }
 

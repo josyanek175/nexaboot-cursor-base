@@ -269,7 +269,7 @@ export async function syncMetaTemplatesForChannel(
           ${language},
           ${category},
           ${status},
-          ${JSON.stringify(components)}::jsonb,
+          ${components}::jsonb,
           ${active},
           now(),
           now()

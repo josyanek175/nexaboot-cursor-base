@@ -36,7 +36,7 @@ export const Route = createFileRoute("/api/meta/messages/send-text")({
 
         console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId, route: "meta/send-text" });
 
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         const s = sql();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`

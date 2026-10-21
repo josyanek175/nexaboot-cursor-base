@@ -3,9 +3,10 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { canAssignUserRole, canManageUserIdentity } from "@/lib/user-role-policy";
 import { requireCompanyId } from "@/lib/company.server";
 
-const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI"]);
+const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI", "SUPER_ADMIN"]);
 
 const UpdateBody = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -17,7 +18,7 @@ const UpdateBody = z.object({
 });
 
 async function getActor() {
-  const uid = getSessionUserId();
+  const uid = await getSessionUserId();
   if (!uid) return null;
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id
@@ -74,11 +75,15 @@ export const Route = createFileRoute("/api/users/$id")({
         }
 
         const target = await sql()`
-          SELECT id FROM public.users
+          SELECT id,role FROM public.users
           WHERE id = ${params.id} AND company_id = ${companyId}::uuid
         `;
         if (!target[0]) return Response.json({ error: "not_found" }, { status: 404 });
 
+        if (!canManageUserIdentity(String(actor.role), String(target[0].role)))
+          return Response.json({ error: "forbidden" }, { status: 403 });
+        if (parsed.data.role && !canAssignUserRole(String(actor.role), parsed.data.role))
+          return Response.json({ error: "role_not_allowed" }, { status: 403 });
         const d = parsed.data;
         const passwordHash =
           d.password && d.password.length > 0 ? await bcrypt.hash(d.password, 10) : null;
@@ -125,6 +130,11 @@ export const Route = createFileRoute("/api/users/$id")({
         if (params.id === String(actor.id)) {
           return Response.json({ error: "cannot_delete_self" }, { status: 400 });
         }
+        const targets =
+          await sql()`SELECT role FROM public.users WHERE id=${params.id} AND company_id=${companyId}::uuid`;
+        if (!targets[0]) return Response.json({ error: "not_found" }, { status: 404 });
+        if (!canManageUserIdentity(String(actor.role), String(targets[0].role)))
+          return Response.json({ error: "forbidden" }, { status: 403 });
         const rows = await sql()`
           UPDATE public.users SET active = false, updated_at = now()
           WHERE id = ${params.id} AND company_id = ${companyId}::uuid

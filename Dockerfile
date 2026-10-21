@@ -1,10 +1,10 @@
 # NexaBoot — deploy como Node server (Easypanel/VM).
-# Multi-stage: build com Bun (respeita bun.lock) e runtime com Node.
+# Multi-stage: build/runtime Node; package-lock.json � o lockfile validado nos testes.
 # Com o plugin nitro(), o build gera /app/.output (servidor Node auto-contido).
 # A saída .output NÃO precisa de node_modules em runtime.
 
 # ---------- Stage 1: build ----------
-FROM oven/bun:1 AS builder
+FROM node:22 AS builder
 WORKDIR /app
 
 # Variáveis VITE_* são embutidas em BUILD TIME (cliente). Se a tela de
@@ -16,12 +16,12 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV NITRO_PRESET=node-server
 
 # Instala dependências usando o lockfile.
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev --no-audit --no-fund
 
 # Copia o restante e gera o build de produção (vite build => .output/).
 COPY . .
-RUN bun run build
+RUN npm run build && npm run build:workers
 
 # ---------- Stage 2: runtime ----------
 FROM node:22-slim AS runner

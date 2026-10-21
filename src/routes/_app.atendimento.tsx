@@ -483,6 +483,8 @@ function transformApiMessage(m: any, conversationId: string): Message {
 
   let templateButtons: string[] | undefined;
   let displayText = text != null ? String(text) : "";
+  const interactive = rpObj.interactive as {action?: {buttons?: Array<{reply?: {title?: string}}>}} | undefined;
+  if (interactive?.action?.buttons) templateButtons = interactive.action.buttons.flatMap(button => button.reply?.title ? [button.reply.title] : []);
   const metaTpl = rpObj.meta_template;
   if (metaTpl && typeof metaTpl === "object") {
     const resolved = resolveMetaTemplateDisplayForMessage({
@@ -648,6 +650,11 @@ function AtendimentoPage() {
 
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [msgs, setMsgs] = useState<Record<string, Message[]>>({});
+  const [historyMore,setHistoryMore] = useState<Record<string,boolean>>({});
+  const [loadingHistory,setLoadingHistory] = useState(false);
+  const historyLoaded = useRef(new Set<string>());
+  const historyCursors = useRef<Record<string,{before:string;id:string}>>({});
+  const keepHistoryPosition = useRef(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   // Canais e atendentes reais (DB/Evolution) usados nos filtros e ações.
   const [channelList, setChannelList] = useState<Channel[]>([]);
@@ -889,6 +896,10 @@ function AtendimentoPage() {
         ? data
         : [];
       const incoming = list.map((m) => transformApiMessage(m, convId));
+      if (!historyLoaded.current.has(convId)) {
+        setHistoryMore(prev=>({...prev,[convId]:data?.hasMore === true}));
+        if (data.nextCursor) historyCursors.current[convId]=data.nextCursor;
+      }
       const fingerprint =
         incoming.length === 0
           ? "0"
@@ -915,7 +926,7 @@ function AtendimentoPage() {
         );
         // Dedupe final por id (último vence).
         const byId = new Map<string, Message>();
-        [...incoming, ...keptOptimistic].forEach((m) => byId.set(m.id, m));
+        [...existing.filter(m=>!m.id.startsWith("m-")), ...incoming, ...keptOptimistic].forEach((m) => byId.set(m.id, m));
         const merged = Array.from(byId.values()).sort((a, b) =>
           a.createdAt.localeCompare(b.createdAt),
         );
@@ -931,6 +942,32 @@ function AtendimentoPage() {
       if (!opts?.silent) setLoadingMsgs(false);
     }
   };
+
+  async function loadOlderMessages() {
+    if (!selectedId || loadingHistory) return;
+    const first=historyCursors.current[selectedId];
+    if (!first) return;
+    const id=selectedId;
+    setLoadingHistory(true);
+    try {
+      const data=await apiGet(`/conversations/${encodeURIComponent(id)}/messages?limit=100&before=${encodeURIComponent(first.before)}&before_id=${encodeURIComponent(first.id)}`);
+      const older=(data.messages ?? []).map((m: unknown)=>transformApiMessage(m,id));
+      historyLoaded.current.add(id);
+      if(data.nextCursor) historyCursors.current[id]=data.nextCursor;
+      setHistoryMore(prev=>({...prev,[id]:data.hasMore === true}));
+      keepHistoryPosition.current=true;
+      const scroll=messagesScrollRef.current;
+      const previousHeight=scroll?.scrollHeight ?? 0;
+      const previousTop=scroll?.scrollTop ?? 0;
+      setMsgs(prev=>{
+        const byId=new Map<string,Message>();
+        [...older,...(prev[id] ?? [])].forEach(m=>byId.set(m.id,m));
+        return {...prev,[id]:[...byId.values()].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id))};
+      });
+      requestAnimationFrame(()=>{if(scroll)scroll.scrollTop=previousTop+scroll.scrollHeight-previousHeight;});
+    } catch {toast.error("Não foi possível carregar o histórico anterior. Tente novamente.");}
+    finally {setLoadingHistory(false);}
+  }
 
   // Carrega mensagens da conversa selecionada via REST + polling 10s.
   useEffect(() => {
@@ -1275,6 +1312,7 @@ function AtendimentoPage() {
   // Auto-scroll para o fim ao chegar/enviar mensagem na conversa aberta.
   useEffect(() => {
     if (!selected) return;
+    if (keepHistoryPosition.current) {keepHistoryPosition.current=false;return;}
     const el = messagesScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [selected?.id, messages.length]);
@@ -1891,6 +1929,11 @@ function AtendimentoPage() {
             )}
             <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
               <div className="mx-auto max-w-3xl space-y-2">
+                <p className="text-center text-[11px] text-muted-foreground">Histórico contínuo deste cliente neste canal</p>
+                {!loadingMsgs && historyMore[selectedId] && <button type="button" disabled={loadingHistory} onClick={loadOlderMessages}
+                  className="mx-auto block rounded-full border border-border bg-card px-4 py-2 text-xs hover:bg-muted disabled:opacity-50">
+                  {loadingHistory ? "Carregando histórico…" : "Carregar mensagens anteriores"}
+                </button>}
                 {loadingMsgs && (
                   <div className="py-10 text-center text-xs text-muted-foreground">Carregando mensagens…</div>
                 )}

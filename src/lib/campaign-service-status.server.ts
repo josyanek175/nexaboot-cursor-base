@@ -220,7 +220,7 @@ export function deriveReopenCampaignStatus(opts: {
   campaignLastInboundAt: Date | null;
   campaignLastHumanReplyAt: Date | null;
   hasActiveAssignment: boolean;
-}): Promise<CampaignServiceStatus> {
+}): CampaignServiceStatus {
   if (opts.hasActiveAssignment) return "in_service";
   const inbound = opts.campaignLastInboundAt?.getTime() ?? 0;
   const human = opts.campaignLastHumanReplyAt?.getTime() ?? 0;

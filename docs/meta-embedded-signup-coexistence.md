@@ -40,12 +40,16 @@ Sem acesso ao app Meta deste ambiente. Validar manualmente:
 - Webhook fields: `messages` (mínimo); `smb_message_echoes` / history só após fixture real
 - Inscrição do app na WABA: feita em runtime via `POST /{waba-id}/subscribed_apps` no `/complete`
 
-## Migrations (ordem DEV)
+## Migrations
 
-1. `20260801_meta_connection_mode.sql` — `meta_connection_mode` (+ colunas coexistence)
+**Produção** (ver `docs/migrations/PROD_APPLY_META_COEXISTENCE.md`):
+
+1. `20260803_meta_connection_mode_nullable.sql` — coluna nullable; Meta→`cloud_api`; Evolution→`NULL`
 2. `20260801_meta_coexistence_onboarding.sql` — CSRF + onboarding (já inclui `resulting_channel_id`)
 3. `20260802_meta_coexistence_connected_at.sql` — `connected_at`, `webhook_subscribed_at`
-4. **Não** executar `…_onboarding_channel_id.sql` se o passo 2 já foi aplicado (coluna já incluída)
+
+**Não** aplicar `20260801_meta_connection_mode.sql` em produção (`NOT NULL DEFAULT` poluía Evolution).  
+Arquivo histórico permanece no repo. Não executar `…_onboarding_channel_id.sql` se o onboarding já inclui `resulting_channel_id`.
 
 ## API
 

@@ -46,7 +46,7 @@ export const Route = createFileRoute("/api/meta/coexistence/exchange")({
         if (company instanceof Response) return company;
         const companyId = company;
 
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         if (!uid) {
           return Response.json({ error: "unauthenticated" }, { status: 401 });
         }

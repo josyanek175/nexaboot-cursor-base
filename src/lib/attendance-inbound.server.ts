@@ -70,6 +70,12 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
         WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'message_source'
       ) AS present`
     : [];
+  const original = input.rawPayload as {
+    message?: { interactive?: { button_reply?: { id?: string }; list_reply?: { id?: string } } };
+  };
+  const replyId =
+    original?.message?.interactive?.button_reply?.id ??
+    original?.message?.interactive?.list_reply?.id;
   const storedPayload = {
     ...(input.rawPayload as Record<string, unknown>),
     ...(!input.echo
@@ -78,7 +84,7 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
             status: "pending",
             isMedia: !!input.media,
             restartCycle,
-            text: input.media ? (input.media.caption ?? "") : input.text,
+            text: input.media ? (input.media.caption ?? "") : replyId || input.text,
           },
         }
       : {}),

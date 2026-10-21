@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/internal-chat/create")({
         const company = await requireCompanyId();
         if (company instanceof Response) return company;
         const companyId = company;
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
 
         const json = await request.json().catch(() => null);

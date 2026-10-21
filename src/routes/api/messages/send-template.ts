@@ -29,7 +29,7 @@ export const Route = createFileRoute("/api/messages/send-template")({
           );
         }
 
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         const s = sql();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`

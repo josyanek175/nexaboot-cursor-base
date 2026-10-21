@@ -4,6 +4,7 @@ import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import {
   buildSessionSetCookie,
+  createPersistedSession,
   describeSessionCookie,
   hasSessionSecret,
 } from "@/lib/session.server";
@@ -132,11 +133,17 @@ export const Route = createFileRoute("/api/auth/register")({
               hasSessionSecret: hasSessionSecret(),
               nodeEnv: process.env.NODE_ENV,
             });
-            setCookieHeader = buildSessionSetCookie(u.id);
+            const created = await createPersistedSession({
+              userId: u.id,
+              companyId,
+              request,
+            });
+            setCookieHeader = buildSessionSetCookie(created.token);
             console.log("[REGISTER_SET_COOKIE]", {
               userId: u.id,
+              sessionId: created.sessionId,
               setCookieReturned: true,
-              cookieAttrs: describeSessionCookie(), // name, httpOnly, sameSite, secure, path, maxAge, nodeEnv
+              cookieAttrs: describeSessionCookie(),
             });
           }
 

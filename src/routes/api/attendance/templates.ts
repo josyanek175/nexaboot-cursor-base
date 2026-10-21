@@ -29,7 +29,7 @@ const PostBody = z.object({
 });
 
 async function loadActor(companyId: string) {
-  const uid = getSessionUserId();
+  const uid = await getSessionUserId();
   if (!uid) return null;
   const rows = await sql<{ id: string; role: string | null; tenant_id: string | null }[]>`
     SELECT id, role, tenant_id FROM public.users

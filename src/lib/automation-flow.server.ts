@@ -10,6 +10,7 @@ import { upsertInboundConversation } from "@/lib/crm-inbound.server";
 import {
   matchChoice,
   promptForStep,
+  renderFlowText,
   readStoredDefinition,
   replyMatches,
   stepById,
@@ -121,7 +122,7 @@ export function ensureAutomationSchema(): Promise<void> {
 export async function requireAutomationActor(
   mode: "manage" | "reminders",
 ): Promise<Actor | Response> {
-  const userId = getSessionUserId();
+  const userId = await getSessionUserId();
   if (!userId) return Response.json({ error: "unauthenticated" }, { status: 401 });
   const company = await requireCompanyId(userId);
   if (company instanceof Response) return company;
@@ -421,6 +422,7 @@ async function sendText(
   conversationId: string,
   text: string,
   stepId = "reply",
+  buttons?: Array<{ id: string; title: string }>,
 ): Promise<boolean> {
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -447,6 +449,7 @@ async function sendText(
     text: trimmed,
     sentByName: "Fluxo",
     automationKey,
+    buttons,
   });
   if (!result.ok) {
     console.error("[AUTOMATION_SEND_FAIL]", {
@@ -489,9 +492,18 @@ async function presentStep(params: {
       continue;
     }
     const vars = await loadContactVars(params.contactId, collected);
-    const text = promptForStep(current, vars);
+    const choices =
+      current.type === "buttons"
+        ? current.buttons
+        : current.type === "reminder"
+          ? current.options
+          : undefined;
+    const text = choices
+      ? renderFlowText(current.text, vars).trim() || "Escolha uma opção."
+      : promptForStep(current, vars);
+    const buttons = choices?.map((choice) => ({ id: choice.id, title: choice.label }));
     const sent =
-      !text || (await sendText(params.companyId, params.conversationId, text, current.id));
+      !text || (await sendText(params.companyId, params.conversationId, text, current.id, buttons));
     if (!sent) return { stepId: current.id, status: "ended", collected };
     if (current.type === "message") {
       current = stepById(params.definition, current.next);
@@ -729,6 +741,7 @@ async function answerWaitingSession(session: SessionRow, text: string) {
         session.conversation_id,
         `Toque em uma das opções.\n${promptForStep(step, vars)}`,
         step.id + ":options",
+        choices.map((choice) => ({ id: choice.id, title: choice.label })),
       );
       return;
     }

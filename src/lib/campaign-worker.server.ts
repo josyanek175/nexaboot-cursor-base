@@ -304,7 +304,7 @@ async function saveOutboundCampaignMessage(db: PgSql, opts: {
         'sent',
         NULL,
         ${SYSTEM_SENDER_NAME},
-        ${JSON.stringify(payload)}::jsonb
+        ${payload}::jsonb
       )
       ON CONFLICT (conversation_id, external_message_id)
         WHERE external_message_id IS NOT NULL
@@ -330,7 +330,7 @@ async function saveOutboundCampaignMessage(db: PgSql, opts: {
         'sent',
         NULL,
         ${SYSTEM_SENDER_NAME},
-        ${JSON.stringify(payload)}::jsonb
+        ${payload}::jsonb
       )
     `;
   }
@@ -1115,7 +1115,7 @@ export async function processCampaignWorkerTick(
         await insertCampaignEvent(campaign.company_id, campaign.id, "campaign.paused", null, {
           reason: "outside_window",
           resume_at: nextAt.toISOString(),
-        }, db);
+        }, null, db);
         console.log("[CAMPAIGN_WORKER_PAUSED]", {
           campaignId: campaign.id,
           resumeAt: nextAt.toISOString(),
@@ -1140,7 +1140,7 @@ export async function processCampaignWorkerTick(
         campaign.status === "paused" ? "campaign.resumed" : "campaign.started",
         null,
         { at: now.toISOString() },
-       db);
+       null, db);
       console.log("[CAMPAIGN_WORKER_RUNNING]", {
         campaignId: campaign.id,
         from: campaign.status,
@@ -1203,7 +1203,7 @@ export async function processCampaignWorkerTick(
       await syncCampaignContactCounters(campaign.id, campaign.company_id, db);
       await insertCampaignEvent(campaign.company_id, campaign.id, "campaign.completed", null, {
         sent_count: campaign.sent_count,
-      }, db);
+      }, null, db);
       blockState.delete(campaign.id);
       console.log("[CAMPAIGN_WORKER_COMPLETED]", {
         campaignId: campaign.id,
@@ -1697,7 +1697,7 @@ export async function processCampaignWorkerTick(
         kind: pause.kind,
         delay_ms: pause.delayMs,
         sent_in_campaign: sentInCampaign,
-      }, db);
+      }, null, db);
       console.log("[CAMPAIGN_WORKER_PAUSE]", {
         campaignId: campaign.id,
         kind: pause.kind,

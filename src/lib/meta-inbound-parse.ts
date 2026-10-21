@@ -425,7 +425,7 @@ export function extractMetaSmbMessageEchoes(payload: unknown): MetaSmbEchoMessag
         const messageText =
           textResolution?.text ??
           caption ??
-          (mediaNode ? metaInboundMediaPreviewLabel(messageType) : null);
+          (isMetaInboundMediaType(messageType) ? metaInboundMediaPreviewLabel(messageType) : null);
         if (!messageText && !mediaNode) continue;
 
         out.push({

@@ -1,7 +1,16 @@
 // Cliente de API do próprio nexaboot-web (mesma origem, prefixo /api).
 // Fase 1 Evolution: paramos de depender de VITE_API_URL externo.
 // Mantém compatibilidade: se VITE_API_URL for definido, ele é respeitado.
+import { NEXA_SESSION_REPLACED_EVENT, SESSION_REPLACED_ERROR } from "@/lib/session-errors";
+
 const API_URL = import.meta.env.VITE_API_URL || "/api";
+
+function notifySessionReplaced(body: ApiErrorBody) {
+  if (typeof window === "undefined") return;
+  if (body.error === SESSION_REPLACED_ERROR) {
+    window.dispatchEvent(new CustomEvent(NEXA_SESSION_REPLACED_EVENT));
+  }
+}
 
 export type ApiErrorBody = {
   error?: string;
@@ -36,6 +45,7 @@ async function parseErrorResponse(response: Response): Promise<ApiRequestError> 
   } catch {
     body = {};
   }
+  if (response.status === 401) notifySessionReplaced(body);
   return new ApiRequestError(response.status, body);
 }
 

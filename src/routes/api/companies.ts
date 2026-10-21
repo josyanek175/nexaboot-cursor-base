@@ -8,7 +8,7 @@ import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 
 async function getActor() {
-  const uid = getSessionUserId();
+  const uid = await getSessionUserId();
   if (!uid) return null;
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id, active
@@ -102,7 +102,7 @@ export const Route = createFileRoute("/api/companies")({
         const hash = await bcrypt.hash(admin.password, 10);
 
         try {
-          const result = await sql.begin(async (tx) => {
+          const result = await sql().begin(async (tx) => {
             const companies = await tx<{ id: string; name: string; active: boolean; created_at: string; updated_at: string }[]>`
               INSERT INTO public.companies (name, active)
               VALUES (${name}, ${active ?? true})

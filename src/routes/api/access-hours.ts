@@ -33,7 +33,7 @@ const Body = z.object({
 });
 
 async function requireManager() {
-  const userId = getSessionUserId();
+  const userId = await getSessionUserId();
   if (!userId) return Response.json({ error: "unauthenticated" }, { status: 401 });
   const users = await sql<{ role: string; company_id: string | null }[]>`
     SELECT role, company_id FROM public.users WHERE id = ${userId}::uuid LIMIT 1

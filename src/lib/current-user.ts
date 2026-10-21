@@ -2,7 +2,7 @@
 // Backend: /api/auth/login + /api/auth/me.
 import { useMemo } from "react";
 import { useAuth } from "./auth";
-import { tenants, type Role } from "./mocks";
+import { type Role } from "./mocks";
 
 export interface CurrentUser {
   id: string;
@@ -18,20 +18,20 @@ export const AUTH_SOURCE = "postgres-cookie-session";
 
 /** Hook React — use dentro de componentes. */
 export function useCurrentUser(): CurrentUser | null {
-  const { user } = useAuth();
+  const { user, companyId, companyName } = useAuth();
   return useMemo(() => {
     if (!user) return null;
-    const t = tenants.find((x) => x.id === user.tenantId);
+
     return {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      tenant_id: user.tenantId,
-      tenant_name: t?.name ?? user.tenantId,
+      tenant_id: companyId ?? "",
+      tenant_name: companyName ?? "Selecione uma empresa",
       avatarColor: user.avatarColor,
     };
-  }, [user]);
+  }, [user, companyId, companyName]);
 }
 
 /** Snapshot fora de componentes — sem cache local, retorna null.

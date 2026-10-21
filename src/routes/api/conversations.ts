@@ -48,7 +48,7 @@ export const Route = createFileRoute("/api/conversations")({
         if (company instanceof Response) return company;
         const companyId = company;
 
-        let uid = getSessionUserId();
+        let uid = await getSessionUserId();
         if (!uid) {
           const info = await getCurrentUserCompanyInfo();
           uid = info.userId;

@@ -121,6 +121,7 @@ import { Route as ApiConversationsIdReadRouteImport } from './routes/api/convers
 import { Route as ApiConversationsIdMessagesRouteImport } from './routes/api/conversations/$id/messages'
 import { Route as ApiConversationsIdFinishRouteImport } from './routes/api/conversations/$id/finish'
 import { Route as ApiConversationsIdAssumeRouteImport } from './routes/api/conversations/$id/assume'
+import { Route as ApiCompaniesIdWorkspaceRouteImport } from './routes/api/companies/$id/workspace'
 import { Route as ApiCompaniesIdSubscriptionRouteImport } from './routes/api/companies/$id/subscription'
 import { Route as ApiCampaignsWorkerTickRouteImport } from './routes/api/campaigns/worker/tick'
 import { Route as ApiCampaignsTemplatesFromMetaRouteImport } from './routes/api/campaigns/templates/from-meta'
@@ -726,6 +727,11 @@ const ApiConversationsIdAssumeRoute =
     path: '/$id/assume',
     getParentRoute: () => ApiConversationsRoute,
   } as any)
+const ApiCompaniesIdWorkspaceRoute = ApiCompaniesIdWorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
+  getParentRoute: () => ApiCompaniesIdRoute,
+} as any)
 const ApiCompaniesIdSubscriptionRoute =
   ApiCompaniesIdSubscriptionRouteImport.update({
     id: '/subscription',
@@ -963,6 +969,7 @@ export interface FileRoutesByFullPath {
   '/api/campaigns/templates/from-meta': typeof ApiCampaignsTemplatesFromMetaRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
+  '/api/companies/$id/workspace': typeof ApiCompaniesIdWorkspaceRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/finish': typeof ApiConversationsIdFinishRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -1098,6 +1105,7 @@ export interface FileRoutesByTo {
   '/api/campaigns/templates/from-meta': typeof ApiCampaignsTemplatesFromMetaRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
+  '/api/companies/$id/workspace': typeof ApiCompaniesIdWorkspaceRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/finish': typeof ApiConversationsIdFinishRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -1237,6 +1245,7 @@ export interface FileRoutesById {
   '/api/campaigns/templates/from-meta': typeof ApiCampaignsTemplatesFromMetaRoute
   '/api/campaigns/worker/tick': typeof ApiCampaignsWorkerTickRoute
   '/api/companies/$id/subscription': typeof ApiCompaniesIdSubscriptionRoute
+  '/api/companies/$id/workspace': typeof ApiCompaniesIdWorkspaceRoute
   '/api/conversations/$id/assume': typeof ApiConversationsIdAssumeRoute
   '/api/conversations/$id/finish': typeof ApiConversationsIdFinishRoute
   '/api/conversations/$id/messages': typeof ApiConversationsIdMessagesRoute
@@ -1376,6 +1385,7 @@ export interface FileRouteTypes {
     | '/api/campaigns/templates/from-meta'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
+    | '/api/companies/$id/workspace'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/finish'
     | '/api/conversations/$id/messages'
@@ -1511,6 +1521,7 @@ export interface FileRouteTypes {
     | '/api/campaigns/templates/from-meta'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
+    | '/api/companies/$id/workspace'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/finish'
     | '/api/conversations/$id/messages'
@@ -1649,6 +1660,7 @@ export interface FileRouteTypes {
     | '/api/campaigns/templates/from-meta'
     | '/api/campaigns/worker/tick'
     | '/api/companies/$id/subscription'
+    | '/api/companies/$id/workspace'
     | '/api/conversations/$id/assume'
     | '/api/conversations/$id/finish'
     | '/api/conversations/$id/messages'
@@ -2530,6 +2542,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConversationsIdAssumeRouteImport
       parentRoute: typeof ApiConversationsRoute
     }
+    '/api/companies/$id/workspace': {
+      id: '/api/companies/$id/workspace'
+      path: '/workspace'
+      fullPath: '/api/companies/$id/workspace'
+      preLoaderRoute: typeof ApiCompaniesIdWorkspaceRouteImport
+      parentRoute: typeof ApiCompaniesIdRoute
+    }
     '/api/companies/$id/subscription': {
       id: '/api/companies/$id/subscription'
       path: '/subscription'
@@ -2869,10 +2888,12 @@ const ApiCampaignsRouteWithChildren = ApiCampaignsRoute._addFileChildren(
 
 interface ApiCompaniesIdRouteChildren {
   ApiCompaniesIdSubscriptionRoute: typeof ApiCompaniesIdSubscriptionRoute
+  ApiCompaniesIdWorkspaceRoute: typeof ApiCompaniesIdWorkspaceRoute
 }
 
 const ApiCompaniesIdRouteChildren: ApiCompaniesIdRouteChildren = {
   ApiCompaniesIdSubscriptionRoute: ApiCompaniesIdSubscriptionRoute,
+  ApiCompaniesIdWorkspaceRoute: ApiCompaniesIdWorkspaceRoute,
 }
 
 const ApiCompaniesIdRouteWithChildren = ApiCompaniesIdRoute._addFileChildren(

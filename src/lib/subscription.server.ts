@@ -198,6 +198,7 @@ export async function listCompaniesWithPlanUsage(opts: {
     SELECT
       c.id,
       c.name,
+      to_jsonb(c)->>'slug' AS workspace_slug,
       c.active,
       c.created_at,
       c.updated_at,

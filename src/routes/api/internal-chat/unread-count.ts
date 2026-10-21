@@ -16,7 +16,7 @@ export const Route = createFileRoute("/api/internal-chat/unread-count")({
   server: {
     handlers: {
       GET: async () => {
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         if (!uid) return Response.json({ error: "unauthorized" }, { status: 401 });
 
         const info = await getCurrentUserCompanyInfo();

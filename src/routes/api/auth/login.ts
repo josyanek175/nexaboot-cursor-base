@@ -7,10 +7,12 @@ import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import {
   buildSessionSetCookie,
+  createPersistedSession,
   describeSessionCookie,
   hasSessionSecret,
 } from "@/lib/session.server";
 import { buildAuthUserResponse } from "@/lib/auth-user";
+import { workspaceFromPath } from "@/lib/workspace-path";
 import { accessAllowedNow } from "@/lib/access-hours.server";
 import {
   ACCESS_OUTSIDE_ALLOWED_HOURS,
@@ -190,7 +192,7 @@ export const Route = createFileRoute("/api/auth/login")({
         if (u.company_id) {
           try {
             const c = await s`
-              SELECT id, name FROM public.companies WHERE id = ${u.company_id}::uuid LIMIT 1
+              SELECT id, name FROM public.companies WHERE id = ${u.company_id}::uuid AND active=true LIMIT 1
             `;
             if (c[0]) {
               companyValid = true;
@@ -215,6 +217,15 @@ export const Route = createFileRoute("/api/auth/login")({
             },
             { status: 403 },
           );
+        }
+
+        const referrer = request.headers.get("referer");
+        let workspaceSlug: string | null = null;
+        try { const ref = referrer ? new URL(referrer) : null; if (ref?.origin === new URL(request.url).origin) workspaceSlug = workspaceFromPath(ref.pathname); } catch {}
+        if (workspaceSlug) {
+          const workspace = await s`SELECT c.id FROM public.companies c WHERE c.id=${u.company_id}::uuid
+            AND c.active=true AND to_jsonb(c)->>'slug'=${workspaceSlug} LIMIT 1`;
+          if (!workspace[0]) return Response.json({ error: "workspace_forbidden", message: "Sua conta não tem acesso ao ambiente desta empresa." }, { status: 403 });
         }
 
         // 6) Tenant — apenas diagnóstico, NÃO bloqueia o login -----------
@@ -260,23 +271,29 @@ export const Route = createFileRoute("/api/auth/login")({
           });
         }
 
-        // 8) Sessão / cookie httpOnly (depende de SESSION_SECRET) --------
-        // Anexamos o Set-Cookie EXPLICITAMENTE na Response (não dependemos do
-        // merge de contexto do framework), garantindo que o header sempre vá.
+        // 8) Sessão persistida (revoga anteriores + insert) + cookie httpOnly.
+        // Transação curta, sem HTTP/rede. Token cru NÃO é logado.
         console.log("[LOGIN_SESSION_ENV]", {
           hasSessionSecret: hasSessionSecret(),
           nodeEnv: process.env.NODE_ENV,
         });
         let setCookieHeader: string;
+        let sessionId: string;
         try {
-          setCookieHeader = buildSessionSetCookie(u.id);
+          const created = await createPersistedSession({
+            userId: u.id,
+            companyId: companyValid ? u.company_id : null,
+            request,
+          });
+          sessionId = created.sessionId;
+          setCookieHeader = buildSessionSetCookie(created.token);
         } catch (e) {
           console.error("[LOGIN_SESSION_FAIL]", {
             userId: u.id,
-            message: (e as Error).message,
+            message: e instanceof Error ? e.message : String(e),
           });
           return Response.json(
-            { error: "session_not_created", reason: (e as Error).message },
+            { error: "session_not_created", reason: e instanceof Error ? e.message : String(e) },
             { status: 500 },
           );
         }
@@ -284,8 +301,9 @@ export const Route = createFileRoute("/api/auth/login")({
         const cookieAttrs = describeSessionCookie();
         console.log("[LOGIN_SET_COOKIE]", {
           userId: u.id,
+          sessionId,
           setCookieReturned: true,
-          cookieAttrs, // name, httpOnly, sameSite, secure, path, maxAge, nodeEnv
+          cookieAttrs,
         });
 
         console.log("[LOGIN_SUCCESS]", {
@@ -294,6 +312,7 @@ export const Route = createFileRoute("/api/auth/login")({
           tenant_id: u.tenant_id,
           tenantExists,
           sessionCreated: true,
+          sessionId,
           ms: Date.now() - startedAt,
         });
 

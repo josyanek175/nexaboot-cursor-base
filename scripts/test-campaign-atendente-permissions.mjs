@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Permissões de Campanhas para ATENDENTE + regressão dos demais perfis.
  * Uso: npx tsx scripts/test-campaign-atendente-permissions.mjs
  *

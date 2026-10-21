@@ -1,37 +1,51 @@
-# Atendimento Meta usando o fluxo existente
+# Atendimento na DEV: conversa contínua e botões Meta
 
-Versão local baseada no hotfix de produção `e0a9c8a`. Não requer novas tabelas, colunas, índices ou migrações. Os scripts anteriores de criação de fila não fazem parte desta versão e não devem ser aplicados para esta entrega.
+Esta versão integra os recursos de produção de `21072f9` com a arquitetura durável anterior da DEV (`228b578`). A main de produção não foi alterada nesta entrega.
 
-## Comportamento
+## Conversas e histórico
 
-- Mensagem recebida é confirmada primeiro nas tabelas existentes `contacts`, `conversations` e `messages`. O envio do bot acontece depois do commit.
-- Atendimento aberto/aguardando mantém o ciclo. Após encerramento, a próxima mensagem cria outra conversa, preservando as anteriores e suas mensagens.
-- O fluxo ativo já configurado por empresa/canal é reutilizado. A personalização pelo nome foi adiada: `{{nome}}` fica vazio no atendimento, por exemplo `Olá, {{nome}}!` vira `Olá!`. Nomes cadastrais existentes são preservados.
-- Não há dependência de `whatsapp_profile_name`, `message_source` ou `attendance_automation_jobs` para receber e executar o fluxo.
-- A leitura/escrita da sessão usa `automation_sessions`, já existente. O avanço de etapas agora persiste `step_id` corretamente; mensagens automáticas e `goto` seguem até a próxima etapa que aguarda resposta.
-- O processamento de mensagens simultâneas é coordenado por bloqueio transacional curto e metadados internos em `messages.raw_payload.__nexaFlow`. Os outros campos do payload são preservados. Nenhuma conexão fica reservada durante o envio externo.
-- O controle usa estados `pending`, `processing`, `processed` e `retry` no registro da mensagem. Cada tentativa tem identificação própria e lease de dois minutos, renovado durante o trabalho. Processador que perde a posse não pode continuar enviando ou alterando a sessão.
-- As saídas automáticas carregam uma chave por mensagem recebida/etapa no payload existente. Se a saída já foi persistida e salvar a sessão falhar, a nova tentativa não a reenvia.
-- Bot respeita atribuição humana e encerramento antes de processar e antes de cada envio. Gravação tardia da sessão não reativa estados encerrados/transferidos.
-- Echo do Business App continua como saída, sem disparar o fluxo ou reabrir atendimento. Status de entrega/leitura não iniciam conversas.
-- A gravação JSON passou a enviar objetos ao driver, evitando JSON com um texto JSON dentro. Sessões legadas com esse formato são lidas e normalizadas sem migração em massa.
+O cliente permanece na mesma conversa por empresa, contato e canal. Uma mensagem nova após `finished`, `closed` ou `resolved` reabre essa conversa e reinicia a sessão do fluxo. Atribuições antigas são liberadas. Uma reentrega do mesmo wamid não reabre nem reinicia o atendimento.
 
-## Compatibilidade com índice legado
+As mensagens antigas não são movidas ou apagadas. A listagem comum prioriza a conversa atual por contato/canal. A fila de campanhas mantém sua organização própria. A API de mensagens pode apresentar juntos os históricos que já ficaram separados, sempre exigindo a mesma empresa, contato e canal.
 
-Se um índice antigo impedir a criação de outra conversa para o mesmo contato/canal, a entrada é preservada e o ciclo lógico reinicia na conversa existente, sem remover o índice ou mover/apagar mensagens. O log `ATTENDANCE_LEGACY_CYCLE_REUSED` indica esse caso. A sessão anterior é reiniciada apenas porque o atendimento estava finalizado. Nesse modo compatível o ID da conversa é reutilizado; fora dele, um novo ID é criado.
+A interface permite carregar mensagens anteriores. O cursor usa horário com microssegundos e ID para não perder mensagens com horários iguais. O polling preserva o histórico já carregado. O payload retornado na listagem contém somente as informações necessárias para exibir o menu/template, sem retornar o payload bruto inteiro.
 
-## Retentativas e limites
+## Botões
 
-Falha do bot não desfaz nem bloqueia a gravação da mensagem. O trabalho fica registrado na mensagem e é retomado na próxima mensagem ou reentrega da Meta, respeitando backoff de dez segundos. Não há processo de polling nem tabela nova; se o cliente ficar em silêncio, não há retry em background nesta versão. Um trabalho abandonado é recuperável na próxima entrada após expirar seu lease.
+Etapas com opções passam título e identificador ao provider Meta. O Graph recebe `type=interactive`, `interactive.type=button` e ações `reply`. São permitidos de um a três botões, títulos com até vinte caracteres e corpo com até 1024. A resposta pode avançar pelo ID estável. O envio manual de texto continua textual; Evolution mantém alternativa numerada.
 
-Se a Meta aceitar um envio mas o resultado não puder ser persistido, existe uma janela de resultado ambíguo: não é possível prometer entrega exatamente uma vez no provedor externo. A chamada já em andamento também não pode ser desfeita se um humano assumir naquele instante. O teste cobre saída já gravada, falhas conhecidas antes de aceite e interrupção das etapas seguintes.
+O nome do perfil continua adiado. O fluxo usa saudação genérica e preserva os nomes cadastrados. Não depende de `whatsapp_profile_name` ou da antiga `attendance_automation_jobs`.
 
-Em produção, as tabelas originais de automação são verificadas, sem criação automática de estrutura. Se elas faltarem ou o fluxo não estiver configurado, a entrada continua gravada. É necessário conferir o fluxo ativo/vínculo do canal e validar com uma conta WhatsApp de teste antes de liberar amplamente.
+## Transações, retentativas e arquitetura durável
 
-## Validação reproduzível
+O webhook legado grava primeiro contato, conversa e mensagem. O bot só envia depois do commit. O estado do trabalho vive em `messages.raw_payload.__nexaFlow`, sem nova tabela de automação. Lease, token de posse e deduplicação das saídas evitam execução concorrente indevida.
 
-`node scripts/test-attendance-lifecycle.mjs` usa PostgreSQL real e os módulos reais de ingresso Meta, roteamento, envio, persistência e sessões. Somente autenticação, configuração de canal e o provedor externo são simulados. O teste recusa host não local e banco cujo nome não termine em `_test`.
+A arquitetura durável reaproveitada da DEV usa inbox, outbox, RabbitMQ e tarefas de mídia/campanha que já existiam nesse desenvolvimento. O domínio Meta do worker agora chama a mesma persistência do caminho legado. Lotes com canais de empresas diferentes resolvem cada canal separadamente. Echo do Business App é saída; não reenvia, não inicia fluxo e não reabre conversa finalizada. Status são associados ao canal da mensagem.
 
-Definir `ATTENDANCE_TEST_DATABASE_URL` para um banco local vazio e descartável; opcionalmente `ATTENDANCE_TEST_POOL_MAX=1` para validar o pool mínimo. O teste cria somente fixtures das tabelas preexistentes. Inclui 55 cenários, 100 mensagens simultâneas, vinte entregas do mesmo wamid, três rodadas extras de concorrência e dois processos Node independentes sobre o mesmo banco.
+O message-worker ativo também busca trabalhos de fluxo pendentes, com retentativa disponível ou lease expirado, e os retoma sem exigir outra mensagem do cliente. No web legado sozinho essa recuperação em background não é ligada. O índice opcional `20261022_dev_flow_recovery_index.sql` melhora essa busca. Os três workers são empacotados em `.output/workers`; cada serviço deve ser configurado separadamente. Todas as flags duráveis continuam desligadas por padrão.
 
-Nenhuma operação dessa validação acessa produção. A aplicação continua exigindo teste final com a Meta real em homologação.
+O processo do message-worker fixa a camada de domínio no mesmo banco configurado para sua inbox. Pools separados continuam consumindo conexões e precisam de orçamento conjunto.
+
+## Limites
+
+Aceite pela Meta sem confirmação persistida ainda é um resultado ambíguo; não há garantia absoluta de envio exatamente uma vez no provedor externo. Uma chamada já em andamento não pode ser desfeita se um humano assumir naquele instante. O bloqueio impede as próximas etapas e gravações tardias da sessão.
+
+As migrações duráveis anteriores só são necessárias se a arquitetura experimental for ativada em homologação. Elas não devem ser aplicadas em produção por causa desta entrega. Não ligar flags duráveis antes de conferir schema, broker, filas, storage e serviços.
+
+## Multiempresa
+
+O contexto operacional do cliente e do servidor usa `company_id`, inclusive quando o campo legado `tenant_id` é compartilhado. Não há identidade de demonstração nem troca de perfil fictício na sessão. Trocar empresa operacional recarrega a aplicação.
+
+`/empresa1` é uma entrada por slug, validada contra a empresa do usuário. O endereço não concede autorização. O cadastro do slug exige a migração DEV `20261022_dev_company_workspace.sql`; as leituras antigas não dependem dessa coluna. A tela Empresas oferece a configuração do endereço, limitada ao administrador da própria empresa ou plataforma.
+
+Administradores de empresa não podem criar, promover, redefinir senha ou desativar identidades de plataforma. Mídias e históricos continuam protegidos por empresa. Respostas de API autenticadas não ficam em cache reutilizável após mudança de login.
+
+## Validação
+
+- 65 cenários em PostgreSQL local real com pool de oito conexões.
+- Os mesmos 65 cenários com uma conexão.
+- 33 verificações de workspace, histórico, mídia, permissões e payload nativo de botões.
+- 24 suítes de regressão de Meta, coexistência, automação, sessões, filas, mídia e campanhas.
+- Compilação do web e empacotamento dos workers.
+
+Os testes recusam bancos não locais e nomes que não terminem em `_test`. As tabelas duráveis usadas nos testes são fixtures separadas, criadas somente após demonstrar que o caminho legado funciona sem elas. O provider Meta e o broker são simulados nas verificações de domínio. Teste com WhatsApp e RabbitMQ reais em homologação ainda é necessário.

@@ -20,7 +20,7 @@ export const Route = createFileRoute("/api/internal/db-pool-status")({
   server: {
     handlers: {
       GET: async () => {
-        const uid = getSessionUserId();
+        const uid = await getSessionUserId();
         if (!uid) {
           return Response.json({ error: "unauthorized" }, { status: 401 });
         }

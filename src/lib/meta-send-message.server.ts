@@ -1,3 +1,4 @@
+import { metaMessageContent } from "@/lib/whatsapp/interactive-message";
 // Envio manual de texto outbound Meta WhatsApp Cloud API.
 
 import { sql } from "@/lib/pg.server";
@@ -43,15 +44,15 @@ export function metaSendRejectionMessage(reason: MetaSendRejectReason | string):
     case "channel_not_active":
       return "Canal Meta inativo.";
     case "invalid_recipient_phone":
-      return "Telefone do contato inválido.";
+      return "Telefone do contato invÃ¡lido.";
     case "service_window_closed":
       return "Fora da janela de atendimento de 24 horas. Aguarde o cliente enviar uma mensagem ou use um template aprovado.";
     case "missing_token":
-      return "Token Meta não configurado.";
+      return "Token Meta nÃ£o configurado.";
     case "missing_phone_number_id":
-      return "Phone Number ID Meta não configurado.";
+      return "Phone Number ID Meta nÃ£o configurado.";
     default:
-      return "Não foi possível enviar a mensagem pelo WhatsApp Meta.";
+      return "NÃ£o foi possÃ­vel enviar a mensagem pelo WhatsApp Meta.";
   }
 }
 
@@ -77,16 +78,16 @@ export function friendlyMetaSendError(code: string | null, fallback?: string | n
     return metaSendRejectionMessage("service_window_closed");
   }
   if (c === 190 || c === 102 || c === 463) {
-    return "Token Meta inválido ou expirado. Reconfigure o access token do canal.";
+    return "Token Meta invÃ¡lido ou expirado. Reconfigure o access token do canal.";
   }
   if (c === 100) {
     return metaSendRejectionMessage("invalid_recipient_phone");
   }
   if (c === 131030) {
-    return "Este número não está registrado no WhatsApp.";
+    return "Este nÃºmero nÃ£o estÃ¡ registrado no WhatsApp.";
   }
   if (fallback?.trim()) return fallback.trim();
-  return "Não foi possível enviar a mensagem pelo WhatsApp Meta.";
+  return "NÃ£o foi possÃ­vel enviar a mensagem pelo WhatsApp Meta.";
 }
 
 type MetaSendRejectContext = {
@@ -249,6 +250,7 @@ export async function sendMetaManualText(params: {
   sentByUserId?: string | null;
   sentByName?: string | null;
   automationKey?: string;
+  buttons?: Array<{ id: string; title: string }>;
 }): Promise<MetaManualSendResult> {
   const { companyId, conversationId, text, sentByUserId, sentByName } = params;
   const s = sql();
@@ -383,7 +385,7 @@ export async function sendMetaManualText(params: {
     });
   }
 
-  const sendResult = await resolved.provider.sendText(channel, phone, text);
+  const sendResult = await resolved.provider.sendText(channel, phone, text, params.buttons);
   if (!sendResult.ok) {
     const errorCode = sendResult.errorCode ?? sendResult.error ?? "meta_send_failed";
     const errorMessage = sendResult.errorMessage ?? sendResult.error ?? "meta_send_failed";
@@ -403,8 +405,7 @@ export async function sendMetaManualText(params: {
   const rawPayload = sanitizeMetaWebhookPayload({
     messaging_product: "whatsapp",
     to: phone,
-    type: "text",
-    text: { preview_url: false, body: text },
+    ...metaMessageContent(text, params.buttons),
     ...(params.automationKey ? { __nexaFlowSendKey: params.automationKey } : {}),
     meta_message_id: sendResult.providerMessageId ?? null,
   }) as Record<string, unknown>;
@@ -476,7 +477,7 @@ export type MetaTemplateSendInput = {
   templateName: string;
   languageCode: string;
   bodyParameters: string[];
-  /** SQL injetável (worker directo). */
+  /** SQL injetÃ¡vel (worker directo). */
   db?: PgSql;
 };
 
@@ -486,8 +487,8 @@ export type MetaTemplateSendResult =
 
 /**
  * Envia template HSM aprovado via Graph API.
- * Não exige janela de 24h (templates abrem conversa).
- * Reutiliza loadMetaAccessToken — sem nova criptografia.
+ * NÃ£o exige janela de 24h (templates abrem conversa).
+ * Reutiliza loadMetaAccessToken â€” sem nova criptografia.
  */
 export async function sendMetaTemplateMessage(
   input: MetaTemplateSendInput,

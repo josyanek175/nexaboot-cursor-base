@@ -1,3 +1,4 @@
+import { CompanyWorkspaceField } from "@/components/company-workspace-field";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Building2, Plus, Pencil, Power, ShieldAlert, Loader2 } from "lucide-react";
@@ -7,6 +8,7 @@ import { canCreateTenant, canSuspendTenant, isPlatformRole } from "@/lib/permiss
 import { pushAudit } from "@/lib/audit-log";
 
 type CompanyRow = {
+  workspace_slug?: string | null;
   id: string;
   name: string;
   active: boolean;
@@ -352,7 +354,7 @@ function EmpresasPage() {
                     t.whatsapp_channels_used >= t.max_whatsapp_channels;
                   return (
                     <tr key={t.id} className="border-t border-border hover:bg-muted/30">
-                      <td className="px-4 py-3 font-medium">{t.name}</td>
+                      <td className="px-4 py-3 font-medium">{t.name}<CompanyWorkspaceField companyId={t.id} slug={t.workspace_slug} editable={editable} onSaved={reload} /></td>
                       <td className="px-4 py-3">
                         {t.plan_name ? (
                           <span className="rounded-md bg-accent px-2 py-1 text-xs">{t.plan_name}</span>

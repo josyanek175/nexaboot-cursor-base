@@ -53,7 +53,12 @@ state.graphSend = async (channel, message) => {
     state.failNext = false;
     return { ok: false, error: "test_send_failed", errorCode: "test_send_failed" };
   }
-  const event = { channelId: channel.id, text: message.text, phone: message.to };
+  const event = {
+    channelId: channel.id,
+    text: message.text,
+    phone: message.to,
+    buttons: message.buttons,
+  };
   state.sent.push(event);
   if (state.afterGraph) await state.afterGraph(channel, message);
   return { ok: true, providerMessageId: "test-wamid-" + randomUUID() };
@@ -68,16 +73,16 @@ const mocks = {
   "meta-media-download.server": `export const downloadMetaMedia=async()=>({ok:false,error:'test_media_unavailable'});`,
   "campaign-response.server": `export const handleCampaignInboundReply=async()=>null;`,
   "whatsapp/providers/meta-whatsapp-provider.server": `export const loadMetaAccessToken=async()=>'local-test-token';
- export const metaWhatsAppProvider={hasAccessToken:async()=>true,sendText:(channel,to,text)=>globalThis.__attendanceTest.graphSend(channel,{to,text})};`,
+ export const metaWhatsAppProvider={hasAccessToken:async()=>true,sendText:(channel,to,text,buttons)=>globalThis.__attendanceTest.graphSend(channel,{to,text,buttons})};`,
   "whatsapp/whatsapp-provider-router.server": `export const normalizeProviderKind=value=>value==='meta'?'meta':'evolution';
  export const getProviderByKind=()=>({});
  export const loadMetaChannelByPhoneNumberId=async value=>globalThis.__attendanceTest.channels.find(c=>c.phoneNumberId===value&&c.active&&!c.deletedAt)??null;
  export const resolveProviderForChannel=async(id,company)=>{const channel=globalThis.__attendanceTest.channels.find(c=>c.id===id&&c.companyId===company);
- return channel?{channel,provider:{sendText:(c,to,text)=>globalThis.__attendanceTest.graphSend(c,{to,text})}}:null;};`,
+ return channel?{channel,provider:{sendText:(c,to,text,buttons)=>globalThis.__attendanceTest.graphSend(c,{to,text,buttons})}}:null;};`,
 };
 const bundled = await build({
   stdin: {
-    contents: `export * from './src/lib/attendance-inbound.server';
+    contents: `export * from './src/lib/attendance-inbound.server'; export {processMetaInboxEvent} from './src/lib/webhook-meta-processing.server';
  export * from './src/lib/attendance-jobs.server'; export * from './src/lib/automation-flow.server';
  export {persistMetaInboundMessages,persistMetaSmbMessageEchoes} from './src/lib/meta-inbound-message.server';
  export {sendConversationText} from './src/lib/message-send-router.server';
@@ -318,11 +323,11 @@ try {
     );
   });
   await scenario("novo ciclo preserva ID e mensagens do atendimento finalizado", async () => {
-    assert.notEqual(first.conversationId, second.conversationId);
-    assert.equal(await count(first.conversationId), 1);
+    assert.equal(first.conversationId, second.conversationId);
+    assert.equal(await count(first.conversationId), 2);
     assert.equal(
       (await db`SELECT status FROM conversations WHERE id=${first.conversationId}`)[0].status,
-      "finished",
+      "open",
     );
   });
   await scenario("waiting permanece waiting sem repetir saudação", async () => {
@@ -341,7 +346,7 @@ try {
       (
         await db`SELECT count(*)::int AS n FROM messages WHERE conversation_id=${row.conversationId} AND direction='out' AND message_text LIKE 'Olá%'`
       )[0].n,
-      1,
+      2,
     );
   });
   await scenario(
@@ -615,8 +620,8 @@ try {
       await api.stopAutomationForConversation(row.conversationId, company);
       await api.onCampaignFinish({ companyId: company, conversationId: row.conversationId });
       const next = await emit(input({ phone: p.phone }));
-      assert.notEqual(next.conversationId, row.conversationId);
-      assert.equal(await count(next.conversationId), 1);
+      assert.equal(next.conversationId, row.conversationId);
+      assert.equal(await count(next.conversationId), 2);
       assert.equal(
         (
           await db`SELECT active FROM conversation_assignments WHERE conversation_id=${row.conversationId}`
@@ -713,7 +718,7 @@ try {
         0,
       );
       const next = await emit({ ...p, externalMessageId: "after-echo-" + randomUUID() });
-      assert.notEqual(next.conversationId, echo.conversationId);
+      assert.equal(next.conversationId, echo.conversationId);
     },
   );
   await scenario("envio manual continua funcionando e não é deduplicado pelo bot", async () => {
@@ -1068,6 +1073,62 @@ try {
       "Rua do Teste",
     );
   });
+  await scenario("saudação persiste botões nativos e não lista numerada", async () => {
+    const row = await emit(input());
+    assert.deepEqual(state.sent.at(-1).buttons, [{ id: "1", title: "Ajuda" }]);
+    const saved = (
+      await db`SELECT raw_payload FROM messages WHERE conversation_id=${row.conversationId} AND direction='out'`
+    )[0].raw_payload;
+    assert.equal(saved.type, "interactive");
+    assert.equal(saved.interactive.action.buttons[0].reply.id, "1");
+    assert.doesNotMatch(state.sent.at(-1).text, /1\. Ajuda/);
+  });
+  await scenario("retorno simultâneo reabre uma vez e preserva as mensagens antigas", async () => {
+    const p = input(),
+      row = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: row.conversationId });
+    const returned = await Promise.all(
+      Array.from({ length: 20 }, () =>
+        api.commitMetaAttendanceMessage(input({ phone: p.phone, text: "1" })),
+      ),
+    );
+    assert.ok(returned.every((item) => item.conversationId === row.conversationId));
+    await Promise.all(returned.map((item) => api.drainAttendanceJobs(item.conversationId)));
+    assert.equal(await count(row.conversationId), 3);
+    assert.equal(
+      (
+        await db`SELECT count(*)::int AS n FROM messages WHERE conversation_id=${row.conversationId} AND direction='out' AND message_text LIKE 'Olá%'`
+      )[0].n,
+      2,
+    );
+    assert.equal(await count(row.conversationId, "in"), 21);
+    assert.equal(
+      (await db`SELECT count(*)::int AS n FROM conversations WHERE contact_id=${row.contactId}`)[0]
+        .n,
+      1,
+    );
+  });
+  await scenario("resposta interativa usa o ID estável mesmo com título diferente", async () => {
+    const p = input(),
+      row = await emit(p);
+    const reply = input({ phone: p.phone, text: "Título que mudou" });
+    await api.persistMetaInboundMessages(
+      payload(reply, "interactive", {
+        interactive: { type: "button_reply", button_reply: { id: "1", title: "Título que mudou" } },
+      }),
+    );
+    assert.equal((await session(row.conversationId)).status, "ended");
+  });
+  await scenario(
+    "recuperação do worker retoma uma entrada pendente sem nova mensagem",
+    async () => {
+      const p = input(),
+        row = await api.commitMetaAttendanceMessage(p);
+      await api.recoverPendingAttendanceJobs(100);
+      assert.equal(await count(row.conversationId), 1);
+      assert.equal((await mark(row.messageId)).status, "processed");
+    },
+  );
   await scenario("todo o caminho opera somente com as tabelas preexistentes", async () => {
     assert.deepEqual(
       await db`SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename`,
@@ -1080,12 +1141,164 @@ try {
       0,
     );
   });
+  // Separate fixtures for the optional architecture inherited from DEV. Never applied outside this disposable DB.
+  await db.unsafe(`CREATE TABLE webhook_inbox(id uuid PRIMARY KEY);
+    ALTER TABLE whatsapp_channels ADD COLUMN phone_number_id text,ADD COLUMN status text DEFAULT 'ACTIVE';
+    ALTER TABLE messages ADD COLUMN media_status text;`);
+  await db.begin((tx) =>
+    tx.unsafe(
+      readFileSync("docs/migrations/20260809_webhook_media_jobs.sql", "utf8").replace(
+        /^BEGIN;|^COMMIT;/gm,
+        "",
+      ),
+    ),
+  );
+  await db.begin((tx) =>
+    tx.unsafe(
+      readFileSync("docs/migrations/20260809_webhook_campaign_jobs.sql", "utf8").replace(
+        /^BEGIN;|^COMMIT;/gm,
+        "",
+      ),
+    ),
+  );
+  for (const ch of state.channels)
+    await db`UPDATE whatsapp_channels SET phone_number_id=${ch.phoneNumberId} WHERE id=${ch.id}`;
+  async function durable(body) {
+    const inbox = randomUUID();
+    await db`INSERT INTO webhook_inbox(id) VALUES (${inbox})`;
+    return db.begin((tx) =>
+      api.processMetaInboxEvent({ sql: tx, payload: body, inboxId: inbox, log: () => {} }),
+    );
+  }
+  await scenario("worker grava entrada e tarefa antes de qualquer envio", async () => {
+    const p = input(),
+      n = state.requests,
+      result = await durable(payload(p));
+    assert.equal(result.messages[0].messageCreated, true);
+    assert.equal(state.requests, n);
+    assert.equal((await mark(result.messages[0].messageId)).status, "pending");
+    await api.drainAttendanceJobs(result.messages[0].conversationId);
+    assert.equal(state.requests, n + 1);
+    assert.equal(
+      (
+        await db`SELECT count(*)::int AS n FROM webhook_campaign_jobs WHERE message_id=${result.messages[0].messageId}`
+      )[0].n,
+      1,
+    );
+  });
+  await scenario("worker repetido não duplica mensagem nem saudação", async () => {
+    const p = input(),
+      a = await durable(payload(p));
+    await api.drainAttendanceJobs(a.messages[0].conversationId);
+    const n = state.requests,
+      b = await durable(payload(p));
+    await api.drainAttendanceJobs(b.messages[0].conversationId);
+    assert.equal(b.messages[0].messageCreated, false);
+    assert.equal(state.requests, n);
+  });
+  await scenario("worker de mídia cria tarefa e mantém o fluxo após commit", async () => {
+    const result = await durable(
+      payload(input(), "image", { image: { id: "fake-media", mime_type: "image/jpeg" } }),
+    );
+    const m = result.messages[0];
+    assert.ok(m.mediaJobId);
+    assert.equal(
+      (await db`SELECT media_status FROM messages WHERE id=${m.messageId}`)[0].media_status,
+      "pending",
+    );
+    await api.drainAttendanceJobs(m.conversationId);
+    assert.equal(await count(m.conversationId), 1);
+  });
+  await scenario("coexistência pelo worker grava saída sem responder nem reabrir", async () => {
+    const p = input(),
+      row = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: row.conversationId });
+    const n = state.requests;
+    const echo = {
+      entry: [
+        {
+          changes: [
+            {
+              field: "smb_message_echoes",
+              value: {
+                metadata: { phone_number_id: "channel-" + channel },
+                message_echoes: [
+                  {
+                    id: "durable-echo-" + randomUUID(),
+                    from: "5511999999999",
+                    to: p.phone,
+                    type: "text",
+                    text: { body: "Enviado pelo aplicativo" },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    await durable(echo);
+    assert.equal(state.requests, n);
+    assert.equal(
+      (await db`SELECT status FROM conversations WHERE id=${row.conversationId}`)[0].status,
+      "finished",
+    );
+    assert.equal(
+      (
+        await db`SELECT count(*)::int AS n FROM messages WHERE conversation_id=${row.conversationId} AND raw_payload->>'message_source'='whatsapp_business_app'`
+      )[0].n,
+      1,
+    );
+  });
+  await scenario("um lote Meta com duas empresas mantém cada mensagem no seu canal", async () => {
+    const otherCompany = randomUUID(),
+      otherChannel = randomUUID();
+    await addChannel(otherChannel, otherCompany);
+    await flow(otherCompany, otherChannel, basic);
+    await db`UPDATE whatsapp_channels SET phone_number_id=${"channel-" + otherChannel} WHERE id=${otherChannel}`;
+    const a = payload(input()),
+      b = payload(input({ companyId: otherCompany, channelId: otherChannel }));
+    const result = await durable({ entry: [...a.entry, ...b.entry] });
+    assert.equal(result.messages.length, 2);
+    const ids = result.messages.map((m) => m.conversationId);
+    const owners =
+      await db`SELECT DISTINCT company_id FROM conversations WHERE id=ANY(${ids}::uuid[])`;
+    assert.equal(owners.length, 2);
+    for (const id of ids) await api.drainAttendanceJobs(id);
+  });
+  await scenario("status durável é aplicado apenas ao canal da mensagem", async () => {
+    const p = input(),
+      row = await emit(p);
+    const outbound = (
+      await db`SELECT external_message_id FROM messages WHERE conversation_id=${row.conversationId} AND direction='out'`
+    )[0].external_message_id;
+    const event = {
+      entry: [
+        {
+          changes: [
+            {
+              field: "messages",
+              value: {
+                metadata: { phone_number_id: "channel-" + channel },
+                statuses: [{ id: outbound, status: "read" }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    await durable(event);
+    assert.equal(
+      (await db`SELECT status FROM messages WHERE external_message_id=${outbound}`)[0].status,
+      "read",
+    );
+  });
   process.stdout.write(
     "RESULT: " +
       checks +
       " scenarios passed; PostgreSQL pool max=" +
       String(process.env.ATTENDANCE_TEST_POOL_MAX ?? 8) +
-      "; no new tables or profile columns.\n",
+      "; legacy path without migration, durable DEV fixtures isolated.\n",
   );
 } finally {
   await db.end();

@@ -11,6 +11,21 @@ type Work = {
   state: { text?: string; isMedia?: boolean; restartCycle?: boolean };
 };
 
+/** Called only by the enabled durable worker, never by the web server. */
+export async function recoverPendingAttendanceJobs(limit = 5): Promise<number> {
+  const rows = await getSql()<{ conversation_id: string }[]>`
+    SELECT conversation_id FROM public.messages
+    WHERE direction='in' AND raw_payload->'__nexaFlow'->>'status' IN ('pending','retry','processing')
+      AND COALESCE((raw_payload->'__nexaFlow'->>'availableAt')::timestamptz,now())<=now()
+      AND (raw_payload->'__nexaFlow'->>'status'<>'processing'
+        OR (raw_payload->'__nexaFlow'->>'leaseUntil')::timestamptz<now())
+    GROUP BY conversation_id ORDER BY min(created_at),conversation_id LIMIT ${Math.max(1, Math.min(limit, 100))}
+  `;
+  let processed = 0;
+  for (const row of rows) processed += await drainAttendanceJobs(row.conversation_id, 10);
+  return processed;
+}
+
 /** Serializes flow execution using existing messages.raw_payload; no schema migration. */
 export async function drainAttendanceJobs(conversationId: string, limit = 100): Promise<number> {
   let processed = 0;

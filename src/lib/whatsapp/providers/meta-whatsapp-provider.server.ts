@@ -1,4 +1,5 @@
-// Provider Meta WhatsApp Cloud API — envio server-side via Graph API.
+import { metaMessageContent } from "@/lib/whatsapp/interactive-message";
+// Provider Meta WhatsApp Cloud API â€” envio server-side via Graph API.
 // Tokens ficam cifrados em whatsapp_channel_secrets; nunca expostos em logs/responses.
 
 import { encryptToken, hasTokenEncryptionKey } from "@/lib/crypto/token-crypto.server";
@@ -37,7 +38,14 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     channel: WhatsAppChannelRecord,
     to: string,
     body: string,
+    buttons?: Array<{ id: string; title: string }>,
   ): Promise<ProviderSendResult> {
+    let content: ReturnType<typeof metaMessageContent>;
+    try {
+      content = metaMessageContent(body, buttons);
+    } catch {
+      return { ok: false, error: "invalid_interactive_buttons" };
+    }
     const phoneNumberId = channel.phoneNumberId?.trim();
     if (!phoneNumberId) {
       return { ok: false, error: "missing_phone_number_id" };
@@ -72,8 +80,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
         body: JSON.stringify({
           messaging_product: "whatsapp",
           to: toDigits,
-          type: "text",
-          text: { preview_url: false, body },
+          ...content,
         }),
       });
 
@@ -107,7 +114,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
   /**
    * Persiste access token cifrado para um canal Meta da empresa.
-   * Uso interno — rotas públicas devem chamar isto sem retornar o token.
+   * Uso interno â€” rotas pÃºblicas devem chamar isto sem retornar o token.
    */
   async storeAccessToken(
     channelId: string,
@@ -158,7 +165,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
           const parsed = JSON.parse(probeBody) as { error?: { message?: string } };
           message = parsed.error?.message ?? message;
         } catch {
-          // mantém texto bruto
+          // mantÃ©m texto bruto
         }
         await s`
           UPDATE public.whatsapp_channels

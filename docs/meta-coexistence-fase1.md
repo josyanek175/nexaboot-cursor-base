@@ -36,13 +36,18 @@ Preferido (Embedded Signup oficial): `POST /api/meta/embedded-signup/start` → 
 
 ## Migration
 
-Ordem (DEV → PROD, com backup):
+Ordem **produção** (Console EasyPanel / `nexabootprincipal`):
 
-1. `docs/migrations/20260801_meta_connection_mode.sql`
+1. `docs/migrations/20260803_meta_connection_mode_nullable.sql`  
+   (**não** aplicar `20260801_meta_connection_mode.sql` em PROD — NOT NULL DEFAULT poluía Evolution)
 2. `docs/migrations/20260801_meta_coexistence_onboarding.sql` (já inclui `resulting_channel_id`)
 3. `docs/migrations/20260802_meta_coexistence_connected_at.sql`
 
-Rollbacks espelhados `*_rollback.sql`.  
+Procedimento completo (backup, Antes/Depois, validações):  
+`docs/migrations/PROD_APPLY_META_COEXISTENCE.md`
+
+Arquivo histórico `20260801_meta_connection_mode.sql` permanece no repo para referência; não usar em PROD.
+
 `20260801_meta_coexistence_onboarding_channel_id.sql` só se a tabela onboarding existir **sem** `resulting_channel_id`.
 
 ## Checklist produção (liberação controlada)

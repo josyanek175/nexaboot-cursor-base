@@ -12,18 +12,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { tenants, type Tenant } from "./mocks";
+import { type Tenant } from "./mocks";
 import { pushAudit } from "./audit-log";
+import { normalizeAuthUser, type AuthUser, type MeUserPayload } from "./auth-user";
+import {
+  NEXA_SESSION_REPLACED_EVENT,
+  SESSION_REPLACED_ERROR,
+  SESSION_REPLACED_MESSAGE,
+} from "./session-errors";
 import { toast } from "sonner";
-import {
-  ACCESS_OUTSIDE_ALLOWED_HOURS,
-  formatAccessHoursUserMessage,
-} from "./access-hours";
-import {
-  normalizeAuthUser,
-  type AuthUser,
-  type MeUserPayload,
-} from "./auth-user";
+import { ACCESS_OUTSIDE_ALLOWED_HOURS } from "./access-hours";
 
 export type { AuthUser };
 
@@ -51,8 +49,7 @@ interface AuthContextValue {
   requestPasswordReset: (email: string) => Promise<void>;
 }
 
-const NO_COMPANY_MESSAGE =
-  "Seu usuário não está vinculado a uma empresa. Contate o administrador.";
+const NO_COMPANY_MESSAGE = "Seu usuário não está vinculado a uma empresa. Contate o administrador.";
 
 export type LoginResult =
   | { ok: true }
@@ -84,11 +81,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCompanyId(authUser.companyId);
       setPlatformAccess(authUser.platformAccess);
       setCompanyMessage(
-        authUser.companyValid ? null : data.company_message ?? NO_COMPANY_MESSAGE,
+        authUser.companyValid ? null : (data.company_message ?? NO_COMPANY_MESSAGE),
       );
     },
     [],
   );
+
+  const clearLocalAuth = useCallback(() => {
+    setUser(null);
+    setCompanyValid(false);
+    setCompanyName(null);
+    setCompanyId(null);
+    setCompanyMessage(null);
+    setPlatformAccess(false);
+  }, []);
+
+  const handleSessionReplaced = useCallback(() => {
+    clearLocalAuth();
+    toast.error(SESSION_REPLACED_MESSAGE);
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.assign("/login");
+    }
+  }, [clearLocalAuth]);
 
   const refreshSession = useCallback(async () => {
     const res = await fetch("/api/auth/me", {
@@ -96,35 +110,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { Accept: "application/json" },
     });
     if (res.status === 401 || res.status === 403) {
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        forceLogout?: boolean;
-        allowedStart?: string | null;
-        allowedEnd?: string | null;
-        nextWeekdayLabel?: string | null;
-        nextTime?: string | null;
-      };
-      if (data.error === ACCESS_OUTSIDE_ALLOWED_HOURS) {
-        setUser(null);
-        toast.error(
-          formatAccessHoursUserMessage({
-            sessionEnded: data.forceLogout === true,
-            allowedStart: data.allowedStart,
-            allowedEnd: data.allowedEnd,
-            nextWeekdayLabel: data.nextWeekdayLabel,
-            nextTime: data.nextTime,
-          }),
-        );
-        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-          window.location.assign("/login");
-        }
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (data.error === SESSION_REPLACED_ERROR) handleSessionReplaced();
+      else {
+        clearLocalAuth();
+        if (data.error === ACCESS_OUTSIDE_ALLOWED_HOURS)
+          toast.error(data.message ?? "Acesso fora do horário permitido.");
       }
       return;
     }
     if (!res.ok) return;
     const data = (await res.json()) as { user: MeUserPayload | null; company_message?: string };
     applyMeResponse(data);
-  }, [applyMeResponse]);
+  }, [applyMeResponse, handleSessionReplaced, clearLocalAuth]);
 
   const setOperationalCompany = useCallback(
     async (id: string) => {
@@ -135,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ company_id: id }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await refreshSession();
+      window.location.assign("/dashboard");
     },
     [refreshSession],
   );
@@ -150,25 +148,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { Accept: "application/json" },
         });
         if (res.status === 401 || res.status === 403) {
-          const denied = (await res.json().catch(() => ({}))) as {
-            error?: string;
-            forceLogout?: boolean;
-            allowedStart?: string | null;
-            allowedEnd?: string | null;
-            nextWeekdayLabel?: string | null;
-            nextTime?: string | null;
-          };
-          if (!cancelled && denied.error === ACCESS_OUTSIDE_ALLOWED_HOURS) {
-            setUser(null);
-            toast.error(
-              formatAccessHoursUserMessage({
-                sessionEnded: denied.forceLogout === true,
-                allowedStart: denied.allowedStart,
-                allowedEnd: denied.allowedEnd,
-                nextWeekdayLabel: denied.nextWeekdayLabel,
-                nextTime: denied.nextTime,
-              }),
-            );
+          const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+          if (!cancelled && data.error === ACCESS_OUTSIDE_ALLOWED_HOURS)
+            toast.error(data.message ?? "Acesso fora do horário permitido.");
+          if (!cancelled && data.error === SESSION_REPLACED_ERROR) {
+            handleSessionReplaced();
           }
           return;
         }
@@ -189,7 +173,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyMeResponse]);
+  }, [applyMeResponse, handleSessionReplaced, clearLocalAuth]);
+
+  useEffect(() => {
+    const onReplaced = () => handleSessionReplaced();
+    window.addEventListener(NEXA_SESSION_REPLACED_EVENT, onReplaced);
+    return () => window.removeEventListener(NEXA_SESSION_REPLACED_EVENT, onReplaced);
+  }, [handleSessionReplaced]);
 
   const login = useCallback(
     async (email: string, password: string, _remember: boolean): Promise<LoginResult> => {
@@ -212,19 +202,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
         });
 
-          const data = (await res.json().catch(() => ({}))) as {
+        const data = (await res.json().catch(() => ({}))) as {
           user?: MeUserPayload;
           error?: string;
           reason?: string;
           message?: string;
-          allowedStart?: string | null;
-          allowedEnd?: string | null;
-          nextWeekdayLabel?: string | null;
-          nextTime?: string | null;
         };
 
         if (!res.ok) {
           const code = data?.error ?? "unknown_error";
+          if (code === ACCESS_OUTSIDE_ALLOWED_HOURS || code === "workspace_forbidden") {
+            return {
+              ok: false,
+              reason: "blocked",
+              message: data.message ?? "Acesso não permitido neste ambiente ou horário.",
+            };
+          }
 
           // Usuário sem empresa válida: bloqueio claro, NÃO conta como tentativa
           // de senha (credenciais estavam corretas) e não dispara lockout.
@@ -242,9 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return {
               ok: false,
               reason: "blocked",
-              message:
-                data?.message ??
-                "Usuário sem empresa vinculada. Contate o administrador.",
+              message: data?.message ?? "Usuário sem empresa vinculada. Contate o administrador.",
             };
           }
 
@@ -272,20 +263,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             session_not_created: "Falha ao criar a sessão. Verifique SESSION_SECRET.",
             invalid_input: "Dados de login inválidos.",
           };
-          if (code === ACCESS_OUTSIDE_ALLOWED_HOURS) {
-            return {
-              ok: false,
-              reason: "blocked",
-              message: formatAccessHoursUserMessage({
-                sessionEnded: false,
-                allowedStart: data.allowedStart,
-                allowedEnd: data.allowedEnd,
-                nextWeekdayLabel: data.nextWeekdayLabel,
-                nextTime: data.nextTime,
-              }),
-            };
-          }
-
           const message = DIAG_MESSAGES[code] ?? "E-mail ou senha inválidos.";
 
           if (isInfra) {
@@ -352,12 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     const current = user;
-    setUser(null);
-    setCompanyValid(false);
-    setCompanyName(null);
-    setCompanyId(null);
-    setCompanyMessage(null);
-    setPlatformAccess(false);
+    clearLocalAuth();
     fetch("/api/auth/me?action=logout", {
       method: "POST",
       credentials: "include",
@@ -377,7 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reason: `Logout: ${current.email}`,
       });
     }
-  }, [user]);
+  }, [user, clearLocalAuth]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
     await new Promise((r) => setTimeout(r, 400));
@@ -396,16 +368,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const tenant = useMemo(
     () =>
       user
-        ? tenants.find((t) => t.id === user.tenantId) ?? {
-            id: user.tenantId,
-            name: user.tenantId,
+        ? {
+            id: companyId ?? "",
+            name: companyName ?? "Selecione uma empresa",
             cnpj: "",
             plan: "Free" as const,
             status: "ativo" as const,
             sharedAttendance: false,
           }
         : null,
-    [user],
+    [user, companyId, companyName],
   );
 
   const value: AuthContextValue = {

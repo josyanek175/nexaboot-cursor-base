@@ -3,7 +3,6 @@ import { useMemo } from "react";
 import { ScrollText, ShieldAlert } from "lucide-react";
 import { useAuditLog, type AuditAction } from "@/lib/audit-log";
 import { useSession } from "@/lib/session";
-import { tenants } from "@/lib/mocks";
 
 export const Route = createFileRoute("/_app/logs")({
   component: LogsPage,
@@ -42,6 +41,7 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   "auth.login.success": "Login realizado",
   "auth.login.failed": "Tentativa de login inválida",
   "auth.login.blocked": "Login bloqueado",
+  "auth.login.blocked_no_company": "Login bloqueado por vínculo de empresa",
   "auth.logout": "Logout",
   "auth.password.reset_requested": "Recuperação de senha solicitada",
   "contact.create": "Contato criado",
@@ -51,13 +51,13 @@ const ACTION_LABEL: Record<AuditAction, string> = {
 };
 
 function LogsPage() {
-  const { session, isSuperAdmin } = useSession();
+  const { session, isSuperAdmin, tenant } = useSession();
 
   // Isolamento: ADMIN_GERAL vê tudo; demais perfis veem apenas o próprio tenant.
   const logs = useAuditLog(isSuperAdmin ? undefined : { tenantId: session.tenantId });
   const tenantName = useMemo(
-    () => (id: string | null) => tenants.find((t) => t.id === id)?.name ?? id ?? "—",
-    [],
+    () => (id: string | null) => (id === tenant.id ? tenant.name : (id ?? "—")),
+    [tenant.id, tenant.name],
   );
 
   return (
@@ -68,22 +68,27 @@ function LogsPage() {
           <div>
             <h1 className="text-lg font-semibold">Logs e Auditoria</h1>
             <p className="text-xs text-muted-foreground">
-              {isSuperAdmin ? "Visão global · ADMIN_GERAL" : `Restrito à empresa ${session.tenantId}`} ·{" "}
-              {logs.length} evento(s)
+              {isSuperAdmin
+                ? "Visão global · ADMIN_GERAL"
+                : `Restrito à empresa ${session.tenantId}`}{" "}
+              · {logs.length} evento(s)
             </p>
           </div>
         </div>
       </header>
 
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-6 py-2 text-xs text-muted-foreground">
-        <ShieldAlert className="h-3.5 w-3.5" /> Cada log carrega tenant_id; políticas RLS replicam essa visibilidade no Supabase.
+        <ShieldAlert className="h-3.5 w-3.5" /> Cada log carrega tenant_id; políticas RLS replicam
+        essa visibilidade no Supabase.
       </div>
 
       <div className="flex-1 overflow-auto p-6">
         {logs.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
             Nenhuma ação registrada nesta sessão.
-            <div className="mt-1 text-xs">Crie/edite usuários, canais ou empresas para gerar logs.</div>
+            <div className="mt-1 text-xs">
+              Crie/edite usuários, canais ou empresas para gerar logs.
+            </div>
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -108,7 +113,9 @@ function LogsPage() {
                     <td className="px-3 py-2 text-xs">{tenantName(l.tenantId)}</td>
                     <td className="px-3 py-2 text-xs">{l.actorName}</td>
                     <td className="px-3 py-2 text-xs font-medium">{ACTION_LABEL[l.action]}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{l.targetName ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {l.targetName ?? "—"}
+                    </td>
                     <td className="px-3 py-2 text-xs">
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
@@ -122,7 +129,9 @@ function LogsPage() {
                         {l.result}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-xs italic text-muted-foreground">{l.reason ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs italic text-muted-foreground">
+                      {l.reason ?? "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

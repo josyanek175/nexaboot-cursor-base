@@ -1,4 +1,5 @@
 import "./lib/error-capture";
+import { workspaceAccessResponse } from "./lib/workspace-access.server";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
@@ -8,12 +9,9 @@ import {
   PG_POOL_MAX,
   sql,
 } from "./lib/pg.server";
-import { buildClearSetCookie, verifySessionToken } from "./lib/session.server";
+import { buildClearSetCookie, resolveSession } from "./lib/session.server";
 import { accessAllowedNow } from "./lib/access-hours.server";
-import {
-  ACCESS_OUTSIDE_ALLOWED_HOURS,
-  formatAccessHoursUserMessage,
-} from "./lib/access-hours";
+import { ACCESS_OUTSIDE_ALLOWED_HOURS, formatAccessHoursUserMessage } from "./lib/access-hours";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -62,7 +60,7 @@ startDatabaseBootstrapInBackground();
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
     serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => ((m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry)),
+      (m) => (m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry),
     );
   }
   return serverEntryPromise;
@@ -116,12 +114,13 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
-function readSessionUserId(request: Request): string | null {
+async function readSessionUserId(request: Request): Promise<string | null> {
   const cookie = request.headers.get("cookie") ?? "";
   const match = cookie.match(/(?:^|;\s*)nexa_session=([^;]+)/);
   if (!match?.[1]) return null;
   try {
-    return verifySessionToken(decodeURIComponent(match[1]));
+    const resolved = await resolveSession(decodeURIComponent(match[1]));
+    return resolved.status === "ok" ? resolved.session.userId : null;
   } catch {
     return null;
   }
@@ -139,7 +138,7 @@ async function attendantAccessHoursResponse(request: Request): Promise<Response 
   ) {
     return null;
   }
-  const userId = readSessionUserId(request);
+  const userId = await readSessionUserId(request);
   if (!userId) return null;
   try {
     const users = await sql<{ role: string | null; company_id: string | null }[]>`
@@ -184,10 +183,21 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     // Bootstrap NÃO é reiniciado aqui — só no load do módulo (acima).
     try {
+      const workspaceBlocked = await workspaceAccessResponse(request);
+      if (workspaceBlocked) return workspaceBlocked;
       const blocked = await attendantAccessHoursResponse(request);
       if (blocked) return blocked;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
+      if (new URL(request.url).pathname.startsWith("/api/")) {
+        const headers = new Headers(response.headers);
+        headers.set("Cache-Control", "private, no-store");
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

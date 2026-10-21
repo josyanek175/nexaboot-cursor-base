@@ -28,6 +28,7 @@ export async function sendConversationText(params: {
   sentByUserId?: string | null;
   sentByName?: string | null;
   automationKey?: string;
+  buttons?: Array<{ id: string; title: string }>;
 }): Promise<SendConversationTextResult> {
   const { companyId, conversationId, text, sentByUserId, sentByName } = params;
 
@@ -82,6 +83,7 @@ export async function sendConversationText(params: {
       sentByUserId,
       sentByName,
       automationKey: params.automationKey,
+      buttons: params.buttons,
     });
     if (!result.ok) {
       return {
@@ -114,7 +116,12 @@ export async function sendConversationText(params: {
       {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: apiKey },
-        body: JSON.stringify({ number, text }),
+        body: JSON.stringify({
+          number,
+          text: params.buttons
+            ? [text, ...params.buttons.map((b, i) => `${i + 1}. ${b.title}`)].join("\n")
+            : text,
+        }),
       },
     );
     const body = await res.text().catch(() => "");
