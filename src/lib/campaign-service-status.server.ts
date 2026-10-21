@@ -3,7 +3,7 @@
  * Única camada responsável por awaiting_reply, in_service, answered,
  * completed, not_interested e opt_out.
  */
-import { sql } from "@/lib/pg.server";
+import { sql, getSql } from "@/lib/pg.server";
 import type { ResponseIntent } from "@/lib/campaign-response.server";
 
 export type CampaignServiceStatus =
@@ -190,18 +190,29 @@ export async function onCampaignFinish(opts: {
   companyId: string;
   conversationId: string;
 }): Promise<void> {
-  const s = sql();
-  await s`
-    UPDATE public.conversations
-    SET status = 'finished',
-        campaign_service_status = CASE
-          WHEN campaign_reply_campaign_id IS NOT NULL THEN 'completed'
-          ELSE campaign_service_status
-        END,
-        updated_at = now()
-    WHERE id = ${opts.conversationId}::uuid
-      AND company_id = ${opts.companyId}::uuid
-  `;
+  const s = getSql();
+  await s.begin(async tx => {
+    const contact = await tx<{ contact_id: string }[]>`SELECT contact_id FROM public.conversations
+      WHERE id = ${opts.conversationId}::uuid AND company_id = ${opts.companyId}::uuid`;
+    if (contact[0]?.contact_id) await tx`SELECT id FROM public.contacts WHERE id = ${contact[0].contact_id}::uuid FOR UPDATE`;
+    await tx`
+      UPDATE public.conversations
+      SET status = 'finished',
+          campaign_service_status = CASE
+            WHEN campaign_reply_campaign_id IS NOT NULL THEN 'completed'
+            ELSE campaign_service_status
+          END,
+          updated_at = now()
+      WHERE id = ${opts.conversationId}::uuid
+        AND company_id = ${opts.companyId}::uuid
+    `;
+    await tx`UPDATE public.conversation_assignments SET active = false, unassigned_at = now()
+      WHERE conversation_id = ${opts.conversationId}::uuid AND active = true
+        AND EXISTS (SELECT 1 FROM public.conversations WHERE id = ${opts.conversationId}::uuid AND company_id = ${opts.companyId}::uuid)`;
+    const tables = await tx<{ present: string | null }[]>`SELECT to_regclass('public.automation_sessions')::text AS present`;
+    if (tables[0]?.present) await tx`UPDATE public.automation_sessions SET status = 'ended', updated_at = now()
+      WHERE conversation_id = ${opts.conversationId}::uuid AND company_id = ${opts.companyId}::uuid`;
+  });
 }
 
 /** Reabrir — deriva status conforme último inbound vs resposta humana. */

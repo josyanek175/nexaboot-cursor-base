@@ -1,3 +1,4 @@
+import { ATTENDANCE_LIFECYCLE_SCHEMA } from "@/lib/attendance-lifecycle-schema";
 // Conexão PostgreSQL externa via DATABASE_URL.
 // Usa postgres.js. Servidor-only.
 import postgres from "postgres";
@@ -453,7 +454,7 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
       LIMIT 1
     ) m ON true
     WHERE c.contact_id IS NULL
-      AND c.status IS DISTINCT FROM 'merged' AND c.status IS DISTINCT FROM 'archived'
+      AND c.status IN ('open', 'waiting')
   `;
   for (const oc of orphanConvs) {
     const phoneMatch = normalizePhoneForMatch(oc.remote_jid);
@@ -481,7 +482,7 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
     SELECT company_id, contact_id, whatsapp_channel_id
     FROM public.conversations
     WHERE contact_id IS NOT NULL
-      AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
+      AND status IN ('open', 'waiting')
     GROUP BY company_id, contact_id, whatsapp_channel_id
     HAVING count(*) > 1
   `;
@@ -492,7 +493,7 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
       WHERE company_id = ${g.company_id}::uuid
         AND contact_id = ${g.contact_id}::uuid
         AND whatsapp_channel_id = ${g.whatsapp_channel_id}::uuid
-        AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
+        AND status IN ('open', 'waiting')
       ORDER BY (status = 'open') DESC, last_message_at DESC NULLS LAST, created_at DESC
     `;
     const principal = rows[0];
@@ -660,6 +661,7 @@ export async function ensureCrmSchema() {
         -- Origem do nome: 'manual' (tela /contatos) nunca é sobrescrito pelo
         -- pushName do WhatsApp; 'whatsapp'/'auto' podem ser atualizados.
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS name_source TEXT;
+        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS whatsapp_profile_name TEXT;
         -- Chave canônica de telefone (sem o nono dígito BR) usada para
         -- unicidade/deduplicação tolerante a variantes com/sem o 9.
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS phone_match TEXT;
@@ -715,6 +717,7 @@ export async function ensureCrmSchema() {
         -- não destrutivo: mensagens antigas ficam com estes campos NULL.
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sent_by_user_id UUID;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sent_by_name TEXT;
+        ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS message_source TEXT;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_emoji TEXT;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_to_message_id TEXT;
         -- Tamanho em bytes da mídia (envio/recebimento). Idempotente, não destrutivo.
@@ -731,9 +734,11 @@ export async function ensureCrmSchema() {
       // duplicados legados, sem apagar nada.
       await ensureContactsDedup(s);
 
-      // Uma conversa principal por (contato, canal). Consolida duplicadas que
+      // Uma conversa ATIVA principal por (contato, canal); ciclos finalizados ficam separados.
+      // Consolida duplicadas que
       // sobraram após apontar os contatos ao principal. Não apaga nada.
       await ensureConversationsDedup(s);
+      await getSql().unsafe(ATTENDANCE_LIFECYCLE_SCHEMA);
 
       // Planos comerciais + assinaturas por empresa (fase 1 — sem enforcement).
       await ensurePlansSchema(s);

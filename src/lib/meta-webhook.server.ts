@@ -367,6 +367,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       try {
         const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
         const persistResult = await persistMetaInboundMessages(webhookBody);
+        if (persistResult.errors > 0) persistError = `inbound_errors=${persistResult.errors}`;
         if (persistResult.saved > 0) {
           processingStatus = "persisted";
           console.log("[META_WEBHOOK_PERSISTED]", {
@@ -397,6 +398,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
           processingStatus = "persisted";
           console.log("[META_SMB_ECHO_PERSISTED]", echoResult);
         } else if (echoResult.errors > 0) {
+          persistError = `echo_errors=${echoResult.errors}`;
           console.error("[META_SMB_ECHO_FAIL]", echoResult);
         }
       } catch (e) {
@@ -413,7 +415,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       eventType,
       signatureValid: true,
       processingStatus,
-      httpStatus: 200,
+      httpStatus: persistError ? 503 : 200,
       payload: auditPayload,
       error: persistError,
     });
@@ -426,6 +428,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
+    persistError = error;
     console.error("[META_WEBHOOK_ERROR]", { reason: "handler_exception", error });
     try {
       await insertMetaWebhookLog({
@@ -447,5 +450,6 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     }
   }
 
+  if (persistError) return Response.json({ error: "webhook_persistence_failed" }, { status: 503 });
   return metaWebhookOkResponse();
 }

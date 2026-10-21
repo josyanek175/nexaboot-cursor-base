@@ -1,3 +1,4 @@
+import { startAttendanceJobPump } from "./lib/attendance-jobs.server";
 import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
@@ -182,6 +183,7 @@ async function attendantAccessHoursResponse(request: Request): Promise<Response 
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    startAttendanceJobPump();
     // Bootstrap NÃO é reiniciado aqui — só no load do módulo (acima).
     try {
       const blocked = await attendantAccessHoursResponse(request);

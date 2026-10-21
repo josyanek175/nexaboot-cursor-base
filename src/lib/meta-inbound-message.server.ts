@@ -2,15 +2,8 @@
 
 
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
-import {
-  bumpConversationAfterBusinessAppEcho,
-  bumpConversationAfterInboundMessage,
-  insertInboundMediaMessage,
-  insertInboundTextMessage,
-  insertWhatsappBusinessAppEcho,
-  upsertInboundContact,
-  upsertInboundConversation,
-} from "@/lib/crm-inbound.server";
+import { commitMetaAttendanceMessage } from "@/lib/attendance-inbound.server";
+import { drainAttendanceJobs } from "@/lib/attendance-jobs.server";
 import {
   extractMetaInboundMediaMessages,
   extractMetaInboundTextMessages,
@@ -24,7 +17,6 @@ import {
 } from "@/lib/meta-inbound-parse";
 import { downloadMetaMedia } from "@/lib/meta-media-download.server";
 import { loadMetaChannelByPhoneNumberId } from "@/lib/whatsapp/whatsapp-provider-router.server";
-import { onAutomationInbound } from "@/lib/automation-flow.server";
 
 export type { MetaInboundTextMessage, MetaInboundMediaMessage } from "@/lib/meta-inbound-parse";
 export {
@@ -78,30 +70,12 @@ async function persistOneMetaSmbEcho(echo: MetaSmbEchoMessage): Promise<boolean>
   const channel = await loadMetaChannelByPhoneNumberId(echo.phoneNumberId);
   if (!channel?.companyId?.trim() || channel.companyId === "null") return false;
 
-  const contactId = await upsertInboundContact({
-    companyId: channel.companyId,
-    phone: echo.customerPhone,
-    externalJid: echo.customerPhone,
-    fromMe: false,
-  });
-  const conversationId = await upsertInboundConversation({
-    companyId: channel.companyId,
-    channelId: channel.id,
-    contactId,
-  });
-  const messageId = await insertWhatsappBusinessAppEcho({
-    conversationId,
-    externalMessageId: echo.externalMessageId,
-    messageType: echo.messageType,
-    messageText: echo.messageText,
-    rawPayload: echo.rawPayload,
+  const { messageId, conversationId } = await commitMetaAttendanceMessage({
+    companyId: channel.companyId, channelId: channel.id, phone: echo.customerPhone,
+    externalMessageId: echo.externalMessageId, text: echo.messageText ?? `[${echo.messageType}]`,
+    rawPayload: echo.rawPayload, messageType: echo.messageType, echo: true,
   });
   if (!messageId) return false;
-
-  await bumpConversationAfterBusinessAppEcho({
-    conversationId,
-    lastMessageText: echo.messageText ?? `[${echo.messageType}]`,
-  });
   console.log("[META_SMB_ECHO_SAVED]", {
     messageId,
     conversationId,
@@ -183,39 +157,13 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
   const messageRec = asRecord(msg.rawPayload.message);
   const resolution = messageRec ? resolveMetaInboundMessageText(messageRec) : null;
 
-  const contactId = await upsertInboundContact({
-    companyId: channel.companyId,
-    phone: msg.phone,
-    externalJid: msg.phone,
-    name: msg.contactName ?? undefined,
-    fromMe: false,
+  const { contactId, conversationId, messageId } = await commitMetaAttendanceMessage({
+    companyId: channel.companyId, channelId: channel.id, phone: msg.phone,
+    profileName: msg.contactName, externalMessageId: msg.externalMessageId,
+    text: msg.textBody, rawPayload: msg.rawPayload,
   });
-
-  const conversationId = await upsertInboundConversation({
-    companyId: channel.companyId,
-    channelId: channel.id,
-    contactId,
-  });
-
-  const messageId = await insertInboundTextMessage({
-    conversationId,
-    externalMessageId: msg.externalMessageId,
-    messageText: msg.textBody,
-    rawPayload: msg.rawPayload,
-  });
-
-  if (!messageId) {
-    console.log("[META_INBOUND_DEDUP]", {
-      externalMessageId: msg.externalMessageId,
-      conversationId,
-    });
-    return false;
-  }
-
-  await bumpConversationAfterInboundMessage({
-    conversationId,
-    lastMessageText: msg.textBody,
-  });
+  await drainAttendanceJobs(conversationId).catch(() => console.error("[ATTENDANCE_JOB_DEFERRED]"));
+  if (!messageId) return false;
 
   let campaignId: string | undefined;
   try {
@@ -233,18 +181,6 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
       externalMessageId: msg.externalMessageId,
       error: e instanceof Error ? e.message : String(e),
     }    );
-  }
-
-  try {
-    await onAutomationInbound({
-      companyId: channel.companyId,
-      channelId: channel.id,
-      conversationId,
-      contactId,
-      text: msg.textBody,
-    });
-  } catch (e) {
-    console.error("[AUTOMATION_INBOUND_FAIL]", e instanceof Error ? e.message : String(e));
   }
 
   if (resolution?.usedFallback) {
@@ -320,20 +256,6 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
     return false;
   }
 
-  const contactId = await upsertInboundContact({
-    companyId: channel.companyId,
-    phone: msg.phone,
-    externalJid: msg.phone,
-    name: msg.contactName ?? undefined,
-    fromMe: false,
-  });
-
-  const conversationId = await upsertInboundConversation({
-    companyId: channel.companyId,
-    channelId: channel.id,
-    contactId,
-  });
-
   const previewLabel = metaInboundMediaPreviewLabel(msg.mediaType);
   const messageText = msg.caption?.trim() || previewLabel;
 
@@ -362,33 +284,15 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
     media_status: download.ok ? "ready" : "failed",
   });
 
-  const messageId = await insertInboundMediaMessage({
-    conversationId,
-    externalMessageId: msg.externalMessageId,
-    mediaType: msg.mediaType,
-    messageText,
-    caption: msg.caption,
-    mimeType,
-    filename,
-    mediaBase64,
-    mediaError,
-    mediaSize,
-    rawPayload,
+  const { conversationId, messageId } = await commitMetaAttendanceMessage({
+    companyId: channel.companyId, channelId: channel.id, phone: msg.phone,
+    profileName: msg.contactName, externalMessageId: msg.externalMessageId,
+    text: messageText, rawPayload,
+    media: { mediaType: msg.mediaType, messageText, caption: msg.caption, mimeType,
+      filename, mediaBase64, mediaError, mediaSize, rawPayload },
   });
-
-  if (!messageId) {
-    console.log("[META_INBOUND_DEDUP]", {
-      externalMessageId: msg.externalMessageId,
-      conversationId,
-      mediaType: msg.mediaType,
-    });
-    return false;
-  }
-
-  await bumpConversationAfterInboundMessage({
-    conversationId,
-    lastMessageText: messageText,
-  });
+  await drainAttendanceJobs(conversationId).catch(() => console.error("[ATTENDANCE_JOB_DEFERRED]"));
+  if (!messageId) return false;
 
   try {
     await handleCampaignInboundReply({

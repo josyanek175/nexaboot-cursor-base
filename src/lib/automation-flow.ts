@@ -34,7 +34,10 @@ export function emptyDefinition(): FlowDefinition {
 }
 
 export function renderFlowText(text: string, vars: FlowVars): string {
-  return text
+  const personalized = vars.nome?.trim()
+    ? text
+    : text.replace(/,?\s*\{\{nome\}\}/g, "");
+  return personalized
     .replaceAll("{{nome}}", vars.nome ?? "")
     .replaceAll("{{telefone}}", vars.telefone ?? "")
     .replaceAll("{{endereco}}", vars.endereco ?? "")

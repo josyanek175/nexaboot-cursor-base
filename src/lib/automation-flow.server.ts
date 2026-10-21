@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { attendanceDisplayName } from "@/lib/attendance-lifecycle";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
@@ -17,6 +19,8 @@ import {
   type FlowStatus,
   type FlowVars,
 } from "@/lib/automation-flow";
+
+const attendanceContext = new AsyncLocalStorage<boolean>();
 
 function db() {
   return sql() as {
@@ -338,12 +342,18 @@ type SessionRow = {
 };
 
 async function loadContactVars(contactId: string, collected: Collected): Promise<FlowVars> {
-  const rows = await db()<{ name: string | null; phone: string | null; reference: string | null }[]>`
-    SELECT name, phone, reference FROM public.contacts WHERE id = ${contactId}::uuid LIMIT 1
+  const rows = await db()<{
+    name: string | null;
+    name_source: string | null;
+    whatsapp_profile_name: string | null;
+    phone: string | null;
+    reference: string | null;
+  }[]>`
+    SELECT name, name_source, whatsapp_profile_name, phone, reference FROM public.contacts WHERE id = ${contactId}::uuid LIMIT 1
   `;
   const contact = rows[0];
   return {
-    nome: contact?.name ?? "",
+    nome: attendanceDisplayName(contact),
     telefone: contact?.phone ?? "",
     endereco: collected.endereco || contact?.reference || "",
     prazo: collected.prazo ?? "",
@@ -354,6 +364,14 @@ async function loadContactVars(contactId: string, collected: Collected): Promise
 async function sendText(companyId: string, conversationId: string, text: string): Promise<boolean> {
   const trimmed = text.trim();
   if (!trimmed) return false;
+  if (attendanceContext.getStore()) {
+    const allowed = await db()<{ id: string }[]>`SELECT c.id FROM public.conversations c
+      WHERE c.id = ${conversationId}::uuid AND c.company_id = ${companyId}::uuid
+        AND c.status IN ('open', 'waiting')
+        AND NOT EXISTS (SELECT 1 FROM public.conversation_assignments a
+          WHERE a.conversation_id = c.id AND a.active = true AND a.unassigned_at IS NULL) LIMIT 1`;
+    if (!allowed[0]) throw new Error("automation_human_or_finished");
+  }
   const result = await sendConversationText({ companyId, conversationId, text: trimmed, sentByName: "Fluxo" });
   if (!result.ok) {
     console.error("[AUTOMATION_SEND_FAIL]", {
@@ -362,6 +380,7 @@ async function sendText(companyId: string, conversationId: string, text: string)
       error: result.error,
       message: result.message ?? null,
     });
+    if (attendanceContext.getStore()) throw new Error("automation_send_failed");
     return false;
   }
   return true;
@@ -416,22 +435,38 @@ async function saveSession(session: SessionRow, patch: Partial<SessionRow>) {
   `;
 }
 
-export async function onAutomationInbound(params: {
+export async function onAutomationInbound(params: Parameters<typeof processAutomationInbound>[0]): Promise<void> {
+  return attendanceContext.run(true, () => processAutomationInbound(params));
+}
+
+async function processAutomationInbound(params: {
   companyId: string;
   channelId: string;
   conversationId: string;
   contactId: string;
   text: string;
+  isMedia?: boolean;
+  throwErrors?: boolean;
 }): Promise<void> {
   try {
     await ensureAutomationSchema();
   } catch (error) {
     console.error("[AUTOMATION_SCHEMA]", error instanceof Error ? error.message : error);
+    if (params.throwErrors) throw error;
     return;
   }
   try {
     const text = params.text.trim();
-    if (!text) return;
+    const allowed = await db()<{ id: string }[]>`
+      SELECT c.id FROM public.conversations c
+      WHERE c.id = ${params.conversationId}::uuid AND c.company_id = ${params.companyId}::uuid
+        AND c.whatsapp_channel_id = ${params.channelId}::uuid AND c.contact_id = ${params.contactId}::uuid
+        AND c.status IN ('open', 'waiting')
+        AND NOT EXISTS (SELECT 1 FROM public.conversation_assignments a
+          WHERE a.conversation_id = c.id AND a.active = true AND a.unassigned_at IS NULL)
+      LIMIT 1
+    `;
+    if (!allowed[0]) return;
     const sessions = await db()<SessionRow[]>`
       SELECT conversation_id, company_id, flow_id, contact_id, channel_id, step_id, status, collected, source
       FROM public.automation_sessions
@@ -440,6 +475,11 @@ export async function onAutomationInbound(params: {
       LIMIT 1
     `;
     const session = sessions[0];
+    if (session?.status === "transferred" || session?.status === "ended") return;
+    if (session?.status === "waiting") {
+      if (text && !params.isMedia) await answerWaitingSession(session, text);
+      return;
+    }
     const flows = await db()<{ id: string; definition: unknown }[]>`
       SELECT f.id, f.definition
       FROM public.automation_flows f
@@ -470,11 +510,8 @@ export async function onAutomationInbound(params: {
     `;
     const greetingSent = !!greeting[0];
 
-    if (greetingSent && session?.status === "transferred") return;
-    if (greetingSent && session?.status === "waiting" && session.flow_id === flow.id) {
-      await answerWaitingSession(session, text);
-      return;
-    }
+    // Existing outbound flow messages protect legacy conversations without a session.
+    if (greetingSent) return;
 
     const created: SessionRow = {
       conversation_id: params.conversationId,
@@ -522,6 +559,7 @@ export async function onAutomationInbound(params: {
     }
   } catch (error) {
     console.error("[AUTOMATION_INBOUND]", error instanceof Error ? error.message : error);
+    if (params.throwErrors) throw error;
   }
 }
 
