@@ -4,6 +4,12 @@ import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import { isInvalidCampaignPhone } from "@/lib/campaign-send-policy";
 import { isPhoneInOptOutList } from "@/lib/campaign-response.server";
 import {
+  DISPATCH_WINDOW_SKIP_REASON,
+  getCampaignDispatchWindowSettings,
+  loadCompanyDispatchHistory,
+} from "@/lib/campaign-dispatch-window.server";
+import { computeDispatchBlock } from "@/lib/campaign-dispatch-window";
+import {
   parseSpreadsheetRow,
   collectAvailableTags,
   previewMessage,
@@ -22,6 +28,7 @@ export type ImportPreviewResult = {
   invalid: number;
   duplicated: number;
   optOut: number;
+  dispatchWindow: number;
   availableTags: string[];
   samplePreview: {
     name: string;
@@ -59,6 +66,8 @@ async function classifyRows(
   const existingPhones = campaignId
     ? await loadExistingPhoneMatches(companyId, campaignId)
     : new Set<string>();
+  const settings = await getCampaignDispatchWindowSettings(companyId);
+  const history = await loadCompanyDispatchHistory(companyId);
   const seenInBatch = new Set<string>();
   const normalized: NormalizedImportRow[] = [];
 
@@ -66,6 +75,7 @@ async function classifyRows(
   let invalid = 0;
   let duplicated = 0;
   let optOut = 0;
+  let dispatchWindow = 0;
 
   for (const row of parsed) {
     const phoneDigits = normalizePhone(row.phone);
@@ -91,6 +101,19 @@ async function classifyRows(
     } else if (await isPhoneInOptOutList(companyId, phoneDigits)) {
       status = "opt_out";
       reason = "opt_out_list";
+    } else {
+      const hist = history.get(phoneMatch);
+      if (hist) {
+        const block = computeDispatchBlock({
+          sendCount: hist.sendCount,
+          lastSentAt: hist.lastSentAt,
+          settings,
+        });
+        if (block?.blocked) {
+          status = "dispatch_window";
+          reason = DISPATCH_WINDOW_SKIP_REASON;
+        }
+      }
     }
 
     seenInBatch.add(phoneMatch);
@@ -99,6 +122,7 @@ async function classifyRows(
     else if (status === "invalid") invalid++;
     else if (status === "duplicate") duplicated++;
     else if (status === "opt_out") optOut++;
+    else if (status === "dispatch_window") dispatchWindow++;
 
     normalized.push({
       ...row,
@@ -124,6 +148,7 @@ async function classifyRows(
     invalid,
     duplicated,
     optOut,
+    dispatchWindow,
     availableTags: collectAvailableTags(parsed),
     samplePreview,
     rows: normalized,
@@ -161,14 +186,16 @@ export async function confirmCampaignImport(opts: {
   );
 
   const indexSet = new Set(opts.rowIndices);
-  const toImport = preview.rows.filter(
+  const toImportPending = preview.rows.filter(
     (r) => r.status === "valid" && indexSet.has(r.index),
   );
+  // Bloqueados entram na lista já como skipped (mensagem na UI; sem reenvio).
+  const toImportBlocked = preview.rows.filter((r) => r.status === "dispatch_window");
 
   let added = 0;
-  let skipped = preview.total - toImport.length;
+  let skipped = preview.total - toImportPending.length - toImportBlocked.length;
 
-  for (const row of toImport) {
+  for (const row of toImportPending) {
     const phone = normalizePhone(row.phone);
     try {
       const inserted = await sql<{ id: string }[]>`
@@ -193,11 +220,38 @@ export async function confirmCampaignImport(opts: {
     }
   }
 
+  for (const row of toImportBlocked) {
+    const phone = normalizePhone(row.phone);
+    try {
+      const inserted = await sql<{ id: string }[]>`
+        INSERT INTO public.campaign_contacts
+          (campaign_id, company_id, contact_id, phone, name, variables, status, skip_reason)
+        VALUES (
+          ${opts.campaignId}::uuid,
+          ${opts.companyId}::uuid,
+          NULL,
+          ${phone},
+          ${row.name.trim()},
+          ${row.variables as unknown as Record<string, never>},
+          'skipped',
+          ${DISPATCH_WINDOW_SKIP_REASON}
+        )
+        ON CONFLICT (campaign_id, phone) DO NOTHING
+        RETURNING id
+      `;
+      if (inserted[0]) skipped++;
+      else skipped++;
+    } catch {
+      skipped++;
+    }
+  }
+
   await syncCampaignContactCounters(opts.campaignId, opts.companyId);
   await insertCampaignEvent(opts.companyId, opts.campaignId, "contacts.imported", opts.userId, {
     requested: opts.rowIndices.length,
     added,
     skipped,
+    dispatch_window: toImportBlocked.length,
   });
 
   return { added, skipped };

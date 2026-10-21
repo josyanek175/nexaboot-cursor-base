@@ -1,12 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Megaphone, Plus, Loader2, Pencil, Trash2 } from "lucide-react";
+import {
+  Megaphone,
+  Plus,
+  Loader2,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import {
   canAccessCampaignsModule,
   canManageCampaigns,
   canDeleteCampaign,
+  canViewCampaignCosts,
   actingUserFromAuth,
 } from "@/lib/permissions";
 import { apiDelete } from "@/lib/api";
@@ -64,6 +71,7 @@ function CampanhasPage() {
   const canAccess = canAccessCampaignsModule(actor, companyValid);
   const canManage = canManageCampaigns(actor);
   const canDelete = canDeleteCampaign(actor);
+  const canCosts = canViewCampaignCosts(actor);
 
   async function reload() {
     setLoading(true);
@@ -143,22 +151,32 @@ function CampanhasPage() {
             </p>
           </div>
         </div>
-        {canManage && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {canCosts && (
             <Link
-              to="/campanhas/modelos"
+              to="/campanhas/templates-atendimento"
               className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
             >
-              <Megaphone className="h-4 w-4" /> Modelos
+              Templates atendimento
             </Link>
-            <Link
-              to="/campanhas/nova"
-              className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
-            >
-              <Plus className="h-4 w-4" /> Nova campanha
-            </Link>
-          </div>
-        )}
+          )}
+          {canManage && (
+            <>
+              <Link
+                to="/campanhas/modelos"
+                className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                <Megaphone className="h-4 w-4" /> Modelos
+              </Link>
+              <Link
+                to="/campanhas/nova"
+                className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
+              >
+                <Plus className="h-4 w-4" /> Nova campanha
+              </Link>
+            </>
+          )}
+        </div>
       </header>
 
       <div className="flex-1 overflow-auto p-6">

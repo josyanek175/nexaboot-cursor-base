@@ -1,22 +1,18 @@
 // Persistência de mensagens inbound Meta WhatsApp Cloud API (texto + mídia).
 
-
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
-import {
-  bumpConversationAfterInboundMessage,
-  insertInboundMediaMessage,
-  insertInboundTextMessage,
-  upsertInboundContact,
-  upsertInboundConversation,
-} from "@/lib/crm-inbound.server";
+import { commitMetaAttendanceMessage } from "@/lib/attendance-inbound.server";
+import { drainAttendanceJobs } from "@/lib/attendance-jobs.server";
 import {
   extractMetaInboundMediaMessages,
   extractMetaInboundTextMessages,
+  extractMetaSmbMessageEchoes,
   metaInboundMediaPreviewLabel,
   resolveMetaInboundMessageText,
   unwrapMetaWebhookBody,
   type MetaInboundMediaMessage,
   type MetaInboundTextMessage,
+  type MetaSmbEchoMessage,
 } from "@/lib/meta-inbound-parse";
 import { downloadMetaMedia } from "@/lib/meta-media-download.server";
 import { loadMetaChannelByPhoneNumberId } from "@/lib/whatsapp/whatsapp-provider-router.server";
@@ -47,6 +43,57 @@ function enrichRawPayload(
   extra: Record<string, unknown>,
 ): Record<string, unknown> {
   return { ...rawPayload, ...extra };
+}
+
+/** Grava o que saiu do WhatsApp do celular. Não envia de novo. */
+export async function persistMetaSmbMessageEchoes(
+  payload: unknown,
+): Promise<MetaInboundPersistResult> {
+  const echoes = extractMetaSmbMessageEchoes(payload);
+  const result: MetaInboundPersistResult = {
+    processed: echoes.length,
+    saved: 0,
+    skipped: 0,
+    errors: 0,
+  };
+  for (const echo of echoes) {
+    try {
+      const saved = await persistOneMetaSmbEcho(echo);
+      if (saved) result.saved += 1;
+      else result.skipped += 1;
+    } catch (e) {
+      result.errors += 1;
+      console.error("[META_SMB_ECHO_FAIL]", {
+        externalMessageId: echo.externalMessageId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return result;
+}
+
+async function persistOneMetaSmbEcho(echo: MetaSmbEchoMessage): Promise<boolean> {
+  const channel = await loadMetaChannelByPhoneNumberId(echo.phoneNumberId);
+  if (!channel?.companyId?.trim() || channel.companyId === "null") return false;
+
+  const { messageId, conversationId } = await commitMetaAttendanceMessage({
+    companyId: channel.companyId,
+    channelId: channel.id,
+    phone: echo.customerPhone,
+    externalMessageId: echo.externalMessageId,
+    text: echo.messageText ?? `[${echo.messageType}]`,
+    rawPayload: echo.rawPayload,
+    messageType: echo.messageType,
+    echo: true,
+  });
+  if (!messageId) return false;
+  console.log("[META_SMB_ECHO_SAVED]", {
+    messageId,
+    conversationId,
+    externalMessageId: echo.externalMessageId,
+    resent: false,
+  });
+  return true;
 }
 
 /** Persiste mensagens inbound Meta em contacts/conversations/messages. */
@@ -121,39 +168,21 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
   const messageRec = asRecord(msg.rawPayload.message);
   const resolution = messageRec ? resolveMetaInboundMessageText(messageRec) : null;
 
-  const contactId = await upsertInboundContact({
-    companyId: channel.companyId,
-    phone: msg.phone,
-    externalJid: msg.phone,
-    name: msg.contactName ?? undefined,
-    fromMe: false,
-  });
-
-  const conversationId = await upsertInboundConversation({
+  const { contactId, conversationId, messageId } = await commitMetaAttendanceMessage({
     companyId: channel.companyId,
     channelId: channel.id,
-    contactId,
-  });
-
-  const messageId = await insertInboundTextMessage({
-    conversationId,
+    phone: msg.phone,
+    profileName: msg.contactName,
     externalMessageId: msg.externalMessageId,
-    messageText: msg.textBody,
+    text: msg.textBody,
     rawPayload: msg.rawPayload,
   });
-
   if (!messageId) {
-    console.log("[META_INBOUND_DEDUP]", {
-      externalMessageId: msg.externalMessageId,
-      conversationId,
-    });
+    await drainAttendanceJobs(conversationId).catch(() =>
+      console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+    );
     return false;
   }
-
-  await bumpConversationAfterInboundMessage({
-    conversationId,
-    lastMessageText: msg.textBody,
-  });
 
   let campaignId: string | undefined;
   try {
@@ -172,6 +201,10 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
       error: e instanceof Error ? e.message : String(e),
     });
   }
+
+  await drainAttendanceJobs(conversationId).catch(() =>
+    console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+  );
 
   if (resolution?.usedFallback) {
     console.log("[META_WEBHOOK_REPLY_WITHOUT_TEXT]", {
@@ -246,20 +279,6 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
     return false;
   }
 
-  const contactId = await upsertInboundContact({
-    companyId: channel.companyId,
-    phone: msg.phone,
-    externalJid: msg.phone,
-    name: msg.contactName ?? undefined,
-    fromMe: false,
-  });
-
-  const conversationId = await upsertInboundConversation({
-    companyId: channel.companyId,
-    channelId: channel.id,
-    contactId,
-  });
-
   const previewLabel = metaInboundMediaPreviewLabel(msg.mediaType);
   const messageText = msg.caption?.trim() || previewLabel;
 
@@ -276,8 +295,8 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
 
   const mimeType = download.ok
     ? download.mimeType
-    : msg.mimeHint ?? (msg.mediaType === "audio" ? "audio/ogg" : null);
-  const filename = download.ok ? download.filename ?? msg.filename : msg.filename;
+    : (msg.mimeHint ?? (msg.mediaType === "audio" ? "audio/ogg" : null));
+  const filename = download.ok ? (download.filename ?? msg.filename) : msg.filename;
   const mediaBase64 = download.ok ? download.base64 : null;
   const mediaError = download.ok ? null : download.error;
   const mediaSize = download.ok ? download.fileSize : null;
@@ -288,33 +307,32 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
     media_status: download.ok ? "ready" : "failed",
   });
 
-  const messageId = await insertInboundMediaMessage({
-    conversationId,
+  const { conversationId, messageId } = await commitMetaAttendanceMessage({
+    companyId: channel.companyId,
+    channelId: channel.id,
+    phone: msg.phone,
+    profileName: msg.contactName,
     externalMessageId: msg.externalMessageId,
-    mediaType: msg.mediaType,
-    messageText,
-    caption: msg.caption,
-    mimeType,
-    filename,
-    mediaBase64,
-    mediaError,
-    mediaSize,
+    text: messageText,
     rawPayload,
-  });
-
-  if (!messageId) {
-    console.log("[META_INBOUND_DEDUP]", {
-      externalMessageId: msg.externalMessageId,
-      conversationId,
+    media: {
       mediaType: msg.mediaType,
-    });
+      messageText,
+      caption: msg.caption,
+      mimeType,
+      filename,
+      mediaBase64,
+      mediaError,
+      mediaSize,
+      rawPayload,
+    },
+  });
+  if (!messageId) {
+    await drainAttendanceJobs(conversationId).catch(() =>
+      console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+    );
     return false;
   }
-
-  await bumpConversationAfterInboundMessage({
-    conversationId,
-    lastMessageText: messageText,
-  });
 
   try {
     await handleCampaignInboundReply({
@@ -333,6 +351,10 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
       error: e instanceof Error ? e.message : String(e),
     });
   }
+
+  await drainAttendanceJobs(conversationId).catch(() =>
+    console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+  );
 
   console.log("[META_MEDIA_MESSAGE_SAVED]", {
     channelId: channel.id,

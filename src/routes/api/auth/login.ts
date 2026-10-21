@@ -7,11 +7,15 @@ import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import {
   buildSessionSetCookie,
-  createPersistedSession,
   describeSessionCookie,
   hasSessionSecret,
 } from "@/lib/session.server";
 import { buildAuthUserResponse } from "@/lib/auth-user";
+import { accessAllowedNow } from "@/lib/access-hours.server";
+import {
+  ACCESS_OUTSIDE_ALLOWED_HOURS,
+  formatAccessHoursUserMessage,
+} from "@/lib/access-hours";
 
 const Body = z.object({
   email: z.string().email().max(255),
@@ -226,6 +230,26 @@ export const Route = createFileRoute("/api/auth/login")({
           tenantExists,
         });
 
+        if (roleUpper === "ATENDENTE") {
+          const hours = await accessAllowedNow({
+            companyId: u.company_id,
+            role: roleUpper,
+          });
+          if (!hours.allowed) {
+            return Response.json(
+              {
+                error: ACCESS_OUTSIDE_ALLOWED_HOURS,
+                message: formatAccessHoursUserMessage(hours),
+                allowedStart: hours.allowedStart,
+                allowedEnd: hours.allowedEnd,
+                nextWeekdayLabel: hours.nextWeekdayLabel,
+                nextTime: hours.nextTime,
+              },
+              { status: 403 },
+            );
+          }
+        }
+
         // 7) last_login_at (não-fatal) -----------------------------------
         try {
           await s`UPDATE public.users SET last_login_at = now() WHERE id = ${u.id}`;
@@ -236,29 +260,23 @@ export const Route = createFileRoute("/api/auth/login")({
           });
         }
 
-        // 8) Sessão persistida (revoga anteriores + insert) + cookie httpOnly.
-        // Transação curta, sem HTTP/rede. Token cru NÃO é logado.
+        // 8) Sessão / cookie httpOnly (depende de SESSION_SECRET) --------
+        // Anexamos o Set-Cookie EXPLICITAMENTE na Response (não dependemos do
+        // merge de contexto do framework), garantindo que o header sempre vá.
         console.log("[LOGIN_SESSION_ENV]", {
           hasSessionSecret: hasSessionSecret(),
           nodeEnv: process.env.NODE_ENV,
         });
         let setCookieHeader: string;
-        let sessionId: string;
         try {
-          const created = await createPersistedSession({
-            userId: u.id,
-            companyId: companyValid ? u.company_id : null,
-            request,
-          });
-          sessionId = created.sessionId;
-          setCookieHeader = buildSessionSetCookie(created.token);
+          setCookieHeader = buildSessionSetCookie(u.id);
         } catch (e) {
           console.error("[LOGIN_SESSION_FAIL]", {
             userId: u.id,
-            message: e instanceof Error ? e.message : String(e),
+            message: (e as Error).message,
           });
           return Response.json(
-            { error: "session_not_created", reason: e instanceof Error ? e.message : String(e) },
+            { error: "session_not_created", reason: (e as Error).message },
             { status: 500 },
           );
         }
@@ -266,9 +284,8 @@ export const Route = createFileRoute("/api/auth/login")({
         const cookieAttrs = describeSessionCookie();
         console.log("[LOGIN_SET_COOKIE]", {
           userId: u.id,
-          sessionId,
           setCookieReturned: true,
-          cookieAttrs,
+          cookieAttrs, // name, httpOnly, sameSite, secure, path, maxAge, nodeEnv
         });
 
         console.log("[LOGIN_SUCCESS]", {
@@ -277,7 +294,6 @@ export const Route = createFileRoute("/api/auth/login")({
           tenant_id: u.tenant_id,
           tenantExists,
           sessionCreated: true,
-          sessionId,
           ms: Date.now() - startedAt,
         });
 

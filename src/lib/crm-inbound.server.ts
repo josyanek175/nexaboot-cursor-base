@@ -1,32 +1,32 @@
 // Upsert de contato/conversa/mensagem inbound — modelo compartilhado CRM.
 // Usado pelo webhook Meta; Evolution mantém cópia local até refatoração futura.
 
-import { sql } from "@/lib/pg.server";
-import type { SqlExecutor } from "@/lib/pg-types";
+import { getSql } from "@/lib/pg.server";
 import { normalizePhoneForMatch } from "@/lib/phone";
+import { validProfileName } from "@/lib/attendance-lifecycle";
 
-/**
- * Executor de query destas funções.
- *
- * Sem `sql` explícito vale o pool global, que é o que a rota HTTP sempre usou.
- * O message-worker passa a `TransactionSql` do seu `begin` para que contato,
- * conversa e mensagem entrem no mesmo COMMIT.
- */
-function resolveSql(injected?: SqlExecutor): SqlExecutor {
-  return injected ?? (sql() as unknown as SqlExecutor);
+export type CrmSql = {
+  <T extends object[] = Record<string, unknown>[]>(
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<T>;
+};
+function executor(injected?: CrmSql): CrmSql {
+  return (injected ?? getSql()) as unknown as CrmSql;
 }
 
 /** Contato inbound (Evolution/Meta). fromMe=false para mensagens recebidas da Meta. */
 export async function upsertInboundContact(params: {
+  sql?: CrmSql;
   companyId: string;
   phone: string;
   externalJid: string;
   name?: string;
   fromMe?: boolean;
-  sql?: SqlExecutor;
 }): Promise<string> {
-  const { companyId, phone, externalJid, name, fromMe = false } = params;
-  const s = resolveSql(params.sql);
+  const { companyId, phone, externalJid, fromMe = false } = params;
+  const name = fromMe ? null : validProfileName(params.name);
+  const s = executor(params.sql);
   const phoneMatch = normalizePhoneForMatch(phone);
 
   const existing = await s<
@@ -65,11 +65,15 @@ export async function upsertInboundContact(params: {
     const inserted = await s<{ id: string }[]>`
       INSERT INTO public.contacts
         (company_id, phone, phone_match, name, name_source, external_jid, contact_type)
-      VALUES
-        (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
-      RETURNING id
+      VALUES (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
+      ON CONFLICT DO NOTHING RETURNING id
     `;
-    return inserted[0].id;
+    if (inserted[0]) return inserted[0].id;
+    const winner = await s<{ id: string }[]>`SELECT id FROM public.contacts
+      WHERE company_id = ${companyId}::uuid AND phone_match = ${phoneMatch}
+        AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'inativo' LIMIT 1`;
+    if (winner[0]) return winner[0].id;
+    throw new Error("contact_upsert_failed");
   } catch (e) {
     const again = await s<{ id: string }[]>`
       SELECT id FROM public.contacts
@@ -83,62 +87,85 @@ export async function upsertInboundContact(params: {
   }
 }
 
+/** Meta opts into independent attendance cycles; other callers retain legacy behaviour. */
 export async function upsertInboundConversation(params: {
+  sql?: CrmSql;
   companyId: string;
   channelId: string;
   contactId: string;
-  sql?: SqlExecutor;
+  initialUnread?: number;
+  newCycle?: boolean;
+  onLegacyCycleReused?: () => void;
+  echo?: boolean;
 }): Promise<string> {
+  if (!params.sql) {
+    return getSql().begin(async (tx) =>
+      upsertInboundConversation({ ...params, sql: tx as unknown as CrmSql }),
+    ) as Promise<string>;
+  }
   const { companyId, channelId, contactId } = params;
-  const s = resolveSql(params.sql);
-
+  const s = executor(params.sql);
+  // Lock the contact: absent conversations cannot be protected by FOR UPDATE.
+  await s`SELECT id FROM public.contacts WHERE id = ${contactId}::uuid
+    AND company_id = ${companyId}::uuid FOR UPDATE`;
   const existing = await s<{ id: string; status: string | null }[]>`
     SELECT id, status FROM public.conversations
-    WHERE company_id = ${companyId}::uuid
-      AND whatsapp_channel_id = ${channelId}::uuid
+    WHERE company_id = ${companyId}::uuid AND whatsapp_channel_id = ${channelId}::uuid
       AND contact_id = ${contactId}::uuid
-      AND status IS DISTINCT FROM 'merged'
-      AND status IS DISTINCT FROM 'archived'
-    ORDER BY (status = 'open') DESC, last_message_at DESC NULLS LAST, created_at DESC
+      AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
+      AND (${!params.newCycle || !!params.echo} OR status IN ('open', 'waiting'))
+    ORDER BY (status IN ('open', 'waiting')) DESC, last_message_at DESC NULLS LAST, created_at DESC
+    LIMIT 1 FOR UPDATE
   `;
-
-  if (existing.length > 1) {
-    console.warn("[CONVERSATION_DUPLICATE_DETECTED]", {
-      companyId,
-      channelId,
-      contactId,
-      count: existing.length,
-      chosenId: existing[0].id,
-      note: "Aplicar docs/migrations/20260809_conversations_unique_proposed.sql após dedup",
-    });
-  }
-
   if (existing[0]) {
-    if (existing[0].status !== "open") {
+    if (!params.newCycle && !params.echo && existing[0].status !== "open") {
       await s`UPDATE public.conversations SET status = 'open', updated_at = now() WHERE id = ${existing[0].id}::uuid`;
     }
     return existing[0].id;
   }
-
   const inserted = await s<{ id: string }[]>`
     INSERT INTO public.conversations
       (company_id, contact_id, whatsapp_channel_id, status, unread_count, last_message_at)
-    VALUES
-      (${companyId}::uuid, ${contactId}::uuid, ${channelId}::uuid, 'open', 1, now())
-    RETURNING id
+    VALUES (${companyId}::uuid, ${contactId}::uuid, ${channelId}::uuid,
+      ${params.echo ? "finished" : "open"}, ${params.echo ? 0 : (params.initialUnread ?? (params.newCycle ? 0 : 1))}, now()) ON CONFLICT DO NOTHING RETURNING id
   `;
-  return inserted[0].id;
+  if (inserted[0]) return inserted[0].id;
+  const winner = await s<{ id: string }[]>`SELECT id FROM public.conversations
+    WHERE company_id = ${companyId}::uuid AND whatsapp_channel_id = ${channelId}::uuid
+      AND contact_id = ${contactId}::uuid AND status IN ('open', 'waiting') LIMIT 1`;
+  if (!winner[0] && params.newCycle && !params.echo) {
+    // Compatibility with a legacy full-tuple unique index: never lose inbound.
+    const closed = await s<{ id: string }[]>`SELECT id FROM public.conversations
+      WHERE company_id=${companyId}::uuid AND whatsapp_channel_id=${channelId}::uuid
+        AND contact_id=${contactId}::uuid AND status IN ('finished','closed','resolved')
+      ORDER BY last_message_at DESC NULLS LAST,created_at DESC LIMIT 1 FOR UPDATE`;
+    if (closed[0]) {
+      await s`UPDATE public.conversations SET status='open',updated_at=now() WHERE id=${closed[0].id}::uuid`;
+      const tables = await s<
+        { present: string | null }[]
+      >`SELECT to_regclass('public.automation_sessions')::text AS present`;
+      if (tables[0]?.present)
+        await s`UPDATE public.automation_sessions
+        SET status='ready',step_id=NULL,collected='{}'::jsonb,source='inbound',updated_at=now()
+        WHERE conversation_id=${closed[0].id}::uuid AND company_id=${companyId}::uuid`;
+      params.onLegacyCycleReused?.();
+      console.warn("[ATTENDANCE_LEGACY_CYCLE_REUSED]", { conversationId: closed[0].id });
+      return closed[0].id;
+    }
+  }
+  if (!winner[0]) throw new Error("conversation_upsert_failed");
+  return winner[0].id;
 }
 
 export async function insertInboundTextMessage(params: {
+  sql?: CrmSql;
   conversationId: string;
   externalMessageId: string;
   messageText: string;
   rawPayload: unknown;
-  sql?: SqlExecutor;
 }): Promise<string | null> {
   const { conversationId, externalMessageId, messageText, rawPayload } = params;
-  const s = resolveSql(params.sql);
+  const s = executor(params.sql);
 
   const inserted = await s<{ id: string }[]>`
     INSERT INTO public.messages (
@@ -157,6 +184,7 @@ export async function insertInboundTextMessage(params: {
 }
 
 export async function insertInboundMediaMessage(params: {
+  sql?: CrmSql;
   conversationId: string;
   externalMessageId: string;
   mediaType: string;
@@ -168,9 +196,6 @@ export async function insertInboundMediaMessage(params: {
   mediaError: string | null;
   mediaSize: number | null;
   rawPayload: unknown;
-  sql?: SqlExecutor;
-  /** Modo worker: sem base64, o anexo vira tarefa em webhook_media_jobs. */
-  mediaStatus?: string | null;
 }): Promise<string | null> {
   const {
     conversationId,
@@ -185,7 +210,7 @@ export async function insertInboundMediaMessage(params: {
     mediaSize,
     rawPayload,
   } = params;
-  const s = resolveSql(params.sql);
+  const s = executor(params.sql);
 
   const inserted = await s<{ id: string }[]>`
     INSERT INTO public.messages (
@@ -210,26 +235,16 @@ export async function insertInboundMediaMessage(params: {
     await s`UPDATE public.messages SET media_url = ${mediaUrl} WHERE id = ${messageId}::uuid`;
   }
 
-  // Coluna nova da etapa 3, tocada só quando o chamador pede — assim a rota
-  // legada continua funcionando sem a migration aplicada.
-  if (messageId && params.mediaStatus) {
-    await s`
-      UPDATE public.messages
-      SET media_status = ${params.mediaStatus}
-      WHERE id = ${messageId}::uuid AND media_status IS NULL
-    `;
-  }
-
   return messageId;
 }
 
 export async function bumpConversationAfterInboundMessage(params: {
+  sql?: CrmSql;
   conversationId: string;
   lastMessageText: string;
-  sql?: SqlExecutor;
 }): Promise<void> {
   const { conversationId, lastMessageText } = params;
-  const s = resolveSql(params.sql);
+  const s = executor(params.sql);
   await s`
     UPDATE public.conversations
     SET last_message = ${lastMessageText},
@@ -237,5 +252,60 @@ export async function bumpConversationAfterInboundMessage(params: {
         unread_count = COALESCE(unread_count, 0) + 1,
         updated_at = now()
     WHERE id = ${conversationId}::uuid
+  `;
+}
+
+/** Echo do WhatsApp Business App. Grava como enviada, sem reenviar ao cliente. */
+export async function insertWhatsappBusinessAppEcho(params: {
+  sql?: CrmSql;
+  conversationId: string;
+  externalMessageId: string;
+  messageType: string;
+  messageText: string | null;
+  rawPayload: unknown;
+  persistSource?: boolean;
+}): Promise<string | null> {
+  const { conversationId, externalMessageId, messageType, messageText, rawPayload } = params;
+  const s = executor(params.sql);
+  const inserted =
+    params.persistSource === false
+      ? await s<{ id: string }[]>`
+      INSERT INTO public.messages (
+        conversation_id, external_id, external_message_id, direction,
+        message_type, message_text, from_me, raw_payload, status
+      ) VALUES (
+        ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'out',
+        ${messageType}, ${messageText}, true, ${rawPayload}::jsonb, 'received'
+      ) ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
+      DO NOTHING RETURNING id
+    `
+      : await s<{ id: string }[]>`
+    INSERT INTO public.messages (
+      conversation_id, external_id, external_message_id, direction,
+      message_type, message_text, from_me, raw_payload, status, message_source
+    ) VALUES (
+      ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'out',
+      ${messageType}, ${messageText}, true, ${rawPayload}::jsonb, 'received',
+      'whatsapp_business_app'
+    )
+    ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
+    DO NOTHING
+    RETURNING id
+  `;
+  return inserted[0]?.id ?? null;
+}
+
+export async function bumpConversationAfterBusinessAppEcho(params: {
+  sql?: CrmSql;
+  conversationId: string;
+  lastMessageText: string;
+}): Promise<void> {
+  const s = executor(params.sql);
+  await s`
+    UPDATE public.conversations
+    SET last_message = ${params.lastMessageText},
+        last_message_at = now(),
+        updated_at = now()
+    WHERE id = ${params.conversationId}::uuid
   `;
 }

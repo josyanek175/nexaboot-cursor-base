@@ -17,7 +17,7 @@ export type ParsedSpreadsheetRow = {
 
 export type NormalizedImportRow = ParsedSpreadsheetRow & {
   phoneDigits: string;
-  status: "valid" | "invalid" | "duplicate" | "opt_out";
+  status: "valid" | "invalid" | "duplicate" | "opt_out" | "dispatch_window";
   reason?: string;
 };
 

@@ -12,7 +12,7 @@ import {
   canPauseResumeCampaign,
   type ActingUser,
 } from "@/lib/permissions";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import {
   assertApprovedMetaTemplate,
 } from "@/lib/meta-message-templates.server";
@@ -22,6 +22,12 @@ import {
   isInvalidCampaignPhone,
   isOptOutContact,
 } from "@/lib/campaign-send-policy";
+import {
+  DISPATCH_WINDOW_SKIP_REASON,
+  getCampaignDispatchWindowSettings,
+  loadCompanyDispatchHistory,
+} from "@/lib/campaign-dispatch-window.server";
+import { computeDispatchBlock } from "@/lib/campaign-dispatch-window";
 import { getCampaignTemplate } from "@/lib/campaign-template.server";
 import {
   buildDefaultEvolutionMappings,
@@ -395,7 +401,7 @@ type CampaignActorResult = {
 async function requireCampaignActor(
   mode: "view" | "manage" | "delete",
 ): Promise<CampaignActorResult | Response> {
-  let uid = await getSessionUserId();
+  let uid = getSessionUserId();
   let companyId: string | Response;
 
   if (uid) {
@@ -614,7 +620,7 @@ export async function insertCampaignEvent(
     VALUES (
       ${campaignId}::uuid, ${companyId}::uuid,
       ${campaignContactId ?? null}::uuid,
-      ${eventType}, ${payload}::jsonb,
+      ${eventType}, ${JSON.stringify(payload)}::jsonb,
       ${userId ?? null}::uuid
     )
   `;
@@ -1186,7 +1192,7 @@ export async function createCampaign(
       ${metaFields.meta_template_id},
       ${metaFields.meta_template_name},
       ${metaFields.meta_language_code},
-      ${storedMappings}::jsonb,
+      ${JSON.stringify(storedMappings)}::jsonb,
       ${userId ?? null}::uuid
     )
     RETURNING id, company_id, whatsapp_channel_id, name,
@@ -1343,7 +1349,7 @@ export async function updateCampaign(
         meta_template_id = ${metaFields.meta_template_id},
         meta_template_name = ${metaFields.meta_template_name},
         meta_language_code = ${metaFields.meta_language_code},
-        meta_variable_mappings = ${storedMappings}::jsonb,
+        meta_variable_mappings = ${JSON.stringify(storedMappings)}::jsonb,
         template_id = ${isMeta ? null : (data.template_id !== undefined ? data.template_id : existing.template_id ?? null)}::uuid,
         send_mode = ${CAMPAIGN_SEND_MODE},
         updated_at = now()
@@ -1566,6 +1572,8 @@ export async function addCampaignContacts(
 
   let added = 0;
   let skipped = 0;
+  const dispatchSettings = await getCampaignDispatchWindowSettings(companyId);
+  const dispatchHistory = await loadCompanyDispatchHistory(companyId);
 
   for (const ct of contacts) {
     const phone = normalizePhone(ct.phone);
@@ -1579,6 +1587,19 @@ export async function addCampaignContacts(
     } else if (isOptOutContact({ status: ct.status, tags: ct.tags })) {
       rowStatus = "skipped";
       skipReason = ct.status === "inativo" || ct.status === "merged" ? "contact_inactive" : "opt_out";
+    } else {
+      const hist = dispatchHistory.get(normalizePhoneForMatch(phone));
+      if (hist) {
+        const block = computeDispatchBlock({
+          sendCount: hist.sendCount,
+          lastSentAt: hist.lastSentAt,
+          settings: dispatchSettings,
+        });
+        if (block?.blocked) {
+          rowStatus = "skipped";
+          skipReason = DISPATCH_WINDOW_SKIP_REASON;
+        }
+      }
     }
 
     try {
@@ -1593,7 +1614,7 @@ export async function addCampaignContacts(
           (campaign_id, company_id, contact_id, phone, name, variables, status, skip_reason)
         VALUES (
           ${campaignId}::uuid, ${companyId}::uuid, ${ct.id}::uuid,
-          ${phone}, ${ct.name}, ${contactVariables}::jsonb,
+          ${phone}, ${ct.name}, ${JSON.stringify(contactVariables)}::jsonb,
           ${rowStatus}, ${skipReason}
         )
         ON CONFLICT (campaign_id, phone) DO NOTHING

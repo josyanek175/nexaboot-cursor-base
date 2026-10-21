@@ -331,15 +331,23 @@ function DashboardPage() {
             {data.scope === "attendant" ? " · foco nos seus atendimentos e fila sem responsável" : " · empresa inteira"}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => load(true)}
-          disabled={refreshing}
-          className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/espera"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted"
+          >
+            <Clock className="h-4 w-4" /> Tempo de espera
+          </Link>
+          <button
+            type="button"
+            onClick={() => load(true)}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            Atualizar
+          </button>
+        </div>
       </header>
 
       {error && (

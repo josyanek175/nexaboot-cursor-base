@@ -63,7 +63,10 @@ export function isWithinMetaServiceWindow(
   return now.getTime() - lastInboundAt.getTime() < META_SERVICE_WINDOW_MS;
 }
 
-export function computeWindowAgeHours(lastInboundAt: Date | null, now: Date = new Date()): number | null {
+export function computeWindowAgeHours(
+  lastInboundAt: Date | null,
+  now: Date = new Date(),
+): number | null {
   if (!lastInboundAt) return null;
   return Math.round(((now.getTime() - lastInboundAt.getTime()) / (60 * 60 * 1000)) * 100) / 100;
 }
@@ -190,7 +193,10 @@ async function getLastInboundMessageAt(conversationId: string): Promise<Date | n
 
 function channelRejectContext(
   channel: WhatsAppChannelRecord,
-  base: Pick<MetaSendRejectContext, "conversationId" | "companyId" | "contactId" | "phone" | "text">,
+  base: Pick<
+    MetaSendRejectContext,
+    "conversationId" | "companyId" | "contactId" | "phone" | "text"
+  >,
   ops?: {
     active: boolean;
     deleted_at: Date | string | null;
@@ -227,7 +233,8 @@ function channelRejectContext(
     tokenStatus: channel.tokenStatus,
     active: ops?.active ?? null,
     deletedAt: ops?.deleted_at != null ? String(ops.deleted_at) : null,
-    lastWebhookAt: ops?.last_webhook_at != null ? String(ops.last_webhook_at) : channel.lastWebhookAt,
+    lastWebhookAt:
+      ops?.last_webhook_at != null ? String(ops.last_webhook_at) : channel.lastWebhookAt,
     lastConnectionAt:
       ops?.last_connected_at != null ? String(ops.last_connected_at) : channel.lastConnectedAt,
     hasToken: hasToken ?? null,
@@ -241,19 +248,22 @@ export async function sendMetaManualText(params: {
   text: string;
   sentByUserId?: string | null;
   sentByName?: string | null;
+  automationKey?: string;
 }): Promise<MetaManualSendResult> {
   const { companyId, conversationId, text, sentByUserId, sentByName } = params;
   const s = sql();
 
-  const rows = await s<{
-    id: string;
-    company_id: string;
-    contact_id: string;
-    whatsapp_channel_id: string;
-    phone: string | null;
-    external_jid: string | null;
-    channel_type: string;
-  }[]>`
+  const rows = await s<
+    {
+      id: string;
+      company_id: string;
+      contact_id: string;
+      whatsapp_channel_id: string;
+      phone: string | null;
+      external_jid: string | null;
+      channel_type: string;
+    }[]
+  >`
     SELECT c.id, c.company_id, c.contact_id, c.whatsapp_channel_id,
            ct.phone, ct.external_jid,
            ch.channel_type
@@ -395,6 +405,7 @@ export async function sendMetaManualText(params: {
     to: phone,
     type: "text",
     text: { preview_url: false, body: text },
+    ...(params.automationKey ? { __nexaFlowSendKey: params.automationKey } : {}),
     meta_message_id: sendResult.providerMessageId ?? null,
   }) as Record<string, unknown>;
 
@@ -587,7 +598,9 @@ export async function sendMetaTemplateMessage(
       const errObj = parsed.error as Record<string, unknown> | undefined;
       const errorCode = errObj?.code != null ? String(errObj.code) : String(res.status);
       const errorMessage =
-        errObj?.message != null ? String(errObj.message) : rawText.slice(0, 500) || "meta_api_error";
+        errObj?.message != null
+          ? String(errObj.message)
+          : rawText.slice(0, 500) || "meta_api_error";
       console.error("[META_TEMPLATE_SEND_ERROR]", {
         status: res.status,
         errorCode,
@@ -619,4 +632,3 @@ export async function sendMetaTemplateMessage(
     return { ok: false, error: "meta_fetch_failed", errorMessage };
   }
 }
-

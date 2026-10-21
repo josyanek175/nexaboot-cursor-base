@@ -123,6 +123,20 @@ export function canDeleteCampaign(actor: ActingUser): boolean {
   );
 }
 
+/** Configurar janela de disparo entre campanhas (GERENTE+). */
+export function canConfigureCampaignDispatchWindow(actor: ActingUser): boolean {
+  return canDeleteCampaign(actor);
+}
+
+/** Ver/configurar custos de disparo (ADMIN_EMPRESA / GERENTE / plataforma). */
+export function canViewCampaignCosts(actor: ActingUser): boolean {
+  return canDeleteCampaign(actor);
+}
+
+export function canConfigureCampaignCosts(actor: ActingUser): boolean {
+  return canDeleteCampaign(actor);
+}
+
 /**
  * Pausar/retomar disparo.
  * ATENDENTE: somente campanhas que ele criou.

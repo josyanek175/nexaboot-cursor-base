@@ -65,7 +65,12 @@ function LoginPage() {
     }
     setError(res.message);
     if (res.reason === "blocked") {
-      toast.error("Acesso bloqueado. Procure o administrador.");
+      if (res.message.startsWith("Seu perfil não tem acesso ao sistema neste horário.")) {
+        const [title, detail] = res.message.split("\n");
+        toast.error(title, detail ? { description: detail } : undefined);
+      } else {
+        toast.error("Acesso bloqueado. Procure o administrador.");
+      }
     }
   }
 
@@ -192,7 +197,7 @@ function LoginPage() {
             {error && (
               <div
                 role="alert"
-                className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                className="whitespace-pre-line rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
               >
                 {error}
                 {attempts > 0 && !locked && (

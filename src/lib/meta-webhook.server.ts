@@ -2,14 +2,7 @@
 // Nunca logar tokens, headers sensíveis ou payload bruto com segredos.
 
 import { createHmac, timingSafeEqual } from "crypto";
-import { getSql, sql } from "@/lib/pg.server";
-import { getWebhookInboxSql } from "@/lib/pg-webhook-inbox.server";
-import { isDurableWebhookInboxEnabled } from "@/lib/webhook-inbox-core";
-import { isWebhookLegacyProcessingEnabled } from "@/lib/webhook-message-core";
-import {
-  ingestWebhookRequestToInbox,
-  readWebhookBodyForInbox,
-} from "@/lib/webhook-inbox.server";
+import { sql } from "@/lib/pg.server";
 import {
   buildMetaWebhookAuditPayload,
   extractMetaEventTypes,
@@ -22,7 +15,7 @@ import {
   diagnoseMetaChannelByPhoneNumberId,
   loadMetaChannelByPhoneNumberId,
 } from "@/lib/whatsapp/whatsapp-provider-router.server";
-import { persistMetaInboundMessages } from "@/lib/meta-inbound-message.server";
+import { persistMetaInboundMessages, persistMetaSmbMessageEchoes } from "@/lib/meta-inbound-message.server";
 import { unwrapMetaWebhookBody } from "@/lib/meta-inbound-parse";
 
 export type {
@@ -97,7 +90,7 @@ async function insertMetaWebhookLog(params: {
       ${params.signatureValid},
       ${params.processingStatus},
       ${params.httpStatus},
-      ${safePayload}::jsonb,
+      ${JSON.stringify(safePayload)}::jsonb,
       ${params.error ?? null}
     )
   `;
@@ -147,7 +140,7 @@ export function handleMetaWebhookGET(request: Request): Response {
   return new Response("Forbidden", { status: 403 });
 }
 
-const KNOWN_META_WEBHOOK_FIELDS = new Set(["messages", "message_template_status_update"]);
+const KNOWN_META_WEBHOOK_FIELDS = new Set(["messages", "message_template_status_update", "smb_message_echoes"]);
 
 function logMetaWebhookChanges(payload: unknown): void {
   for (const change of extractMetaWebhookChanges(payload)) {
@@ -374,6 +367,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       try {
         const webhookBody = unwrapMetaWebhookBody(payload) ?? payload;
         const persistResult = await persistMetaInboundMessages(webhookBody);
+        if (persistResult.errors > 0) persistError = `inbound_errors=${persistResult.errors}`;
         if (persistResult.saved > 0) {
           processingStatus = "persisted";
           console.log("[META_WEBHOOK_PERSISTED]", {
@@ -399,6 +393,14 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
           processingStatus = "skipped";
         }
         console.log("[META_INBOUND_PERSIST]", persistResult);
+        const echoResult = await persistMetaSmbMessageEchoes(webhookBody);
+        if (echoResult.saved > 0) {
+          processingStatus = "persisted";
+          console.log("[META_SMB_ECHO_PERSISTED]", echoResult);
+        } else if (echoResult.errors > 0) {
+          persistError = `echo_errors=${echoResult.errors}`;
+          console.error("[META_SMB_ECHO_FAIL]", echoResult);
+        }
       } catch (e) {
         persistError = e instanceof Error ? e.message : String(e);
         processingStatus = "persist_error";
@@ -413,7 +415,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
       eventType,
       signatureValid: true,
       processingStatus,
-      httpStatus: 200,
+      httpStatus: persistError ? 503 : 200,
       payload: auditPayload,
       error: persistError,
     });
@@ -426,6 +428,7 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
+    persistError = error;
     console.error("[META_WEBHOOK_ERROR]", { reason: "handler_exception", error });
     try {
       await insertMetaWebhookLog({
@@ -447,137 +450,6 @@ export async function handleMetaWebhookPOST(request: Request): Promise<Response>
     }
   }
 
+  if (persistError) return Response.json({ error: "webhook_persistence_failed" }, { status: 503 });
   return metaWebhookOkResponse();
-}
-
-/**
- * Ingestão durável do POST Meta.
- *
- * Mantém intactas a validação de assinatura e as auditorias de rejeição.
- * Assinatura ausente ou inválida NUNCA vira evento na inbox — segue devolvendo
- * 200 (como hoje) apenas para não induzir reenvio infinito da Meta.
- *
- * Com assinatura válida, o payload integral é persistido e só então o 200 é
- * devolvido. Nenhuma resolução de canal, persistência de mensagem ou toque em
- * whatsapp_channels acontece aqui.
- */
-export async function ingestMetaWebhookDurable(request: Request): Promise<Response> {
-  const signatureHeader = request.headers.get("x-hub-signature-256");
-
-  // A assinatura exige o corpo bruto, então a leitura acontece aqui — mas sob
-  // a mesma reserva de memória usada pelo pipeline compartilhado.
-  const body = await readWebhookBodyForInbox(request, { provider: "meta" });
-  if (!body.ok) return body.response;
-
-  try {
-    return await ingestMetaWebhookDurableWithBody(request, signatureHeader, body);
-  } finally {
-    body.release();
-  }
-}
-
-async function ingestMetaWebhookDurableWithBody(
-  request: Request,
-  signatureHeader: string | null,
-  body: { text: string; sizeBytes: number; release: () => void },
-): Promise<Response> {
-  const rawBody = body.text;
-
-  console.log("[META_WEBHOOK_RECEIVED]", {
-    contentLength: rawBody.length,
-    hasSignature: !!signatureHeader,
-  });
-  console.log("[META_WEBHOOK_POST_RECEIVED]", {
-    contentLength: rawBody.length,
-    hasSignature: !!signatureHeader,
-  });
-
-  let payload: unknown = {};
-  try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    payload = { parse_error: true };
-  }
-
-  const phoneNumberIds = extractMetaPhoneNumberIds(payload);
-  const phoneNumberId = phoneNumberIds[0] ?? null;
-  const eventTypes = extractMetaEventTypes(payload);
-  const eventType = eventTypes.length > 0 ? eventTypes.join(",") : null;
-  const parsedPhones = parseMetaWebhookPhones(payload);
-  const auditPayload = buildMetaWebhookAuditPayload(payload, parsedPhones);
-
-  logMetaWebhookChanges(payload);
-  console.log("[META_WEBHOOK_POST_BODY]", {
-    object: (payload as Record<string, unknown>)?.object ?? null,
-    phoneNumberIds,
-    changes: parsedPhones.length,
-    messageCount: parsedPhones.reduce((total, change) => total + change.messages.length, 0),
-    eventType,
-  });
-  if (phoneNumberId) {
-    console.log("[META_WEBHOOK_PHONE_NUMBER_ID]", { phoneNumberId });
-  }
-
-  const rejectUnauthorized = async (reason: string): Promise<Response> => {
-    console.error("[META_WEBHOOK_ERROR]", { reason, phoneNumberId });
-    await insertMetaWebhookLog({
-      companyId: null,
-      channelId: null,
-      phoneNumberId,
-      eventType,
-      signatureValid: false,
-      processingStatus: reason === "missing_meta_app_secret" ? "error" : "unauthorized",
-      httpStatus: 200,
-      payload: auditPayload,
-      error: reason,
-    }).catch((e) => {
-      console.error("[META_WEBHOOK_ERROR]", {
-        reason: "audit_log_failed",
-        error: e instanceof Error ? e.message : String(e),
-      });
-    });
-    return metaWebhookOkResponse();
-  };
-
-  if (!metaAppSecret()) return rejectUnauthorized("missing_meta_app_secret");
-  if (!signatureHeader) return rejectUnauthorized("missing_signature");
-  if (!validateMetaWebhookSignature(rawBody, signatureHeader)) {
-    return rejectUnauthorized("invalid_signature");
-  }
-
-  return ingestWebhookRequestToInbox({
-    sql: getWebhookInboxSql(),
-    provider: "meta",
-    request,
-    rawBody,
-    payloadSizeBytes: body.sizeBytes,
-    releaseBody: body.release,
-    okResponse: (outcome) => {
-      console.log("[META_WEBHOOK_POST_PROCESSED]", {
-        phoneNumberId,
-        inboxId: outcome.inboxId,
-        processingStatus: outcome.status === "duplicate" ? "inbox_duplicate" : "inbox_pending",
-      });
-      return metaWebhookOkResponse();
-    },
-  });
-}
-
-/** Roteia entre ingestão durável, legado e kill-switch. */
-export async function handleMetaWebhookRequest(request: Request): Promise<Response> {
-  if (isDurableWebhookInboxEnabled()) return ingestMetaWebhookDurable(request);
-  if (!isWebhookLegacyProcessingEnabled()) {
-    console.warn("[WEBHOOK_MESSAGE_CONFIG_CONFLICT]", {
-      code: "legacy_disabled",
-      severity: "warning",
-      message:
-        "WEBHOOK_LEGACY_PROCESSING_ENABLED=false e WEBHOOK_DURABLE_INBOX_ENABLED=false: nenhum processamento ativo.",
-    });
-    // Meta espera 200 para não reenviar em loop; o evento não é processado.
-    return new Response("OK", {
-      status: 200,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
-  }
-  return handleMetaWebhookPOST(request);
 }

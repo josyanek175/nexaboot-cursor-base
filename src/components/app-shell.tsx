@@ -6,6 +6,8 @@ import {
   Building2,
   Smartphone,
   Workflow,
+  Waypoints,
+  Bell,
   MessageCircleMore,
   Contact2,
   Settings,
@@ -15,10 +17,13 @@ import {
   Menu,
   UsersRound,
   Megaphone,
+  Clock3,
+  ChartColumn,
 } from "lucide-react";
 import { canManageInternalGroups } from "@/lib/current-user";
 import {
   canAccessCampaignsModule,
+  canViewCampaignCosts,
   actingUserFromAuth,
 } from "@/lib/permissions";
 import { useEffect, useState } from "react";
@@ -44,7 +49,13 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 const roleLabel = (r: Role) => ROLE_LABELS[r] ?? r;
 
-const OPERATIONAL_PREFIXES = ["/atendimento", "/contatos", "/canais", "/campanhas"];
+const OPERATIONAL_PREFIXES = [
+  "/atendimento",
+  "/contatos",
+  "/canais",
+  "/campanhas",
+  "/gerencial",
+];
 function isOperationalPath(pathname: string): boolean {
   return OPERATIONAL_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
@@ -56,12 +67,18 @@ type NavItem = {
   badgeKey?: UnreadKey;
   adminOnly?: boolean;
   campaignsOnly?: boolean;
+  gerencialOnly?: boolean;
+  waitOnly?: boolean;
+  accessHours?: boolean;
+  flows?: boolean;
+  reminders?: boolean;
 };
 
 type CompanyOption = { id: string; name: string };
 
 const nav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/espera", label: "Tempo de espera", icon: Clock3, waitOnly: true },
   {
     to: "/atendimento",
     label: "Atendimento",
@@ -77,11 +94,15 @@ const nav: NavItem[] = [
   { to: "/grupos-internos", label: "Grupos Internos", icon: UsersRound, adminOnly: true },
   { to: "/contatos", label: "Contatos", icon: Contact2 },
   { to: "/campanhas", label: "Campanhas", icon: Megaphone, campaignsOnly: true },
+  { to: "/gerencial", label: "Gerencial", icon: ChartColumn, gerencialOnly: true },
+  { to: "/fluxos", label: "Fluxos", icon: Waypoints, flows: true },
+  { to: "/lembretes", label: "Lembretes", icon: Bell, reminders: true },
   { to: "/empresas", label: "Empresas", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/canais", label: "Canais WhatsApp", icon: Smartphone },
   { to: "/automacoes", label: "Automações N8N", icon: Workflow },
   { to: "/logs", label: "Logs", icon: ScrollText },
+  { to: "/horarios-acesso", label: "Horários de acesso", icon: Clock3, accessHours: true },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
@@ -151,7 +172,10 @@ function Shell() {
 
   useEffect(() => {
     let cancel = false;
+    let inFlight = false;
     const loadUnread = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const r = await fetch("/api/internal-chat/unread-count", { credentials: "include" });
         if (!r.ok) return;
@@ -163,10 +187,12 @@ function Shell() {
         }
       } catch {
         /* ignore */
+      } finally {
+        inFlight = false;
       }
     };
     loadUnread();
-    const id = setInterval(loadUnread, 10000);
+    const id = setInterval(loadUnread, 60_000);
     return () => {
       cancel = true;
       clearInterval(id);
@@ -232,9 +258,34 @@ function Shell() {
           {nav
             .filter((item) => !item.adminOnly || canManageInternalGroups(user.role))
             .filter((item) => {
+              if (!item.accessHours) return true;
+              const role = String(user.role ?? "");
+              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"].includes(role);
+            })
+            .filter((item) => {
+              if (!item.flows) return true;
+              const role = String(user.role ?? "");
+              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"].includes(role);
+            })
+            .filter((item) => {
+              if (!item.reminders) return true;
+              const role = String(user.role ?? "");
+              return ["SUPER_ADMIN", "TI", "ADMIN_GERAL", "ADMIN_EMPRESA"].includes(role);
+            })
+            .filter((item) => {
               if (!item.campaignsOnly) return true;
               if (!actor) return false;
               return canAccessCampaignsModule(actor, companyValid);
+            })
+            .filter((item) => {
+              if (!item.waitOnly) return true;
+              if (!actor) return false;
+              return companyValid && canViewCampaignCosts(actor);
+            })
+            .filter((item) => {
+              if (!item.gerencialOnly) return true;
+              if (!actor) return false;
+              return companyValid && canViewCampaignCosts(actor);
             })
             .map((item) => {
               const { to, label, icon: Icon, badgeKey } = item;

@@ -145,7 +145,7 @@ async function markDocumentSent(params: {
     SET status = 'sent',
         external_id = ${providerMessageId},
         external_message_id = ${providerMessageId},
-        raw_payload = ${rawPayload}::jsonb,
+        raw_payload = ${rawPayload != null ? JSON.stringify(rawPayload) : null}::jsonb,
         media_error = NULL
     WHERE id = ${messageId}::uuid
   `;

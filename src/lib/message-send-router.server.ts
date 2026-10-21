@@ -27,22 +27,25 @@ export async function sendConversationText(params: {
   text: string;
   sentByUserId?: string | null;
   sentByName?: string | null;
+  automationKey?: string;
 }): Promise<SendConversationTextResult> {
   const { companyId, conversationId, text, sentByUserId, sentByName } = params;
 
   console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId });
   const s = sql();
 
-  const rows = await s<{
-    id: string;
-    company_id: string;
-    whatsapp_channel_id: string;
-    channel_type: string;
-    channel_name: string | null;
-    evolution_instance_name: string | null;
-    phone: string | null;
-    external_jid: string | null;
-  }[]>`
+  const rows = await s<
+    {
+      id: string;
+      company_id: string;
+      whatsapp_channel_id: string;
+      channel_type: string;
+      channel_name: string | null;
+      evolution_instance_name: string | null;
+      phone: string | null;
+      external_jid: string | null;
+    }[]
+  >`
     SELECT c.id, c.company_id, c.whatsapp_channel_id,
            ch.channel_type, ch.name AS channel_name, ch.evolution_instance_name,
            ct.phone, ct.external_jid
@@ -78,6 +81,7 @@ export async function sendConversationText(params: {
       text,
       sentByUserId,
       sentByName,
+      automationKey: params.automationKey,
     });
     if (!result.ok) {
       return {

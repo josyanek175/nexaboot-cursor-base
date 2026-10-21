@@ -37,8 +37,15 @@ export const Route = createFileRoute("/api/contacts")({
             bytesPerResultHint: 350,
           },
           async (perf) => {
-            const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
+            const q = (new URL(request.url).searchParams.get("q") ?? "").trim().slice(0, 80);
             const s = sql();
+            // Nome puro não tem dígitos. LIKE '%%' devolveria a empresa inteira
+            // e a lista de atendimento parecia busca errada/atrasada.
+            const phoneDigits = normalizePhone(q);
+            const phonePattern = phoneDigits.length >= 3 ? `%${phoneDigits}%` : null;
+            const matchDigits = normalizePhoneForMatch(q);
+            const matchPattern = matchDigits.length >= 3 ? `%${matchDigits}%` : null;
+            const namePattern = q ? `%${q}%` : null;
 
             const contacts = q
               ? await perf.timedDb("contact_lookup", () => s`
@@ -49,13 +56,13 @@ export const Route = createFileRoute("/api/contacts")({
                   WHERE company_id = ${companyId}::uuid
                     AND status IS DISTINCT FROM 'merged'
                     AND (
-                      name ILIKE ${"%" + q + "%"}
-                      OR phone LIKE ${"%" + normalizePhone(q) + "%"}
-                      OR phone_match LIKE ${"%" + normalizePhoneForMatch(q) + "%"}
-                      OR email ILIKE ${"%" + q + "%"}
+                      name ILIKE ${namePattern}
+                      OR email ILIKE ${namePattern}
+                      OR (${phonePattern}::text IS NOT NULL AND phone LIKE ${phonePattern})
+                      OR (${matchPattern}::text IS NOT NULL AND phone_match LIKE ${matchPattern})
                     )
-                  ORDER BY created_at DESC
-                  LIMIT 1000
+                  ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                  LIMIT 50
                 `)
               : await perf.timedDb("contact_lookup", () => s`
                   SELECT id, name, phone, email, reference, status, tags,

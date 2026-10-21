@@ -35,6 +35,8 @@ function parseFilters(url: URL): ConversationListFilters {
     dateFrom: p.get("date_from") ?? undefined,
     dateTo: p.get("date_to") ?? undefined,
     countsOnly: p.get("counts") === "true",
+    search: p.get("q")?.trim().slice(0, 80) || undefined,
+    channelId: p.get("channel_id") ?? undefined,
   };
 }
 
@@ -46,7 +48,7 @@ export const Route = createFileRoute("/api/conversations")({
         if (company instanceof Response) return company;
         const companyId = company;
 
-        let uid = await getSessionUserId();
+        let uid = getSessionUserId();
         if (!uid) {
           const info = await getCurrentUserCompanyInfo();
           uid = info.userId;

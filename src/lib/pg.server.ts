@@ -453,7 +453,7 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
       LIMIT 1
     ) m ON true
     WHERE c.contact_id IS NULL
-      AND c.status IS DISTINCT FROM 'merged' AND c.status IS DISTINCT FROM 'archived'
+      AND c.status IN ('open', 'waiting')
   `;
   for (const oc of orphanConvs) {
     const phoneMatch = normalizePhoneForMatch(oc.remote_jid);
@@ -481,7 +481,7 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
     SELECT company_id, contact_id, whatsapp_channel_id
     FROM public.conversations
     WHERE contact_id IS NOT NULL
-      AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
+      AND status IN ('open', 'waiting')
     GROUP BY company_id, contact_id, whatsapp_channel_id
     HAVING count(*) > 1
   `;
@@ -492,7 +492,7 @@ async function ensureConversationsDedup(s: ReturnType<typeof sql>) {
       WHERE company_id = ${g.company_id}::uuid
         AND contact_id = ${g.contact_id}::uuid
         AND whatsapp_channel_id = ${g.whatsapp_channel_id}::uuid
-        AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
+        AND status IN ('open', 'waiting')
       ORDER BY (status = 'open') DESC, last_message_at DESC NULLS LAST, created_at DESC
     `;
     const principal = rows[0];
@@ -715,6 +715,7 @@ export async function ensureCrmSchema() {
         -- não destrutivo: mensagens antigas ficam com estes campos NULL.
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sent_by_user_id UUID;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sent_by_name TEXT;
+        ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS message_source TEXT;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_emoji TEXT;
         ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reaction_to_message_id TEXT;
         -- Tamanho em bytes da mídia (envio/recebimento). Idempotente, não destrutivo.
@@ -731,7 +732,8 @@ export async function ensureCrmSchema() {
       // duplicados legados, sem apagar nada.
       await ensureContactsDedup(s);
 
-      // Uma conversa principal por (contato, canal). Consolida duplicadas que
+      // Uma conversa ATIVA principal por (contato, canal); ciclos finalizados ficam separados.
+      // Consolida duplicadas que
       // sobraram após apontar os contatos ao principal. Não apaga nada.
       await ensureConversationsDedup(s);
 
@@ -743,33 +745,7 @@ export async function ensureCrmSchema() {
 
       // Atribuição de atendimento + notificações de transferência.
       await ensureAttendanceSchema(s);
-
-      // Sessões server-side (Fase 1). Idempotente.
-      await s.unsafe(`
-        CREATE TABLE IF NOT EXISTS public.user_sessions (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-          company_id UUID NULL REFERENCES public.companies(id) ON DELETE SET NULL,
-          token_hash TEXT NOT NULL UNIQUE,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          expires_at TIMESTAMPTZ NOT NULL,
-          revoked_at TIMESTAMPTZ NULL,
-          revoked_reason TEXT NULL,
-          ip INET NULL,
-          user_agent TEXT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash
-          ON public.user_sessions (token_hash);
-
-        CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id
-          ON public.user_sessions (user_id);
-
-        CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_one_active_per_user
-          ON public.user_sessions (user_id)
-          WHERE revoked_at IS NULL;
-      `);
+      await ensureAccessHoursSchema(s);
 
       console.log("[CRM_SCHEMA_OK]");
     } catch (e) {
@@ -910,6 +886,38 @@ export async function ensureAttendanceSchema(s?: ReturnType<typeof sql>): Promis
     }
   })();
   return _attendanceReady;
+}
+
+async function ensureAccessHoursSchema(db: ReturnType<typeof sql>): Promise<void> {
+  await db.unsafe(`
+    ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS timezone TEXT;
+
+    CREATE TABLE IF NOT EXISTS public.company_access_hour_settings (
+      company_id UUID PRIMARY KEY REFERENCES public.companies(id) ON DELETE CASCADE,
+      admin_geral_bypass BOOLEAN NOT NULL DEFAULT true,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS public.company_access_schedules (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      profile TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      force_logout_outside_schedule BOOLEAN NOT NULL DEFAULT false,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (company_id, profile)
+    );
+
+    CREATE TABLE IF NOT EXISTS public.company_access_windows (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      schedule_id UUID NOT NULL REFERENCES public.company_access_schedules(id) ON DELETE CASCADE,
+      weekday SMALLINT NOT NULL,
+      blocked BOOLEAN NOT NULL DEFAULT false,
+      start_time TIME NULL,
+      end_time TIME NULL,
+      UNIQUE (schedule_id, weekday)
+    );
+  `);
 }
 
 async function applyAttendanceSchema(db: ReturnType<typeof sql>): Promise<void> {
@@ -1178,6 +1186,40 @@ async function applyCampaignsSchema(db: ReturnType<typeof sql>): Promise<void> {
       ON public.campaign_contacts (company_id, sent_at DESC)
       WHERE sent_at IS NOT NULL;
 
+    -- Janela progressiva entre campanhas (config por empresa).
+    CREATE TABLE IF NOT EXISTS public.company_campaign_dispatch_settings (
+      company_id UUID PRIMARY KEY REFERENCES public.companies(id) ON DELETE CASCADE,
+      first_window_days INT NOT NULL DEFAULT 7,
+      second_window_days INT NOT NULL DEFAULT 10,
+      third_window_days INT NOT NULL DEFAULT 30,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL
+    );
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'company_campaign_dispatch_settings_days_check'
+      ) THEN
+        ALTER TABLE public.company_campaign_dispatch_settings
+          ADD CONSTRAINT company_campaign_dispatch_settings_days_check CHECK (
+            first_window_days BETWEEN 1 AND 365
+            AND second_window_days BETWEEN 1 AND 365
+            AND third_window_days BETWEEN 1 AND 365
+          );
+      END IF;
+    END$$;
+
+    -- Preços estimados Meta (R$) por empresa — tela Campanhas → Custos.
+    CREATE TABLE IF NOT EXISTS public.company_campaign_cost_prices (
+      company_id UUID PRIMARY KEY REFERENCES public.companies(id) ON DELETE CASCADE,
+      marketing_brl NUMERIC(12,4) NOT NULL DEFAULT 0.3217,
+      utility_brl NUMERIC(12,4) NOT NULL DEFAULT 0.0350,
+      authentication_brl NUMERIC(12,4) NOT NULL DEFAULT 0.0350,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_campaign_contacts_company_responded
       ON public.campaign_contacts (company_id, responded_at DESC)
       WHERE responded_at IS NOT NULL;
@@ -1250,6 +1292,23 @@ async function applyCampaignsSchema(db: ReturnType<typeof sql>): Promise<void> {
           FOREIGN KEY (source_campaign_id) REFERENCES public.campaigns(id) ON DELETE SET NULL;
       END IF;
     END$$;
+
+    -- Overlay atendimento → templates Meta (sem seed automático).
+    CREATE TABLE IF NOT EXISTS public.attendance_whatsapp_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+      meta_template_id UUID NOT NULL REFERENCES public.meta_message_templates(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      variables JSONB NOT NULL DEFAULT '[]'::jsonb,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS attendance_whatsapp_templates_company_meta_uniq
+      ON public.attendance_whatsapp_templates (company_id, meta_template_id);
+    CREATE INDEX IF NOT EXISTS idx_attendance_whatsapp_templates_company_active
+      ON public.attendance_whatsapp_templates (company_id, active, updated_at DESC);
   `);
 }
 

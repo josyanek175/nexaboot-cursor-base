@@ -26,10 +26,17 @@ import { Route as ApiConversationsRouteImport } from './routes/api/conversations
 import { Route as ApiContactsRouteImport } from './routes/api/contacts'
 import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
 import { Route as ApiCampaignsRouteImport } from './routes/api/campaigns'
+import { Route as ApiAutomationFlowsRouteImport } from './routes/api/automation-flows'
 import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
+import { Route as ApiAccessHoursRouteImport } from './routes/api/access-hours'
 import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
 import { Route as AppLogsRouteImport } from './routes/_app.logs'
+import { Route as AppLembretesRouteImport } from './routes/_app.lembretes'
+import { Route as AppHorariosAcessoRouteImport } from './routes/_app.horarios-acesso'
 import { Route as AppGruposInternosRouteImport } from './routes/_app.grupos-internos'
+import { Route as AppGerencialRouteImport } from './routes/_app.gerencial'
+import { Route as AppFluxosRouteImport } from './routes/_app.fluxos'
+import { Route as AppEsperaRouteImport } from './routes/_app.espera'
 import { Route as AppEmpresasRouteImport } from './routes/_app.empresas'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppContatosRouteImport } from './routes/_app.contatos'
@@ -39,11 +46,13 @@ import { Route as AppCanaisRouteImport } from './routes/_app.canais'
 import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
 import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app.atendimento'
+import { Route as AppGerencialIndexRouteImport } from './routes/_app.gerencial.index'
 import { Route as AppCampanhasIndexRouteImport } from './routes/_app.campanhas.index'
 import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
 import { Route as ApiWebhooksEvolutionRouteImport } from './routes/api/webhooks/evolution'
 import { Route as ApiUsersIdRouteImport } from './routes/api/users/$id'
 import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
+import { Route as ApiMessagesSendTemplateRouteImport } from './routes/api/messages/send-template'
 import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
 import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
 import { Route as ApiInternalDbPoolStatusRouteImport } from './routes/api/internal/db-pool-status'
@@ -62,22 +71,35 @@ import { Route as ApiDebugPlansSelectsRouteImport } from './routes/api/debug/pla
 import { Route as ApiDebugDbRouteImport } from './routes/api/debug/db'
 import { Route as ApiDebugCurrentUserRouteImport } from './routes/api/debug/current-user'
 import { Route as ApiDebugColsRouteImport } from './routes/api/debug/cols'
+import { Route as ApiDashboardWaitRouteImport } from './routes/api/dashboard/wait'
 import { Route as ApiDashboardCampaignsRouteImport } from './routes/api/dashboard/campaigns'
 import { Route as ApiConversationsStartRouteImport } from './routes/api/conversations/start'
 import { Route as ApiContactsIdRouteImport } from './routes/api/contacts/$id'
 import { Route as ApiCompaniesIdRouteImport } from './routes/api/companies/$id'
 import { Route as ApiCampaignsTemplatesRouteImport } from './routes/api/campaigns/templates'
+import { Route as ApiCampaignsResultsRouteImport } from './routes/api/campaigns/results'
+import { Route as ApiCampaignsDispatchWindowRouteImport } from './routes/api/campaigns/dispatch-window'
+import { Route as ApiCampaignsDispatchBlocksRouteImport } from './routes/api/campaigns/dispatch-blocks'
+import { Route as ApiCampaignsCostsRouteImport } from './routes/api/campaigns/costs'
 import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
+import { Route as ApiAttendanceTemplatesRouteImport } from './routes/api/attendance/templates'
 import { Route as ApiAttendanceNotificationsRouteImport } from './routes/api/attendance/notifications'
 import { Route as ApiAdminSeedDemoRouteImport } from './routes/api/admin/seed-demo'
 import { Route as ApiAdminResetPasswordRouteImport } from './routes/api/admin/reset-password'
 import { Route as ApiAdminAuthCheckRouteImport } from './routes/api/admin/auth-check'
+import { Route as AppGerencialResultadosRouteImport } from './routes/_app.gerencial.resultados'
+import { Route as AppGerencialCustosRouteImport } from './routes/_app.gerencial.custos'
+import { Route as AppGerencialBloqueadosRouteImport } from './routes/_app.gerencial.bloqueados'
+import { Route as AppCampanhasTemplatesAtendimentoRouteImport } from './routes/_app.campanhas.templates-atendimento'
+import { Route as AppCampanhasResultadosRouteImport } from './routes/_app.campanhas.resultados'
 import { Route as AppCampanhasNovaRouteImport } from './routes/_app.campanhas.nova'
 import { Route as AppCampanhasModelosRouteImport } from './routes/_app.campanhas.modelos'
+import { Route as AppCampanhasCustosRouteImport } from './routes/_app.campanhas.custos'
+import { Route as AppCampanhasBloqueadosRouteImport } from './routes/_app.campanhas.bloqueados'
 import { Route as AppCampanhasIdRouteImport } from './routes/_app.campanhas.$id'
 import { Route as ApiWebhooksMetaWhatsappRouteImport } from './routes/api/webhooks/meta/whatsapp'
 import { Route as ApiWebhooksMetaDiagnosticRouteImport } from './routes/api/webhooks/meta/diagnostic'
@@ -208,9 +230,19 @@ const ApiCampaignsRoute = ApiCampaignsRouteImport.update({
   path: '/api/campaigns',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAutomationFlowsRoute = ApiAutomationFlowsRouteImport.update({
+  id: '/api/automation-flows',
+  path: '/api/automation-flows',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAttendantsRoute = ApiAttendantsRouteImport.update({
   id: '/api/attendants',
   path: '/api/attendants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccessHoursRoute = ApiAccessHoursRouteImport.update({
+  id: '/api/access-hours',
+  path: '/api/access-hours',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppUsuariosRoute = AppUsuariosRouteImport.update({
@@ -223,9 +255,34 @@ const AppLogsRoute = AppLogsRouteImport.update({
   path: '/logs',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLembretesRoute = AppLembretesRouteImport.update({
+  id: '/lembretes',
+  path: '/lembretes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHorariosAcessoRoute = AppHorariosAcessoRouteImport.update({
+  id: '/horarios-acesso',
+  path: '/horarios-acesso',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppGruposInternosRoute = AppGruposInternosRouteImport.update({
   id: '/grupos-internos',
   path: '/grupos-internos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGerencialRoute = AppGerencialRouteImport.update({
+  id: '/gerencial',
+  path: '/gerencial',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFluxosRoute = AppFluxosRouteImport.update({
+  id: '/fluxos',
+  path: '/fluxos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEsperaRoute = AppEsperaRouteImport.update({
+  id: '/espera',
+  path: '/espera',
   getParentRoute: () => AppRoute,
 } as any)
 const AppEmpresasRoute = AppEmpresasRouteImport.update({
@@ -273,6 +330,11 @@ const AppAtendimentoRoute = AppAtendimentoRouteImport.update({
   path: '/atendimento',
   getParentRoute: () => AppRoute,
 } as any)
+const AppGerencialIndexRoute = AppGerencialIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppGerencialRoute,
+} as any)
 const AppCampanhasIndexRoute = AppCampanhasIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -297,6 +359,11 @@ const ApiMetaChannelsRoute = ApiMetaChannelsRouteImport.update({
   id: '/api/meta/channels',
   path: '/api/meta/channels',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMessagesSendTemplateRoute = ApiMessagesSendTemplateRouteImport.update({
+  id: '/send-template',
+  path: '/send-template',
+  getParentRoute: () => ApiMessagesRoute,
 } as any)
 const ApiMessagesSendMediaRoute = ApiMessagesSendMediaRouteImport.update({
   id: '/send-media',
@@ -390,6 +457,11 @@ const ApiDebugColsRoute = ApiDebugColsRouteImport.update({
   path: '/api/debug/cols',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDashboardWaitRoute = ApiDashboardWaitRouteImport.update({
+  id: '/wait',
+  path: '/wait',
+  getParentRoute: () => ApiDashboardRoute,
+} as any)
 const ApiDashboardCampaignsRoute = ApiDashboardCampaignsRouteImport.update({
   id: '/campaigns',
   path: '/campaigns',
@@ -413,6 +485,28 @@ const ApiCompaniesIdRoute = ApiCompaniesIdRouteImport.update({
 const ApiCampaignsTemplatesRoute = ApiCampaignsTemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
+  getParentRoute: () => ApiCampaignsRoute,
+} as any)
+const ApiCampaignsResultsRoute = ApiCampaignsResultsRouteImport.update({
+  id: '/results',
+  path: '/results',
+  getParentRoute: () => ApiCampaignsRoute,
+} as any)
+const ApiCampaignsDispatchWindowRoute =
+  ApiCampaignsDispatchWindowRouteImport.update({
+    id: '/dispatch-window',
+    path: '/dispatch-window',
+    getParentRoute: () => ApiCampaignsRoute,
+  } as any)
+const ApiCampaignsDispatchBlocksRoute =
+  ApiCampaignsDispatchBlocksRouteImport.update({
+    id: '/dispatch-blocks',
+    path: '/dispatch-blocks',
+    getParentRoute: () => ApiCampaignsRoute,
+  } as any)
+const ApiCampaignsCostsRoute = ApiCampaignsCostsRouteImport.update({
+  id: '/costs',
+  path: '/costs',
   getParentRoute: () => ApiCampaignsRoute,
 } as any)
 const ApiCampaignsIdRoute = ApiCampaignsIdRouteImport.update({
@@ -441,6 +535,11 @@ const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
   path: '/api/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAttendanceTemplatesRoute = ApiAttendanceTemplatesRouteImport.update({
+  id: '/api/attendance/templates',
+  path: '/api/attendance/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAttendanceNotificationsRoute =
   ApiAttendanceNotificationsRouteImport.update({
     id: '/api/attendance/notifications',
@@ -462,6 +561,32 @@ const ApiAdminAuthCheckRoute = ApiAdminAuthCheckRouteImport.update({
   path: '/api/admin/auth-check',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppGerencialResultadosRoute = AppGerencialResultadosRouteImport.update({
+  id: '/resultados',
+  path: '/resultados',
+  getParentRoute: () => AppGerencialRoute,
+} as any)
+const AppGerencialCustosRoute = AppGerencialCustosRouteImport.update({
+  id: '/custos',
+  path: '/custos',
+  getParentRoute: () => AppGerencialRoute,
+} as any)
+const AppGerencialBloqueadosRoute = AppGerencialBloqueadosRouteImport.update({
+  id: '/bloqueados',
+  path: '/bloqueados',
+  getParentRoute: () => AppGerencialRoute,
+} as any)
+const AppCampanhasTemplatesAtendimentoRoute =
+  AppCampanhasTemplatesAtendimentoRouteImport.update({
+    id: '/templates-atendimento',
+    path: '/templates-atendimento',
+    getParentRoute: () => AppCampanhasRoute,
+  } as any)
+const AppCampanhasResultadosRoute = AppCampanhasResultadosRouteImport.update({
+  id: '/resultados',
+  path: '/resultados',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
 const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
   id: '/nova',
   path: '/nova',
@@ -470,6 +595,16 @@ const AppCampanhasNovaRoute = AppCampanhasNovaRouteImport.update({
 const AppCampanhasModelosRoute = AppCampanhasModelosRouteImport.update({
   id: '/modelos',
   path: '/modelos',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
+const AppCampanhasCustosRoute = AppCampanhasCustosRouteImport.update({
+  id: '/custos',
+  path: '/custos',
+  getParentRoute: () => AppCampanhasRoute,
+} as any)
+const AppCampanhasBloqueadosRoute = AppCampanhasBloqueadosRouteImport.update({
+  id: '/bloqueados',
+  path: '/bloqueados',
   getParentRoute: () => AppCampanhasRoute,
 } as any)
 const AppCampanhasIdRoute = AppCampanhasIdRouteImport.update({
@@ -742,10 +877,17 @@ export interface FileRoutesByFullPath {
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
+  '/espera': typeof AppEsperaRoute
+  '/fluxos': typeof AppFluxosRoute
+  '/gerencial': typeof AppGerencialRouteWithChildren
   '/grupos-internos': typeof AppGruposInternosRoute
+  '/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/lembretes': typeof AppLembretesRoute
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
+  '/api/access-hours': typeof ApiAccessHoursRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -757,22 +899,35 @@ export interface FileRoutesByFullPath {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
+  '/campanhas/custos': typeof AppCampanhasCustosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/campanhas/resultados': typeof AppCampanhasResultadosRoute
+  '/campanhas/templates-atendimento': typeof AppCampanhasTemplatesAtendimentoRoute
+  '/gerencial/bloqueados': typeof AppGerencialBloqueadosRoute
+  '/gerencial/custos': typeof AppGerencialCustosRoute
+  '/gerencial/resultados': typeof AppGerencialResultadosRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
+  '/api/attendance/templates': typeof ApiAttendanceTemplatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
+  '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
+  '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
+  '/api/campaigns/results': typeof ApiCampaignsResultsRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
   '/api/dashboard/campaigns': typeof ApiDashboardCampaignsRoute
+  '/api/dashboard/wait': typeof ApiDashboardWaitRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
@@ -791,11 +946,13 @@ export interface FileRoutesByFullPath {
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
+  '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas/': typeof AppCampanhasIndexRoute
+  '/gerencial/': typeof AppGerencialIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
   '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
@@ -856,10 +1013,16 @@ export interface FileRoutesByTo {
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
+  '/espera': typeof AppEsperaRoute
+  '/fluxos': typeof AppFluxosRoute
   '/grupos-internos': typeof AppGruposInternosRoute
+  '/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/lembretes': typeof AppLembretesRoute
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
+  '/api/access-hours': typeof ApiAccessHoursRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -871,22 +1034,35 @@ export interface FileRoutesByTo {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
+  '/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
+  '/campanhas/custos': typeof AppCampanhasCustosRoute
   '/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/campanhas/resultados': typeof AppCampanhasResultadosRoute
+  '/campanhas/templates-atendimento': typeof AppCampanhasTemplatesAtendimentoRoute
+  '/gerencial/bloqueados': typeof AppGerencialBloqueadosRoute
+  '/gerencial/custos': typeof AppGerencialCustosRoute
+  '/gerencial/resultados': typeof AppGerencialResultadosRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
+  '/api/attendance/templates': typeof ApiAttendanceTemplatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
+  '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
+  '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
+  '/api/campaigns/results': typeof ApiCampaignsResultsRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
   '/api/dashboard/campaigns': typeof ApiDashboardCampaignsRoute
+  '/api/dashboard/wait': typeof ApiDashboardWaitRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
@@ -905,11 +1081,13 @@ export interface FileRoutesByTo {
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
+  '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/campanhas': typeof AppCampanhasIndexRoute
+  '/gerencial': typeof AppGerencialIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
   '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
@@ -973,10 +1151,17 @@ export interface FileRoutesById {
   '/_app/contatos': typeof AppContatosRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/empresas': typeof AppEmpresasRoute
+  '/_app/espera': typeof AppEsperaRoute
+  '/_app/fluxos': typeof AppFluxosRoute
+  '/_app/gerencial': typeof AppGerencialRouteWithChildren
   '/_app/grupos-internos': typeof AppGruposInternosRoute
+  '/_app/horarios-acesso': typeof AppHorariosAcessoRoute
+  '/_app/lembretes': typeof AppLembretesRoute
   '/_app/logs': typeof AppLogsRoute
   '/_app/usuarios': typeof AppUsuariosRoute
+  '/api/access-hours': typeof ApiAccessHoursRoute
   '/api/attendants': typeof ApiAttendantsRoute
+  '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -988,22 +1173,35 @@ export interface FileRoutesById {
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/_app/campanhas/$id': typeof AppCampanhasIdRoute
+  '/_app/campanhas/bloqueados': typeof AppCampanhasBloqueadosRoute
+  '/_app/campanhas/custos': typeof AppCampanhasCustosRoute
   '/_app/campanhas/modelos': typeof AppCampanhasModelosRoute
   '/_app/campanhas/nova': typeof AppCampanhasNovaRoute
+  '/_app/campanhas/resultados': typeof AppCampanhasResultadosRoute
+  '/_app/campanhas/templates-atendimento': typeof AppCampanhasTemplatesAtendimentoRoute
+  '/_app/gerencial/bloqueados': typeof AppGerencialBloqueadosRoute
+  '/_app/gerencial/custos': typeof AppGerencialCustosRoute
+  '/_app/gerencial/resultados': typeof AppGerencialResultadosRoute
   '/api/admin/auth-check': typeof ApiAdminAuthCheckRoute
   '/api/admin/reset-password': typeof ApiAdminResetPasswordRoute
   '/api/admin/seed-demo': typeof ApiAdminSeedDemoRoute
   '/api/attendance/notifications': typeof ApiAttendanceNotificationsRoute
+  '/api/attendance/templates': typeof ApiAttendanceTemplatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
+  '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
+  '/api/campaigns/dispatch-blocks': typeof ApiCampaignsDispatchBlocksRoute
+  '/api/campaigns/dispatch-window': typeof ApiCampaignsDispatchWindowRoute
+  '/api/campaigns/results': typeof ApiCampaignsResultsRoute
   '/api/campaigns/templates': typeof ApiCampaignsTemplatesRouteWithChildren
   '/api/companies/$id': typeof ApiCompaniesIdRouteWithChildren
   '/api/contacts/$id': typeof ApiContactsIdRoute
   '/api/conversations/start': typeof ApiConversationsStartRoute
   '/api/dashboard/campaigns': typeof ApiDashboardCampaignsRoute
+  '/api/dashboard/wait': typeof ApiDashboardWaitRoute
   '/api/debug/cols': typeof ApiDebugColsRoute
   '/api/debug/current-user': typeof ApiDebugCurrentUserRoute
   '/api/debug/db': typeof ApiDebugDbRoute
@@ -1022,11 +1220,13 @@ export interface FileRoutesById {
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
+  '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
   '/api/meta/channels': typeof ApiMetaChannelsRouteWithChildren
   '/api/users/$id': typeof ApiUsersIdRoute
   '/api/webhooks/evolution': typeof ApiWebhooksEvolutionRoute
   '/api/webhooks/meta': typeof ApiWebhooksMetaRouteWithChildren
   '/_app/campanhas/': typeof AppCampanhasIndexRoute
+  '/_app/gerencial/': typeof AppGerencialIndexRoute
   '/api/campaigns/$id/contacts': typeof ApiCampaignsIdContactsRouteWithChildren
   '/api/campaigns/$id/pause': typeof ApiCampaignsIdPauseRoute
   '/api/campaigns/$id/resume': typeof ApiCampaignsIdResumeRoute
@@ -1090,10 +1290,17 @@ export interface FileRouteTypes {
     | '/contatos'
     | '/dashboard'
     | '/empresas'
+    | '/espera'
+    | '/fluxos'
+    | '/gerencial'
     | '/grupos-internos'
+    | '/horarios-acesso'
+    | '/lembretes'
     | '/logs'
     | '/usuarios'
+    | '/api/access-hours'
     | '/api/attendants'
+    | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1105,22 +1312,35 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
+    | '/campanhas/bloqueados'
+    | '/campanhas/custos'
     | '/campanhas/modelos'
     | '/campanhas/nova'
+    | '/campanhas/resultados'
+    | '/campanhas/templates-atendimento'
+    | '/gerencial/bloqueados'
+    | '/gerencial/custos'
+    | '/gerencial/resultados'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/attendance/notifications'
+    | '/api/attendance/templates'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/costs'
+    | '/api/campaigns/dispatch-blocks'
+    | '/api/campaigns/dispatch-window'
+    | '/api/campaigns/results'
     | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
     | '/api/dashboard/campaigns'
+    | '/api/dashboard/wait'
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
@@ -1139,11 +1359,13 @@ export interface FileRouteTypes {
     | '/api/internal/db-pool-status'
     | '/api/messages/send'
     | '/api/messages/send-media'
+    | '/api/messages/send-template'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
     | '/api/webhooks/meta'
     | '/campanhas/'
+    | '/gerencial/'
     | '/api/campaigns/$id/contacts'
     | '/api/campaigns/$id/pause'
     | '/api/campaigns/$id/resume'
@@ -1204,10 +1426,16 @@ export interface FileRouteTypes {
     | '/contatos'
     | '/dashboard'
     | '/empresas'
+    | '/espera'
+    | '/fluxos'
     | '/grupos-internos'
+    | '/horarios-acesso'
+    | '/lembretes'
     | '/logs'
     | '/usuarios'
+    | '/api/access-hours'
     | '/api/attendants'
+    | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1219,22 +1447,35 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
+    | '/campanhas/bloqueados'
+    | '/campanhas/custos'
     | '/campanhas/modelos'
     | '/campanhas/nova'
+    | '/campanhas/resultados'
+    | '/campanhas/templates-atendimento'
+    | '/gerencial/bloqueados'
+    | '/gerencial/custos'
+    | '/gerencial/resultados'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/attendance/notifications'
+    | '/api/attendance/templates'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/costs'
+    | '/api/campaigns/dispatch-blocks'
+    | '/api/campaigns/dispatch-window'
+    | '/api/campaigns/results'
     | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
     | '/api/dashboard/campaigns'
+    | '/api/dashboard/wait'
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
@@ -1253,11 +1494,13 @@ export interface FileRouteTypes {
     | '/api/internal/db-pool-status'
     | '/api/messages/send'
     | '/api/messages/send-media'
+    | '/api/messages/send-template'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
     | '/api/webhooks/meta'
     | '/campanhas'
+    | '/gerencial'
     | '/api/campaigns/$id/contacts'
     | '/api/campaigns/$id/pause'
     | '/api/campaigns/$id/resume'
@@ -1320,10 +1563,17 @@ export interface FileRouteTypes {
     | '/_app/contatos'
     | '/_app/dashboard'
     | '/_app/empresas'
+    | '/_app/espera'
+    | '/_app/fluxos'
+    | '/_app/gerencial'
     | '/_app/grupos-internos'
+    | '/_app/horarios-acesso'
+    | '/_app/lembretes'
     | '/_app/logs'
     | '/_app/usuarios'
+    | '/api/access-hours'
     | '/api/attendants'
+    | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
     | '/api/contacts'
@@ -1335,22 +1585,35 @@ export interface FileRouteTypes {
     | '/api/users'
     | '/webhook/evolution'
     | '/_app/campanhas/$id'
+    | '/_app/campanhas/bloqueados'
+    | '/_app/campanhas/custos'
     | '/_app/campanhas/modelos'
     | '/_app/campanhas/nova'
+    | '/_app/campanhas/resultados'
+    | '/_app/campanhas/templates-atendimento'
+    | '/_app/gerencial/bloqueados'
+    | '/_app/gerencial/custos'
+    | '/_app/gerencial/resultados'
     | '/api/admin/auth-check'
     | '/api/admin/reset-password'
     | '/api/admin/seed-demo'
     | '/api/attendance/notifications'
+    | '/api/attendance/templates'
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
     | '/api/auth/register'
     | '/api/campaigns/$id'
+    | '/api/campaigns/costs'
+    | '/api/campaigns/dispatch-blocks'
+    | '/api/campaigns/dispatch-window'
+    | '/api/campaigns/results'
     | '/api/campaigns/templates'
     | '/api/companies/$id'
     | '/api/contacts/$id'
     | '/api/conversations/start'
     | '/api/dashboard/campaigns'
+    | '/api/dashboard/wait'
     | '/api/debug/cols'
     | '/api/debug/current-user'
     | '/api/debug/db'
@@ -1369,11 +1632,13 @@ export interface FileRouteTypes {
     | '/api/internal/db-pool-status'
     | '/api/messages/send'
     | '/api/messages/send-media'
+    | '/api/messages/send-template'
     | '/api/meta/channels'
     | '/api/users/$id'
     | '/api/webhooks/evolution'
     | '/api/webhooks/meta'
     | '/_app/campanhas/'
+    | '/_app/gerencial/'
     | '/api/campaigns/$id/contacts'
     | '/api/campaigns/$id/pause'
     | '/api/campaigns/$id/resume'
@@ -1428,7 +1693,9 @@ export interface RootRouteChildren {
   PoliticaDePrivacidadeRoute: typeof PoliticaDePrivacidadeRoute
   RegisterRoute: typeof RegisterRoute
   TermosDeUsoRoute: typeof TermosDeUsoRoute
+  ApiAccessHoursRoute: typeof ApiAccessHoursRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
+  ApiAutomationFlowsRoute: typeof ApiAutomationFlowsRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
@@ -1443,6 +1710,7 @@ export interface RootRouteChildren {
   ApiAdminResetPasswordRoute: typeof ApiAdminResetPasswordRoute
   ApiAdminSeedDemoRoute: typeof ApiAdminSeedDemoRoute
   ApiAttendanceNotificationsRoute: typeof ApiAttendanceNotificationsRoute
+  ApiAttendanceTemplatesRoute: typeof ApiAttendanceTemplatesRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthOperationalCompanyRoute: typeof ApiAuthOperationalCompanyRoute
@@ -1597,11 +1865,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCampaignsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/automation-flows': {
+      id: '/api/automation-flows'
+      path: '/api/automation-flows'
+      fullPath: '/api/automation-flows'
+      preLoaderRoute: typeof ApiAutomationFlowsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/attendants': {
       id: '/api/attendants'
       path: '/api/attendants'
       fullPath: '/api/attendants'
       preLoaderRoute: typeof ApiAttendantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/access-hours': {
+      id: '/api/access-hours'
+      path: '/api/access-hours'
+      fullPath: '/api/access-hours'
+      preLoaderRoute: typeof ApiAccessHoursRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/usuarios': {
@@ -1618,11 +1900,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/lembretes': {
+      id: '/_app/lembretes'
+      path: '/lembretes'
+      fullPath: '/lembretes'
+      preLoaderRoute: typeof AppLembretesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/horarios-acesso': {
+      id: '/_app/horarios-acesso'
+      path: '/horarios-acesso'
+      fullPath: '/horarios-acesso'
+      preLoaderRoute: typeof AppHorariosAcessoRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/grupos-internos': {
       id: '/_app/grupos-internos'
       path: '/grupos-internos'
       fullPath: '/grupos-internos'
       preLoaderRoute: typeof AppGruposInternosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/gerencial': {
+      id: '/_app/gerencial'
+      path: '/gerencial'
+      fullPath: '/gerencial'
+      preLoaderRoute: typeof AppGerencialRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/fluxos': {
+      id: '/_app/fluxos'
+      path: '/fluxos'
+      fullPath: '/fluxos'
+      preLoaderRoute: typeof AppFluxosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/espera': {
+      id: '/_app/espera'
+      path: '/espera'
+      fullPath: '/espera'
+      preLoaderRoute: typeof AppEsperaRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/empresas': {
@@ -1688,6 +2005,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAtendimentoRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/gerencial/': {
+      id: '/_app/gerencial/'
+      path: '/'
+      fullPath: '/gerencial/'
+      preLoaderRoute: typeof AppGerencialIndexRouteImport
+      parentRoute: typeof AppGerencialRoute
+    }
     '/_app/campanhas/': {
       id: '/_app/campanhas/'
       path: '/'
@@ -1722,6 +2046,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/meta/channels'
       preLoaderRoute: typeof ApiMetaChannelsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/messages/send-template': {
+      id: '/api/messages/send-template'
+      path: '/send-template'
+      fullPath: '/api/messages/send-template'
+      preLoaderRoute: typeof ApiMessagesSendTemplateRouteImport
+      parentRoute: typeof ApiMessagesRoute
     }
     '/api/messages/send-media': {
       id: '/api/messages/send-media'
@@ -1849,6 +2180,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDebugColsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/dashboard/wait': {
+      id: '/api/dashboard/wait'
+      path: '/wait'
+      fullPath: '/api/dashboard/wait'
+      preLoaderRoute: typeof ApiDashboardWaitRouteImport
+      parentRoute: typeof ApiDashboardRoute
+    }
     '/api/dashboard/campaigns': {
       id: '/api/dashboard/campaigns'
       path: '/campaigns'
@@ -1882,6 +2220,34 @@ declare module '@tanstack/react-router' {
       path: '/templates'
       fullPath: '/api/campaigns/templates'
       preLoaderRoute: typeof ApiCampaignsTemplatesRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/results': {
+      id: '/api/campaigns/results'
+      path: '/results'
+      fullPath: '/api/campaigns/results'
+      preLoaderRoute: typeof ApiCampaignsResultsRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/dispatch-window': {
+      id: '/api/campaigns/dispatch-window'
+      path: '/dispatch-window'
+      fullPath: '/api/campaigns/dispatch-window'
+      preLoaderRoute: typeof ApiCampaignsDispatchWindowRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/dispatch-blocks': {
+      id: '/api/campaigns/dispatch-blocks'
+      path: '/dispatch-blocks'
+      fullPath: '/api/campaigns/dispatch-blocks'
+      preLoaderRoute: typeof ApiCampaignsDispatchBlocksRouteImport
+      parentRoute: typeof ApiCampaignsRoute
+    }
+    '/api/campaigns/costs': {
+      id: '/api/campaigns/costs'
+      path: '/costs'
+      fullPath: '/api/campaigns/costs'
+      preLoaderRoute: typeof ApiCampaignsCostsRouteImport
       parentRoute: typeof ApiCampaignsRoute
     }
     '/api/campaigns/$id': {
@@ -1919,6 +2285,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/attendance/templates': {
+      id: '/api/attendance/templates'
+      path: '/api/attendance/templates'
+      fullPath: '/api/attendance/templates'
+      preLoaderRoute: typeof ApiAttendanceTemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/attendance/notifications': {
       id: '/api/attendance/notifications'
       path: '/api/attendance/notifications'
@@ -1947,6 +2320,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminAuthCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/gerencial/resultados': {
+      id: '/_app/gerencial/resultados'
+      path: '/resultados'
+      fullPath: '/gerencial/resultados'
+      preLoaderRoute: typeof AppGerencialResultadosRouteImport
+      parentRoute: typeof AppGerencialRoute
+    }
+    '/_app/gerencial/custos': {
+      id: '/_app/gerencial/custos'
+      path: '/custos'
+      fullPath: '/gerencial/custos'
+      preLoaderRoute: typeof AppGerencialCustosRouteImport
+      parentRoute: typeof AppGerencialRoute
+    }
+    '/_app/gerencial/bloqueados': {
+      id: '/_app/gerencial/bloqueados'
+      path: '/bloqueados'
+      fullPath: '/gerencial/bloqueados'
+      preLoaderRoute: typeof AppGerencialBloqueadosRouteImport
+      parentRoute: typeof AppGerencialRoute
+    }
+    '/_app/campanhas/templates-atendimento': {
+      id: '/_app/campanhas/templates-atendimento'
+      path: '/templates-atendimento'
+      fullPath: '/campanhas/templates-atendimento'
+      preLoaderRoute: typeof AppCampanhasTemplatesAtendimentoRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
+    '/_app/campanhas/resultados': {
+      id: '/_app/campanhas/resultados'
+      path: '/resultados'
+      fullPath: '/campanhas/resultados'
+      preLoaderRoute: typeof AppCampanhasResultadosRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
     '/_app/campanhas/nova': {
       id: '/_app/campanhas/nova'
       path: '/nova'
@@ -1959,6 +2367,20 @@ declare module '@tanstack/react-router' {
       path: '/modelos'
       fullPath: '/campanhas/modelos'
       preLoaderRoute: typeof AppCampanhasModelosRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
+    '/_app/campanhas/custos': {
+      id: '/_app/campanhas/custos'
+      path: '/custos'
+      fullPath: '/campanhas/custos'
+      preLoaderRoute: typeof AppCampanhasCustosRouteImport
+      parentRoute: typeof AppCampanhasRoute
+    }
+    '/_app/campanhas/bloqueados': {
+      id: '/_app/campanhas/bloqueados'
+      path: '/bloqueados'
+      fullPath: '/campanhas/bloqueados'
+      preLoaderRoute: typeof AppCampanhasBloqueadosRouteImport
       parentRoute: typeof AppCampanhasRoute
     }
     '/_app/campanhas/$id': {
@@ -2281,20 +2703,46 @@ declare module '@tanstack/react-router' {
 
 interface AppCampanhasRouteChildren {
   AppCampanhasIdRoute: typeof AppCampanhasIdRoute
+  AppCampanhasBloqueadosRoute: typeof AppCampanhasBloqueadosRoute
+  AppCampanhasCustosRoute: typeof AppCampanhasCustosRoute
   AppCampanhasModelosRoute: typeof AppCampanhasModelosRoute
   AppCampanhasNovaRoute: typeof AppCampanhasNovaRoute
+  AppCampanhasResultadosRoute: typeof AppCampanhasResultadosRoute
+  AppCampanhasTemplatesAtendimentoRoute: typeof AppCampanhasTemplatesAtendimentoRoute
   AppCampanhasIndexRoute: typeof AppCampanhasIndexRoute
 }
 
 const AppCampanhasRouteChildren: AppCampanhasRouteChildren = {
   AppCampanhasIdRoute: AppCampanhasIdRoute,
+  AppCampanhasBloqueadosRoute: AppCampanhasBloqueadosRoute,
+  AppCampanhasCustosRoute: AppCampanhasCustosRoute,
   AppCampanhasModelosRoute: AppCampanhasModelosRoute,
   AppCampanhasNovaRoute: AppCampanhasNovaRoute,
+  AppCampanhasResultadosRoute: AppCampanhasResultadosRoute,
+  AppCampanhasTemplatesAtendimentoRoute: AppCampanhasTemplatesAtendimentoRoute,
   AppCampanhasIndexRoute: AppCampanhasIndexRoute,
 }
 
 const AppCampanhasRouteWithChildren = AppCampanhasRoute._addFileChildren(
   AppCampanhasRouteChildren,
+)
+
+interface AppGerencialRouteChildren {
+  AppGerencialBloqueadosRoute: typeof AppGerencialBloqueadosRoute
+  AppGerencialCustosRoute: typeof AppGerencialCustosRoute
+  AppGerencialResultadosRoute: typeof AppGerencialResultadosRoute
+  AppGerencialIndexRoute: typeof AppGerencialIndexRoute
+}
+
+const AppGerencialRouteChildren: AppGerencialRouteChildren = {
+  AppGerencialBloqueadosRoute: AppGerencialBloqueadosRoute,
+  AppGerencialCustosRoute: AppGerencialCustosRoute,
+  AppGerencialResultadosRoute: AppGerencialResultadosRoute,
+  AppGerencialIndexRoute: AppGerencialIndexRoute,
+}
+
+const AppGerencialRouteWithChildren = AppGerencialRoute._addFileChildren(
+  AppGerencialRouteChildren,
 )
 
 interface AppRouteChildren {
@@ -2307,7 +2755,12 @@ interface AppRouteChildren {
   AppContatosRoute: typeof AppContatosRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppEmpresasRoute: typeof AppEmpresasRoute
+  AppEsperaRoute: typeof AppEsperaRoute
+  AppFluxosRoute: typeof AppFluxosRoute
+  AppGerencialRoute: typeof AppGerencialRouteWithChildren
   AppGruposInternosRoute: typeof AppGruposInternosRoute
+  AppHorariosAcessoRoute: typeof AppHorariosAcessoRoute
+  AppLembretesRoute: typeof AppLembretesRoute
   AppLogsRoute: typeof AppLogsRoute
   AppUsuariosRoute: typeof AppUsuariosRoute
 }
@@ -2322,7 +2775,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppContatosRoute: AppContatosRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppEmpresasRoute: AppEmpresasRoute,
+  AppEsperaRoute: AppEsperaRoute,
+  AppFluxosRoute: AppFluxosRoute,
+  AppGerencialRoute: AppGerencialRouteWithChildren,
   AppGruposInternosRoute: AppGruposInternosRoute,
+  AppHorariosAcessoRoute: AppHorariosAcessoRoute,
+  AppLembretesRoute: AppLembretesRoute,
   AppLogsRoute: AppLogsRoute,
   AppUsuariosRoute: AppUsuariosRoute,
 }
@@ -2387,12 +2845,20 @@ const ApiCampaignsTemplatesRouteWithChildren =
 
 interface ApiCampaignsRouteChildren {
   ApiCampaignsIdRoute: typeof ApiCampaignsIdRouteWithChildren
+  ApiCampaignsCostsRoute: typeof ApiCampaignsCostsRoute
+  ApiCampaignsDispatchBlocksRoute: typeof ApiCampaignsDispatchBlocksRoute
+  ApiCampaignsDispatchWindowRoute: typeof ApiCampaignsDispatchWindowRoute
+  ApiCampaignsResultsRoute: typeof ApiCampaignsResultsRoute
   ApiCampaignsTemplatesRoute: typeof ApiCampaignsTemplatesRouteWithChildren
   ApiCampaignsWorkerTickRoute: typeof ApiCampaignsWorkerTickRoute
 }
 
 const ApiCampaignsRouteChildren: ApiCampaignsRouteChildren = {
   ApiCampaignsIdRoute: ApiCampaignsIdRouteWithChildren,
+  ApiCampaignsCostsRoute: ApiCampaignsCostsRoute,
+  ApiCampaignsDispatchBlocksRoute: ApiCampaignsDispatchBlocksRoute,
+  ApiCampaignsDispatchWindowRoute: ApiCampaignsDispatchWindowRoute,
+  ApiCampaignsResultsRoute: ApiCampaignsResultsRoute,
   ApiCampaignsTemplatesRoute: ApiCampaignsTemplatesRouteWithChildren,
   ApiCampaignsWorkerTickRoute: ApiCampaignsWorkerTickRoute,
 }
@@ -2462,10 +2928,12 @@ const ApiConversationsRouteWithChildren =
 
 interface ApiDashboardRouteChildren {
   ApiDashboardCampaignsRoute: typeof ApiDashboardCampaignsRoute
+  ApiDashboardWaitRoute: typeof ApiDashboardWaitRoute
 }
 
 const ApiDashboardRouteChildren: ApiDashboardRouteChildren = {
   ApiDashboardCampaignsRoute: ApiDashboardCampaignsRoute,
+  ApiDashboardWaitRoute: ApiDashboardWaitRoute,
 }
 
 const ApiDashboardRouteWithChildren = ApiDashboardRoute._addFileChildren(
@@ -2489,12 +2957,14 @@ const ApiMessagesSendRouteWithChildren = ApiMessagesSendRoute._addFileChildren(
 interface ApiMessagesRouteChildren {
   ApiMessagesSendRoute: typeof ApiMessagesSendRouteWithChildren
   ApiMessagesSendMediaRoute: typeof ApiMessagesSendMediaRoute
+  ApiMessagesSendTemplateRoute: typeof ApiMessagesSendTemplateRoute
   ApiMessagesMessageIdMediaRoute: typeof ApiMessagesMessageIdMediaRoute
 }
 
 const ApiMessagesRouteChildren: ApiMessagesRouteChildren = {
   ApiMessagesSendRoute: ApiMessagesSendRouteWithChildren,
   ApiMessagesSendMediaRoute: ApiMessagesSendMediaRoute,
+  ApiMessagesSendTemplateRoute: ApiMessagesSendTemplateRoute,
   ApiMessagesMessageIdMediaRoute: ApiMessagesMessageIdMediaRoute,
 }
 
@@ -2627,7 +3097,9 @@ const rootRouteChildren: RootRouteChildren = {
   PoliticaDePrivacidadeRoute: PoliticaDePrivacidadeRoute,
   RegisterRoute: RegisterRoute,
   TermosDeUsoRoute: TermosDeUsoRoute,
+  ApiAccessHoursRoute: ApiAccessHoursRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
+  ApiAutomationFlowsRoute: ApiAutomationFlowsRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
   ApiContactsRoute: ApiContactsRouteWithChildren,
@@ -2642,6 +3114,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminResetPasswordRoute: ApiAdminResetPasswordRoute,
   ApiAdminSeedDemoRoute: ApiAdminSeedDemoRoute,
   ApiAttendanceNotificationsRoute: ApiAttendanceNotificationsRoute,
+  ApiAttendanceTemplatesRoute: ApiAttendanceTemplatesRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthOperationalCompanyRoute: ApiAuthOperationalCompanyRoute,

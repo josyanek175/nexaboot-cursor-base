@@ -7,8 +7,9 @@ import {
   UserPlus, ArrowRightLeft, CheckCircle, RotateCcw, StickyNote, History,
   Filter, PanelRightClose, PanelRightOpen, Image as ImageIcon, FileVideo, FileAudio,
   Wifi, WifiOff, ContactRound,
-  Megaphone,
+  Megaphone, FileStack,
 } from "lucide-react";
+import { SendTemplateModal } from "@/components/send-template-modal";
 import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { canSeeAllConversations, inTenantScope } from "@/lib/permissions";
@@ -671,12 +672,14 @@ function AtendimentoPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "groups" | "individuals">("individuals");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showDetails, setShowDetails] = useState(true);
   const [mobileView, setMobileView] = useState<"list" | "chat">(
     initialConversationId ? "chat" : "list",
   );
   const [draft, setDraft] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   // Envio real de mídia (imagem/áudio) via input de arquivo escondido.
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const mediaKindRef = useRef<"image" | "audio" | "document">("image");
@@ -700,6 +703,8 @@ function AtendimentoPage() {
   const attendanceNotifsBootstrapped = useRef(false);
   const selectedIdRef = useRef<string>("");
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  const convsPollInFlightRef = useRef(false);
+  const msgsPollInFlightRef = useRef(false);
   // Scroll automático para o fim do chat ao chegar/enviar mensagem.
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -712,6 +717,7 @@ function AtendimentoPage() {
 
   // Carrega conversas via REST.
   const reloadConversations = async (opts?: { silent?: boolean }) => {
+    convsPollInFlightRef.current = true;
     if (!opts?.silent) {
       setLoadingConvs(true);
       setConvsError(null);
@@ -740,6 +746,11 @@ function AtendimentoPage() {
       }
       if (campaignColorFilter !== "all") {
         params.set("campaign_color", campaignColorFilter);
+      }
+      const q = debouncedSearch.trim();
+      if (q.length >= 2) params.set("q", q);
+      if (listMode !== "campaign" && channelFilter !== "all") {
+        params.set("channel_id", channelFilter);
       }
       const qs = params.toString();
       const data = await apiGet(`/conversations${qs ? `?${qs}` : ""}`);
@@ -804,16 +815,26 @@ function AtendimentoPage() {
         setConvs([]);
       }
     } finally {
+      convsPollInFlightRef.current = false;
       if (!opts?.silent) setLoadingConvs(false);
     }
   };
   useEffect(() => {
     reloadConversations();
-    // Polling de conversas a cada 10s (FASE 2 — 45 usuários concorrentes).
-    const id = setInterval(() => reloadConversations({ silent: true }), 10_000);
+    // Polling de conversas a cada 30s (FASE 2 — 45 usuários concorrentes).
+    const id = setInterval(() => {
+      if (convsPollInFlightRef.current) return;
+      void reloadConversations({ silent: true });
+    }, 30_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.tenantId, listMode, campaignSubFilter, campaignColorFilter, assigneeFilter, channelFilter]);
+  }, [session.tenantId, listMode, campaignSubFilter, campaignColorFilter, assigneeFilter, channelFilter, debouncedSearch]);
+
+  useEffect(() => {
+    const q = search.trim();
+    const t = setTimeout(() => setDebouncedSearch(q), q.length >= 2 ? 180 : 0);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // Carrega canais reais conectados/cadastrados (Evolution) para o filtro.
   const reloadChannels = async () => {
@@ -852,6 +873,7 @@ function AtendimentoPage() {
 
   /** Carrega mensagens, mesclando por id para não duplicar nem perder otimistas. */
   const reloadMessages = async (convId: string, opts?: { silent?: boolean }) => {
+    msgsPollInFlightRef.current = true;
     if (!opts?.silent) {
       setLoadingMsgs(true);
       setMsgsError(null);
@@ -905,16 +927,20 @@ function AtendimentoPage() {
         setMsgs((prev) => ({ ...prev, [convId]: prev[convId] ?? [] }));
       }
     } finally {
+      msgsPollInFlightRef.current = false;
       if (!opts?.silent) setLoadingMsgs(false);
     }
   };
 
-  // Carrega mensagens da conversa selecionada via REST + polling 5s.
+  // Carrega mensagens da conversa selecionada via REST + polling 10s.
   useEffect(() => {
     if (!selectedId) return;
     console.log("conversation selecionada", selectedId);
     reloadMessages(selectedId);
-    const id = setInterval(() => reloadMessages(selectedId, { silent: true }), 5_000);
+    const id = setInterval(() => {
+      if (msgsPollInFlightRef.current) return;
+      void reloadMessages(selectedId, { silent: true });
+    }, 10_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -952,10 +978,13 @@ function AtendimentoPage() {
     }
   };
 
-  // Polling de notificações de transferência (a cada 12s).
+  // Polling de notificações de transferência (a cada 60s).
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
     async function pollAttendanceNotifications() {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const data = await apiGet("/attendance/notifications?unread=1");
         if (cancelled) return;
@@ -991,10 +1020,12 @@ function AtendimentoPage() {
         }
       } catch {
         // silencioso — não interrompe o atendimento
+      } finally {
+        inFlight = false;
       }
     }
     pollAttendanceNotifications();
-    const id = setInterval(pollAttendanceNotifications, 12_000);
+    const id = setInterval(pollAttendanceNotifications, 60_000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -1110,7 +1141,12 @@ function AtendimentoPage() {
   const contactsWithoutConversation = useMemo(() => {
     if (!search.trim()) return [];
 
+    const q = search.trim().toLowerCase();
+    const digits = search.replace(/\D/g, "");
     return contactResults.filter((ct) => {
+      const nameHit = (ct.name || "").toLowerCase().includes(q);
+      const phoneHit = digits.length >= 3 && (ct.phone || "").includes(digits);
+      if (!nameHit && !phoneHit) return false;
       const channelsWithConv = new Set(
         convs.filter((c) => c.contactId === ct.id).map((c) => c.channelId),
       );
@@ -1592,6 +1628,11 @@ function AtendimentoPage() {
               className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 ring-ring"
             />
           </div>
+          {search.trim().length >= 2 && channelFilter === "all" && (
+            <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+              Selecione o telefone do canal para a busca ser precisa. Sem o número, o nome aparece em todos os canais.
+            </p>
+          )}
 
           <div className="mt-3 flex gap-1">
             <button
@@ -1702,6 +1743,7 @@ function AtendimentoPage() {
               icon={Filter}
               value={channelFilter}
               onChange={setChannelFilter}
+              emphasize={search.trim().length >= 2 && channelFilter === "all"}
               options={[{ v: "all", l: "Todos canais" }, ...tenantChannels.map((c) => ({ v: c.id, l: channelFilterLabel(c) }))]}
             />
             <FilterSelect
@@ -1902,9 +1944,28 @@ function AtendimentoPage() {
               onSend={() => sendText(draft)}
               onAttach={sendAttachment}
               onInternalNote={() => setNoteOpen(true)}
+              onSendTemplate={
+                channels.find((c) => c.id === selected.channelId)?.provider === "META"
+                  ? () => setTemplateOpen(true)
+                  : undefined
+              }
               disabled={selected.status === "finished"}
               onReopen={reopen}
             />
+            {templateOpen && (
+              <SendTemplateModal
+                open={templateOpen}
+                conversationId={selected.id}
+                contactName={
+                  contacts.find((c) => c.id === selected.contactId)?.name ?? null
+                }
+                onClose={() => setTemplateOpen(false)}
+                onSent={() => {
+                  void reloadMessages(selected.id, { silent: true });
+                  void reloadConversations({ silent: true });
+                }}
+              />
+            )}
           </>
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
@@ -2095,6 +2156,38 @@ function ContactResultRow({
   onStart: (channelId: string) => void;
 }) {
   const busy = startingContactId === contact.id;
+  const sole = startChannels.length === 1 ? startChannels[0] : null;
+  const opening = busy && !!sole && startingChannelId === sole.id;
+  const initials = (contact.name || contact.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("");
+
+  if (sole) {
+    return (
+      <li>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onStart(sole.id)}
+          className="flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-muted/60 disabled:opacity-60"
+        >
+          <div
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+            style={{ backgroundColor: contact.avatarColor }}
+          >
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{contact.name || contact.phone}</div>
+            {contact.phone && <div className="truncate text-xs text-muted-foreground">{phoneLabel(contact.phone)}</div>}
+            <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-whatsapp">
+              <UserPlus className="h-3 w-3" />
+              {opening ? "Abrindo…" : "Novo atendimento"}
+            </div>
+          </div>
+        </button>
+      </li>
+    );
+  }
+
   return (
     <li>
       <div className="flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left">
@@ -2102,7 +2195,7 @@ function ContactResultRow({
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
           style={{ backgroundColor: contact.avatarColor }}
         >
-          {(contact.name || contact.phone || "?").split(" ").map((p) => p[0]).slice(0, 2).join("")}
+          {initials}
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{contact.name || contact.phone}</div>
@@ -2122,11 +2215,7 @@ function ContactResultRow({
                     className="inline-flex items-center gap-1 rounded bg-whatsapp/10 px-1.5 py-0.5 text-[10px] font-medium text-whatsapp transition-colors hover:bg-whatsapp/20 disabled:opacity-60"
                   >
                     <UserPlus className="h-3 w-3" />
-                    {thisStarting
-                      ? "Abrindo…"
-                      : startChannels.length === 1
-                        ? "Novo atendimento"
-                        : `Novo · ${ch.provider === "META" ? "Meta" : "Evolution"}`}
+                    {thisStarting ? "Abrindo…" : `Novo · ${ch.provider === "META" ? "Meta" : "Evolution"}`}
                   </button>
                 );
               })
@@ -2145,12 +2234,13 @@ function StatusChip({ status }: { status: ConversationStatus }) {
 }
 
 function FilterSelect({
-  icon: Icon, value, onChange, options,
+  icon: Icon, value, onChange, options, emphasize,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   value: string;
   onChange: (v: string) => void;
   options: { v: string; l: string }[];
+  emphasize?: boolean;
 }) {
   return (
     <div className="relative">
@@ -2158,7 +2248,9 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none rounded-md border border-input bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-2 ring-ring"
+        className={`w-full appearance-none rounded-md border bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-2 ring-ring ${
+          emphasize ? "border-amber-400 ring-2 ring-amber-300" : "border-input"
+        }`}
       >
         {options.map((o) => (<option key={o.v} value={o.v}>{o.l}</option>))}
       </select>
@@ -2763,13 +2855,14 @@ function DocumentPreviewPanel({
 
 // ───────── Composer ─────────
 function ChatComposer({
-  value, onChange, onSend, onAttach, onInternalNote, disabled, onReopen,
+  value, onChange, onSend, onAttach, onInternalNote, onSendTemplate, disabled, onReopen,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
   onAttach: (type: "image" | "video" | "audio" | "document") => void;
   onInternalNote: () => void;
+  onSendTemplate?: () => void;
   disabled?: boolean;
   onReopen: () => void;
 }) {
@@ -2801,6 +2894,16 @@ function ChatComposer({
         <button onClick={onInternalNote} className="rounded-md p-2 text-internal hover:bg-internal/10" title="Nota interna">
           <StickyNote className="h-5 w-5" />
         </button>
+        {onSendTemplate && (
+          <button
+            type="button"
+            onClick={onSendTemplate}
+            className="rounded-md p-2 text-primary hover:bg-primary/10"
+            title="Enviar template"
+          >
+            <FileStack className="h-5 w-5" />
+          </button>
+        )}
         <button className="rounded-md p-2 text-muted-foreground hover:bg-muted" title="Emojis"><Smile className="h-5 w-5" /></button>
 
         <div ref={ref} className="relative">

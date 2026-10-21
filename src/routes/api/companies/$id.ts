@@ -5,7 +5,7 @@ import { getSessionUserId } from "@/lib/session.server";
 import { isPlatformRole } from "@/lib/platform-roles";
 
 async function getActor() {
-  const uid = await getSessionUserId();
+  const uid = getSessionUserId();
   if (!uid) return null;
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id, active

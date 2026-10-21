@@ -7,7 +7,7 @@ export const Route = createFileRoute("/api/plans")({
   server: {
     handlers: {
       GET: async () => {
-        const uid = await getSessionUserId();
+        const uid = getSessionUserId();
         if (!uid) return Response.json({ error: "unauthenticated" }, { status: 401 });
 
         const actor = await sql<{ role: string }[]>`

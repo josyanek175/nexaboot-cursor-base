@@ -2,6 +2,23 @@
  * Núcleo do poller do worker de campanhas (testável).
  */
 
+export function parseTruthyEnv(raw) {
+  if (raw == null) return null;
+  const v = String(raw).trim().toLowerCase();
+  if (!v) return null;
+  if (v === "true" || v === "1" || v === "yes") return true;
+  if (v === "false" || v === "0" || v === "no") return false;
+  return null;
+}
+
+/** Modo do worker. Ausente ou desconhecido → "http" (compatibilidade). */
+export function parseWorkerMode(env = process.env) {
+  const raw = (env.CAMPAIGN_WORKER_MODE ?? "").trim().toLowerCase();
+  if (raw === "direct") return "direct";
+  if (raw === "disabled") return "disabled";
+  return "http";
+}
+
 export function readWorkerConfig(env = process.env) {
   const appUrl = (env.APP_URL || "http://localhost:3000").replace(/\/+$/, "");
   const secret = env.CAMPAIGN_WORKER_SECRET || "";
@@ -10,6 +27,7 @@ export function readWorkerConfig(env = process.env) {
   );
   const timeoutMs = Number(env.CAMPAIGN_WORKER_TIMEOUT_MS || 60_000);
   const errorDelayMs = Number(env.CAMPAIGN_WORKER_ERROR_DELAY_MS || 10_000);
+  const enabledParsed = parseTruthyEnv(env.CAMPAIGN_WORKER_ENABLED);
 
   return {
     appUrl,
@@ -17,7 +35,27 @@ export function readWorkerConfig(env = process.env) {
     intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 5000,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 60_000,
     errorDelayMs: Number.isFinite(errorDelayMs) && errorDelayMs > 0 ? errorDelayMs : 10_000,
+    mode: parseWorkerMode(env),
+    enabled: enabledParsed === null ? true : enabledParsed,
   };
+}
+
+/**
+ * Decide se o poller HTTP legado deve rodar.
+ * Só roda em mode=http (ou ausente) e com CAMPAIGN_WORKER_ENABLED diferente de false.
+ */
+export function resolveLegacyWorkerGate(config) {
+  const mode = config?.mode ?? "http";
+  const enabled = config?.enabled !== false;
+
+  if (!enabled) return { run: false, mode, code: "worker_enabled_false" };
+  if (mode === "direct") return { run: false, mode, code: "worker_mode_direct" };
+  if (mode === "disabled") return { run: false, mode, code: "worker_disabled" };
+  return { run: true, mode, code: null };
+}
+
+export function shouldLegacyWorkerRun(env = process.env) {
+  return resolveLegacyWorkerGate(readWorkerConfig(env));
 }
 
 export function buildTickHeaders(secret) {
@@ -85,6 +123,18 @@ export async function runWorkerLoop(opts) {
   const log = opts.log ?? console.log;
   const logError = opts.logError ?? console.error;
   const shouldStop = opts.shouldStop ?? (() => false);
+
+  const gate = opts.gate ?? resolveLegacyWorkerGate(config);
+  if (!gate.run) {
+    log("[CAMPAIGN_WORKER_LEGACY_SKIPPED]", {
+      event: "campaign_worker_legacy_skipped",
+      timestamp: new Date().toISOString(),
+      mode: gate.mode,
+      code: gate.code,
+      message: "Poller HTTP legado inativo: nenhum tick sera enviado ao web.",
+    });
+    return { started: false, mode: gate.mode, code: gate.code };
+  }
 
   log("[CAMPAIGN_WORKER_STARTED]", {
     timestamp: new Date().toISOString(),
@@ -160,4 +210,6 @@ export async function runWorkerLoop(opts) {
     });
     await sleepFn(nextDelayMs);
   }
+
+  return { started: true, mode: gate.mode, code: null };
 }
