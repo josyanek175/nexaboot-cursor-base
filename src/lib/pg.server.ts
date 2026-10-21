@@ -1,4 +1,3 @@
-import { ATTENDANCE_LIFECYCLE_SCHEMA } from "@/lib/attendance-lifecycle-schema";
 // Conexão PostgreSQL externa via DATABASE_URL.
 // Usa postgres.js. Servidor-only.
 import postgres from "postgres";
@@ -661,7 +660,6 @@ export async function ensureCrmSchema() {
         -- Origem do nome: 'manual' (tela /contatos) nunca é sobrescrito pelo
         -- pushName do WhatsApp; 'whatsapp'/'auto' podem ser atualizados.
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS name_source TEXT;
-        ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS whatsapp_profile_name TEXT;
         -- Chave canônica de telefone (sem o nono dígito BR) usada para
         -- unicidade/deduplicação tolerante a variantes com/sem o 9.
         ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS phone_match TEXT;
@@ -738,7 +736,6 @@ export async function ensureCrmSchema() {
       // Consolida duplicadas que
       // sobraram após apontar os contatos ao principal. Não apaga nada.
       await ensureConversationsDedup(s);
-      await getSql().unsafe(ATTENDANCE_LIFECYCLE_SCHEMA);
 
       // Planos comerciais + assinaturas por empresa (fase 1 — sem enforcement).
       await ensurePlansSchema(s);

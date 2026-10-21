@@ -10,7 +10,6 @@ import {
   bumpConversationAfterBusinessAppEcho,
   type CrmSql,
 } from "@/lib/crm-inbound.server";
-import { ensureAttendanceLifecycleSchema } from "@/lib/attendance-jobs.server";
 
 type MessageInput = {
   companyId: string;
@@ -29,16 +28,11 @@ type MessageInput = {
 };
 /** Commit contact + cycle + message + automation work before any external send. */
 export async function commitMetaAttendanceMessage(input: MessageInput) {
-  const lifecycleAvailable = await ensureAttendanceLifecycleSchema();
   return getSql().begin(async (transaction) =>
-    persistMetaAttendanceMessage(transaction as unknown as CrmSql, input, lifecycleAvailable),
+    persistMetaAttendanceMessage(transaction as unknown as CrmSql, input),
   );
 }
-export async function persistMetaAttendanceMessage(
-  tx: CrmSql,
-  input: MessageInput,
-  lifecycleAvailable = true,
-) {
+export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInput) {
   // One lock even when the contact does not exist yet. Scope includes the tenant.
   await tx`SELECT pg_advisory_xact_lock(hashtextextended(${input.companyId + ":" + normalizePhoneForMatch(input.phone)}, 0))`;
   const contactId = await upsertInboundContact({
@@ -46,9 +40,7 @@ export async function persistMetaAttendanceMessage(
     companyId: input.companyId,
     phone: input.phone,
     externalJid: input.phone,
-    name: input.profileName ?? undefined,
     fromMe: !!input.echo,
-    persistProfile: lifecycleAvailable,
   });
   // Cross-cycle dedup: checking only (conversation_id, wamid) can reopen on replay.
   const duplicate = await tx<{ conversation_id: string }[]>`
@@ -60,14 +52,37 @@ export async function persistMetaAttendanceMessage(
   `;
   if (duplicate[0])
     return { contactId, conversationId: duplicate[0].conversation_id, messageId: null };
+  let restartCycle = false;
   const conversationId = await upsertInboundConversation({
     sql: tx,
     companyId: input.companyId,
     channelId: input.channelId,
     contactId,
-    newCycle: lifecycleAvailable,
+    newCycle: true,
+    onLegacyCycleReused: () => {
+      restartCycle = true;
+    },
     echo: input.echo,
   });
+  const sourceColumns = input.echo
+    ? await tx<{ present: boolean }[]>`SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'message_source'
+      ) AS present`
+    : [];
+  const storedPayload = {
+    ...(input.rawPayload as Record<string, unknown>),
+    ...(!input.echo
+      ? {
+          __nexaFlow: {
+            status: "pending",
+            isMedia: !!input.media,
+            restartCycle,
+            text: input.media ? (input.media.caption ?? "") : input.text,
+          },
+        }
+      : {}),
+  };
   const messageId = input.echo
     ? await insertWhatsappBusinessAppEcho({
         sql: tx,
@@ -75,12 +90,16 @@ export async function persistMetaAttendanceMessage(
         externalMessageId: input.externalMessageId,
         messageType: input.messageType ?? "text",
         messageText: input.text,
-        rawPayload: input.rawPayload,
-        persistSource: lifecycleAvailable,
+        rawPayload: {
+          ...storedPayload,
+          message_source: "whatsapp_business_app",
+        },
+        persistSource: sourceColumns[0]?.present ?? false,
       })
     : input.media
       ? await insertInboundMediaMessage({
           ...input.media,
+          rawPayload: storedPayload,
           sql: tx,
           conversationId,
           externalMessageId: input.externalMessageId,
@@ -90,7 +109,7 @@ export async function persistMetaAttendanceMessage(
           conversationId,
           externalMessageId: input.externalMessageId,
           messageText: input.text,
-          rawPayload: input.rawPayload,
+          rawPayload: storedPayload,
         });
   if (!messageId) return { contactId, conversationId, messageId: null };
   if (input.echo) {
@@ -105,12 +124,6 @@ export async function persistMetaAttendanceMessage(
       conversationId,
       lastMessageText: input.text,
     });
-    if (lifecycleAvailable)
-      await tx`INSERT INTO public.attendance_automation_jobs
-      (company_id, channel_id, conversation_id, contact_id, message_id, text, is_media)
-      VALUES (${input.companyId}::uuid, ${input.channelId}::uuid, ${conversationId}::uuid,
-        ${contactId}::uuid, ${messageId}::uuid, ${input.media ? (input.media.caption ?? "") : input.text}, ${!!input.media})
-      ON CONFLICT (message_id) DO NOTHING`;
   }
   return { contactId, conversationId, messageId };
 }

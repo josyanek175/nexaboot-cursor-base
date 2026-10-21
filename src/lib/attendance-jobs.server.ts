@@ -1,139 +1,79 @@
-import { ATTENDANCE_LIFECYCLE_SCHEMA } from "@/lib/attendance-lifecycle-schema";
+import { randomUUID } from "node:crypto";
 import { getSql } from "@/lib/pg.server";
 import { onAutomationInbound } from "@/lib/automation-flow.server";
 
-let ready: Promise<boolean> | null = null;
-let readyMode: string | undefined;
-let checkedAt = 0;
-let schemaAvailable = false;
-/** Missing optional schema must never stop the existing inbound path. */
-export function ensureAttendanceLifecycleSchema(): Promise<boolean> {
-  const mode = process.env.NODE_ENV;
-  if (readyMode !== mode || (!schemaAvailable && Date.now() - checkedAt > 15000)) ready = null;
-  if (!ready) {
-    readyMode = mode;
-    checkedAt = Date.now();
-    ready = (async () => {
-      if (mode === "production") {
-        // Read-only readiness check. Production DDL stays an explicit operation.
-        await getSql()`SELECT whatsapp_profile_name FROM public.contacts LIMIT 0`;
-        await getSql()`SELECT message_source FROM public.messages LIMIT 0`;
-        await getSql()`SELECT id, sequence_id, company_id, channel_id, conversation_id,
-          contact_id, message_id, text, is_media, status, attempts, available_at,
-          lease_until, claim_token, last_error FROM public.attendance_automation_jobs LIMIT 0`;
-      } else {
-        await getSql().unsafe(ATTENDANCE_LIFECYCLE_SCHEMA);
-      }
-      schemaAvailable = true;
-      return true;
-    })().catch((error: unknown) => {
-      schemaAvailable = false;
-      const code = (error as { code?: string })?.code;
-      if (code === "42703" || code === "42P01") {
-        console.error("[ATTENDANCE_SCHEMA_NOT_READY]", {
-          code,
-          mode: "legacy_inbound",
-          message:
-            "Receiving messages without the optional lifecycle schema. Apply the recovery migration to the application's database.",
-        });
-        return false;
-      }
-      ready = null;
-      throw error;
-    });
-  }
-  return ready;
-}
-
-type Job = {
+type Work = {
   id: string;
   company_id: string;
   channel_id: string;
   conversation_id: string;
   contact_id: string;
-  text: string;
-  is_media: boolean;
-  claim_token: string;
+  state: { text?: string; isMedia?: boolean; restartCycle?: boolean };
 };
 
-/** Claims in FIFO order per cycle. The transaction ends before Meta is called. */
-export async function drainAttendanceJobs(conversationId?: string, limit = 20): Promise<number> {
-  if (!(await ensureAttendanceLifecycleSchema())) return 0;
+/** Serializes flow execution using existing messages.raw_payload; no schema migration. */
+export async function drainAttendanceJobs(conversationId: string, limit = 100): Promise<number> {
   let processed = 0;
   for (let i = 0; i < limit; i++) {
+    const token = randomUUID();
     const rows = await getSql().begin(async (tx) => {
-      // Short global claim lock; it never spans an external send.
-      await tx`SELECT pg_advisory_xact_lock(7241093261::bigint)`;
-      return tx<Job[]>`
-        UPDATE public.attendance_automation_jobs j
-        SET status = 'processing', lease_until = now() + interval '5 minutes',
-            claim_token = gen_random_uuid(), attempts = attempts + 1
-        WHERE j.id = (
-          SELECT candidate.id FROM public.attendance_automation_jobs candidate
-          WHERE candidate.status <> 'processed' AND candidate.available_at <= now()
-            AND (candidate.status <> 'processing' OR candidate.lease_until < now())
-            AND (${conversationId ?? null}::uuid IS NULL OR candidate.conversation_id = ${conversationId ?? null}::uuid)
-            AND NOT EXISTS (
-              SELECT 1 FROM public.attendance_automation_jobs earlier
-              WHERE earlier.conversation_id = candidate.conversation_id AND earlier.status <> 'processed'
-                AND earlier.sequence_id < candidate.sequence_id
-            )
-          ORDER BY candidate.sequence_id LIMIT 1 FOR UPDATE SKIP LOCKED
-        ) RETURNING j.*
+      await tx`SELECT pg_advisory_xact_lock(hashtextextended(${"flow:" + conversationId}, 0))`;
+      // FIFO: a running or delayed retry prevents overtaking within this attendance.
+      const candidates = await tx<Work[]>`
+        SELECT m.id, c.company_id, c.whatsapp_channel_id AS channel_id,
+          m.conversation_id, c.contact_id, m.raw_payload->'__nexaFlow' AS state
+        FROM public.messages m JOIN public.conversations c ON c.id=m.conversation_id
+        WHERE m.conversation_id=${conversationId}::uuid AND m.direction='in'
+          AND m.raw_payload->'__nexaFlow'->>'status' IN ('pending','retry','processing')
+        ORDER BY m.created_at, m.id LIMIT 1 FOR UPDATE OF m
       `;
+      const work = candidates[0];
+      if (!work) return [];
+      const claimed = await tx<{ id: string }[]>`
+        UPDATE public.messages SET raw_payload=jsonb_set(raw_payload,'{__nexaFlow}',
+          (raw_payload->'__nexaFlow') || jsonb_build_object('status','processing','token',${token}::text,
+            'leaseUntil',now()+interval '2 minutes','attempts',COALESCE((raw_payload->'__nexaFlow'->>'attempts')::int,0)+1))
+        WHERE id=${work.id}::uuid
+          AND (COALESCE(raw_payload->'__nexaFlow'->>'status','') <> 'processing'
+               OR (raw_payload->'__nexaFlow'->>'leaseUntil')::timestamptz < now())
+          AND COALESCE((raw_payload->'__nexaFlow'->>'availableAt')::timestamptz,now()) <= now()
+        RETURNING id
+      `;
+      return claimed[0] ? [work] : [];
     });
-    const job = rows[0];
-    if (!job) break;
+    const work = rows[0];
+    if (!work) break;
     const heartbeat = setInterval(() => {
-      void getSql()`UPDATE public.attendance_automation_jobs SET lease_until = now() + interval '5 minutes'
-        WHERE id = ${job.id}::uuid AND claim_token = ${job.claim_token}::uuid AND status = 'processing'`.catch(
-        () => {},
-      );
-    }, 30000);
+      void getSql()`UPDATE public.messages SET raw_payload=jsonb_set(raw_payload,'{__nexaFlow,leaseUntil}',to_jsonb(now()+interval '2 minutes'))
+        WHERE id=${work.id}::uuid AND raw_payload->'__nexaFlow'->>'token'=${token}`.catch(() => {});
+    }, 15000);
     heartbeat.unref();
     try {
       await onAutomationInbound({
-        companyId: job.company_id,
-        channelId: job.channel_id,
-        conversationId: job.conversation_id,
-        contactId: job.contact_id,
-        text: job.text,
-        isMedia: job.is_media,
+        companyId: work.company_id,
+        channelId: work.channel_id,
+        conversationId: work.conversation_id,
+        contactId: work.contact_id,
+        inboundMessageId: work.id,
+        processingToken: token,
+        text: work.state.text ?? "",
+        isMedia: work.state.isMedia,
+        restartCycle: work.state.restartCycle,
         throwErrors: true,
       });
-      await getSql()`UPDATE public.attendance_automation_jobs SET status = 'processed', lease_until = NULL,
-        last_error = NULL WHERE id = ${job.id}::uuid AND claim_token = ${job.claim_token}::uuid`;
+      await getSql()`UPDATE public.messages SET raw_payload=jsonb_set(raw_payload,'{__nexaFlow}',
+        (raw_payload->'__nexaFlow') || jsonb_build_object('status','processed','processedAt',now()))
+        WHERE id=${work.id}::uuid AND raw_payload->'__nexaFlow'->>'token'=${token}`;
       processed++;
     } catch {
-      await getSql()`UPDATE public.attendance_automation_jobs SET status = 'retry',
-        lease_until = NULL, available_at = now() + interval '30 seconds', last_error = 'automation_processing_failed'
-        WHERE id = ${job.id}::uuid AND claim_token = ${job.claim_token}::uuid`;
+      await getSql()`UPDATE public.messages SET raw_payload=jsonb_set(raw_payload,'{__nexaFlow}',
+        (raw_payload->'__nexaFlow') || jsonb_build_object('status','retry','availableAt',now()+interval '10 seconds',
+          'error','automation_processing_failed'))
+        WHERE id=${work.id}::uuid AND raw_payload->'__nexaFlow'->>'token'=${token}`;
       break;
     } finally {
       clearInterval(heartbeat);
     }
   }
   return processed;
-}
-
-let pumpStarted = false;
-/** One bounded pump per web process; SQL claims coordinate replicas. */
-export function startAttendanceJobPump(): void {
-  if (pumpStarted) return;
-  pumpStarted = true;
-  let running = false;
-  const timer = setInterval(async () => {
-    if (running) return;
-    running = true;
-    try {
-      await drainAttendanceJobs(undefined, 20);
-    } catch {
-      console.error(
-        "[ATTENDANCE_JOB_PUMP_FAILED] Check lifecycle migration and database availability.",
-      );
-    } finally {
-      running = false;
-    }
-  }, 15000);
-  timer.unref();
 }

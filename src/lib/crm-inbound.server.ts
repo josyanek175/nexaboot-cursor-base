@@ -23,7 +23,6 @@ export async function upsertInboundContact(params: {
   externalJid: string;
   name?: string;
   fromMe?: boolean;
-  persistProfile?: boolean;
 }): Promise<string> {
   const { companyId, phone, externalJid, fromMe = false } = params;
   const name = fromMe ? null : validProfileName(params.name);
@@ -42,10 +41,6 @@ export async function upsertInboundContact(params: {
 
   if (existing[0]) {
     const c = existing[0];
-    if (name && params.persistProfile !== false) {
-      await s`UPDATE public.contacts SET whatsapp_profile_name = ${name}, updated_at = now()
-        WHERE id = ${c.id}::uuid AND whatsapp_profile_name IS DISTINCT FROM ${name}`;
-    }
     const cur = c.name;
     const isManual = c.name_source === "manual";
     const isPlaceholder = !cur || cur.trim() === "" || cur === phone;
@@ -67,21 +62,11 @@ export async function upsertInboundContact(params: {
   const nameSource = !fromMe && name && name.trim() ? "whatsapp" : "auto";
 
   try {
-    const inserted =
-      params.persistProfile === false
-        ? await s<{ id: string }[]>`
-          INSERT INTO public.contacts
-            (company_id, phone, phone_match, name, name_source, external_jid, contact_type)
-          VALUES (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
-          ON CONFLICT DO NOTHING RETURNING id
-        `
-        : await s<{ id: string }[]>`
+    const inserted = await s<{ id: string }[]>`
       INSERT INTO public.contacts
-        (company_id, phone, phone_match, name, name_source, external_jid, contact_type, whatsapp_profile_name)
-      VALUES
-        (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual', ${name})
-      ON CONFLICT DO NOTHING
-      RETURNING id
+        (company_id, phone, phone_match, name, name_source, external_jid, contact_type)
+      VALUES (${companyId}::uuid, ${phone}, ${phoneMatch}, ${finalName}, ${nameSource}, ${externalJid}, 'individual')
+      ON CONFLICT DO NOTHING RETURNING id
     `;
     if (inserted[0]) return inserted[0].id;
     const winner = await s<{ id: string }[]>`SELECT id FROM public.contacts
@@ -110,6 +95,7 @@ export async function upsertInboundConversation(params: {
   contactId: string;
   initialUnread?: number;
   newCycle?: boolean;
+  onLegacyCycleReused?: () => void;
   echo?: boolean;
 }): Promise<string> {
   if (!params.sql) {
@@ -147,6 +133,26 @@ export async function upsertInboundConversation(params: {
   const winner = await s<{ id: string }[]>`SELECT id FROM public.conversations
     WHERE company_id = ${companyId}::uuid AND whatsapp_channel_id = ${channelId}::uuid
       AND contact_id = ${contactId}::uuid AND status IN ('open', 'waiting') LIMIT 1`;
+  if (!winner[0] && params.newCycle && !params.echo) {
+    // Compatibility with a legacy full-tuple unique index: never lose inbound.
+    const closed = await s<{ id: string }[]>`SELECT id FROM public.conversations
+      WHERE company_id=${companyId}::uuid AND whatsapp_channel_id=${channelId}::uuid
+        AND contact_id=${contactId}::uuid AND status IN ('finished','closed','resolved')
+      ORDER BY last_message_at DESC NULLS LAST,created_at DESC LIMIT 1 FOR UPDATE`;
+    if (closed[0]) {
+      await s`UPDATE public.conversations SET status='open',updated_at=now() WHERE id=${closed[0].id}::uuid`;
+      const tables = await s<
+        { present: string | null }[]
+      >`SELECT to_regclass('public.automation_sessions')::text AS present`;
+      if (tables[0]?.present)
+        await s`UPDATE public.automation_sessions
+        SET status='ready',step_id=NULL,collected='{}'::jsonb,source='inbound',updated_at=now()
+        WHERE conversation_id=${closed[0].id}::uuid AND company_id=${companyId}::uuid`;
+      params.onLegacyCycleReused?.();
+      console.warn("[ATTENDANCE_LEGACY_CYCLE_REUSED]", { conversationId: closed[0].id });
+      return closed[0].id;
+    }
+  }
   if (!winner[0]) throw new Error("conversation_upsert_failed");
   return winner[0].id;
 }
@@ -167,7 +173,7 @@ export async function insertInboundTextMessage(params: {
       message_type, message_text, from_me, raw_payload, status
     ) VALUES (
       ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'in',
-      'text', ${messageText}, false, ${JSON.stringify(rawPayload)}::jsonb, 'received'
+      'text', ${messageText}, false, ${rawPayload}::jsonb, 'received'
     )
     ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
     DO NOTHING
@@ -214,7 +220,7 @@ export async function insertInboundMediaMessage(params: {
       media_base64, media_error, media_url, media_size
     ) VALUES (
       ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'in',
-      ${mediaType}, ${messageText}, false, ${JSON.stringify(rawPayload)}::jsonb, 'received',
+      ${mediaType}, ${messageText}, false, ${rawPayload}::jsonb, 'received',
       ${mediaType}, ${mimeType}, ${mimeType}, ${filename}, ${caption},
       ${mediaBase64}, ${mediaError}, ${null}, ${mediaSize}
     )

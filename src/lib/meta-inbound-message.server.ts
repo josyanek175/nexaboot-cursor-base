@@ -1,6 +1,5 @@
 // Persistência de mensagens inbound Meta WhatsApp Cloud API (texto + mídia).
 
-
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
 import { commitMetaAttendanceMessage } from "@/lib/attendance-inbound.server";
 import { drainAttendanceJobs } from "@/lib/attendance-jobs.server";
@@ -47,9 +46,16 @@ function enrichRawPayload(
 }
 
 /** Grava o que saiu do WhatsApp do celular. Não envia de novo. */
-export async function persistMetaSmbMessageEchoes(payload: unknown): Promise<MetaInboundPersistResult> {
+export async function persistMetaSmbMessageEchoes(
+  payload: unknown,
+): Promise<MetaInboundPersistResult> {
   const echoes = extractMetaSmbMessageEchoes(payload);
-  const result: MetaInboundPersistResult = { processed: echoes.length, saved: 0, skipped: 0, errors: 0 };
+  const result: MetaInboundPersistResult = {
+    processed: echoes.length,
+    saved: 0,
+    skipped: 0,
+    errors: 0,
+  };
   for (const echo of echoes) {
     try {
       const saved = await persistOneMetaSmbEcho(echo);
@@ -71,9 +77,14 @@ async function persistOneMetaSmbEcho(echo: MetaSmbEchoMessage): Promise<boolean>
   if (!channel?.companyId?.trim() || channel.companyId === "null") return false;
 
   const { messageId, conversationId } = await commitMetaAttendanceMessage({
-    companyId: channel.companyId, channelId: channel.id, phone: echo.customerPhone,
-    externalMessageId: echo.externalMessageId, text: echo.messageText ?? `[${echo.messageType}]`,
-    rawPayload: echo.rawPayload, messageType: echo.messageType, echo: true,
+    companyId: channel.companyId,
+    channelId: channel.id,
+    phone: echo.customerPhone,
+    externalMessageId: echo.externalMessageId,
+    text: echo.messageText ?? `[${echo.messageType}]`,
+    rawPayload: echo.rawPayload,
+    messageType: echo.messageType,
+    echo: true,
   });
   if (!messageId) return false;
   console.log("[META_SMB_ECHO_SAVED]", {
@@ -158,12 +169,20 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
   const resolution = messageRec ? resolveMetaInboundMessageText(messageRec) : null;
 
   const { contactId, conversationId, messageId } = await commitMetaAttendanceMessage({
-    companyId: channel.companyId, channelId: channel.id, phone: msg.phone,
-    profileName: msg.contactName, externalMessageId: msg.externalMessageId,
-    text: msg.textBody, rawPayload: msg.rawPayload,
+    companyId: channel.companyId,
+    channelId: channel.id,
+    phone: msg.phone,
+    profileName: msg.contactName,
+    externalMessageId: msg.externalMessageId,
+    text: msg.textBody,
+    rawPayload: msg.rawPayload,
   });
-  await drainAttendanceJobs(conversationId).catch(() => console.error("[ATTENDANCE_JOB_DEFERRED]"));
-  if (!messageId) return false;
+  if (!messageId) {
+    await drainAttendanceJobs(conversationId).catch(() =>
+      console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+    );
+    return false;
+  }
 
   let campaignId: string | undefined;
   try {
@@ -180,8 +199,12 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
     console.error("[CAMPAIGN_RESPONSE_HOOK_FAIL]", {
       externalMessageId: msg.externalMessageId,
       error: e instanceof Error ? e.message : String(e),
-    }    );
+    });
   }
+
+  await drainAttendanceJobs(conversationId).catch(() =>
+    console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+  );
 
   if (resolution?.usedFallback) {
     console.log("[META_WEBHOOK_REPLY_WITHOUT_TEXT]", {
@@ -272,8 +295,8 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
 
   const mimeType = download.ok
     ? download.mimeType
-    : msg.mimeHint ?? (msg.mediaType === "audio" ? "audio/ogg" : null);
-  const filename = download.ok ? download.filename ?? msg.filename : msg.filename;
+    : (msg.mimeHint ?? (msg.mediaType === "audio" ? "audio/ogg" : null));
+  const filename = download.ok ? (download.filename ?? msg.filename) : msg.filename;
   const mediaBase64 = download.ok ? download.base64 : null;
   const mediaError = download.ok ? null : download.error;
   const mediaSize = download.ok ? download.fileSize : null;
@@ -285,14 +308,31 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
   });
 
   const { conversationId, messageId } = await commitMetaAttendanceMessage({
-    companyId: channel.companyId, channelId: channel.id, phone: msg.phone,
-    profileName: msg.contactName, externalMessageId: msg.externalMessageId,
-    text: messageText, rawPayload,
-    media: { mediaType: msg.mediaType, messageText, caption: msg.caption, mimeType,
-      filename, mediaBase64, mediaError, mediaSize, rawPayload },
+    companyId: channel.companyId,
+    channelId: channel.id,
+    phone: msg.phone,
+    profileName: msg.contactName,
+    externalMessageId: msg.externalMessageId,
+    text: messageText,
+    rawPayload,
+    media: {
+      mediaType: msg.mediaType,
+      messageText,
+      caption: msg.caption,
+      mimeType,
+      filename,
+      mediaBase64,
+      mediaError,
+      mediaSize,
+      rawPayload,
+    },
   });
-  await drainAttendanceJobs(conversationId).catch(() => console.error("[ATTENDANCE_JOB_DEFERRED]"));
-  if (!messageId) return false;
+  if (!messageId) {
+    await drainAttendanceJobs(conversationId).catch(() =>
+      console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+    );
+    return false;
+  }
 
   try {
     await handleCampaignInboundReply({
@@ -311,6 +351,10 @@ async function persistOneMetaInboundMediaMessage(msg: MetaInboundMediaMessage): 
       error: e instanceof Error ? e.message : String(e),
     });
   }
+
+  await drainAttendanceJobs(conversationId).catch(() =>
+    console.error("[AUTOMATION_INBOUND_DEFERRED]"),
+  );
 
   console.log("[META_MEDIA_MESSAGE_SAVED]", {
     channelId: channel.id,

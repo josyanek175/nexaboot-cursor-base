@@ -21,6 +21,17 @@ import {
 } from "@/lib/automation-flow";
 
 const attendanceContext = new AsyncLocalStorage<boolean>();
+const inboundMessageContext = new AsyncLocalStorage<string>();
+const processingTokenContext = new AsyncLocalStorage<string>();
+
+async function assertFlowOwnership() {
+  const id = inboundMessageContext.getStore(),
+    token = processingTokenContext.getStore();
+  if (!id || !token) return;
+  const owned = await db()<{ id: string }[]>`SELECT id FROM public.messages WHERE id=${id}::uuid
+    AND raw_payload->'__nexaFlow'->>'token'=${token} AND raw_payload->'__nexaFlow'->>'status'='processing'`;
+  if (!owned[0]) throw new Error("automation_lease_lost");
+}
 
 function db() {
   return sql() as {
@@ -37,6 +48,12 @@ let schemaReady: Promise<void> | null = null;
 export function ensureAutomationSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
+      if (process.env.NODE_ENV === "production") {
+        await db()`SELECT id, definition FROM public.automation_flows LIMIT 0`;
+        await db()`SELECT flow_id, channel_id FROM public.automation_flow_channels LIMIT 0`;
+        await db()`SELECT conversation_id, collected FROM public.automation_sessions LIMIT 0`;
+        return;
+      }
       await db()`
         CREATE TABLE IF NOT EXISTS public.automation_flows (
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -101,7 +118,9 @@ export function ensureAutomationSchema(): Promise<void> {
   return schemaReady;
 }
 
-export async function requireAutomationActor(mode: "manage" | "reminders"): Promise<Actor | Response> {
+export async function requireAutomationActor(
+  mode: "manage" | "reminders",
+): Promise<Actor | Response> {
   const userId = getSessionUserId();
   if (!userId) return Response.json({ error: "unauthenticated" }, { status: 401 });
   const company = await requireCompanyId(userId);
@@ -126,23 +145,28 @@ type FlowRow = {
   channel_ids: string[];
 };
 
-function asDefinition(value: unknown, meta: { id?: string | null; name?: string | null } = {}): FlowDefinition {
+function asDefinition(
+  value: unknown,
+  meta: { id?: string | null; name?: string | null } = {},
+): FlowDefinition {
   return readStoredDefinition(value, meta);
 }
 
 export async function listAutomationFlows(companyId: string): Promise<FlowRow[]> {
   await ensureAutomationSchema();
-  const rows = await db()<{
-    id: string;
-    name: string;
-    kind: FlowKind;
-    status: FlowStatus;
-    definition: unknown;
-    dispatch_channel_id: string | null;
-    meta_template_name: string | null;
-    meta_template_language: string | null;
-    channel_ids: string[] | null;
-  }[]>`
+  const rows = await db()<
+    {
+      id: string;
+      name: string;
+      kind: FlowKind;
+      status: FlowStatus;
+      definition: unknown;
+      dispatch_channel_id: string | null;
+      meta_template_name: string | null;
+      meta_template_language: string | null;
+      channel_ids: string[] | null;
+    }[]
+  >`
     SELECT f.id, f.name, f.kind, f.status, f.definition, f.dispatch_channel_id,
            f.meta_template_name, f.meta_template_language,
            COALESCE(array_agg(c.channel_id) FILTER (WHERE c.channel_id IS NOT NULL), '{}') AS channel_ids
@@ -160,7 +184,9 @@ export async function listAutomationFlows(companyId: string): Promise<FlowRow[]>
 }
 
 export async function listCompanyChannels(companyId: string) {
-  const rows = await db()<{ id: string; name: string | null; channel_type: string | null; status: string | null }[]>`
+  const rows = await db()<
+    { id: string; name: string | null; channel_type: string | null; status: string | null }[]
+  >`
     SELECT id, name, channel_type, status
     FROM public.whatsapp_channels
     WHERE company_id = ${companyId}::uuid
@@ -184,31 +210,57 @@ export async function saveAutomationFlow(actor: Actor, body: unknown): Promise<R
   await ensureAutomationSchema();
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const id = typeof record.id === "string" && record.id ? record.id : null;
-  const name = String(record.name ?? "").trim().slice(0, 120);
+  const name = String(record.name ?? "")
+    .trim()
+    .slice(0, 120);
   const kind: FlowKind = record.kind === "sales" ? "sales" : "attendance";
-  const status: FlowStatus = record.status === "active" || record.status === "paused" ? record.status : "draft";
+  const status: FlowStatus =
+    record.status === "active" || record.status === "paused" ? record.status : "draft";
   const parsed = validateDefinition(record.definition);
-  if (!name) return Response.json({ error: "invalid_input", message: "Dê um nome ao fluxo." }, { status: 400 });
-  if (!parsed.ok) return Response.json({ error: "invalid_input", message: parsed.error }, { status: 400 });
-  const channelIds = Array.isArray(record.channelIds) ? record.channelIds.map(String).filter(Boolean) : [];
-  const dispatchChannelId = typeof record.dispatchChannelId === "string" ? record.dispatchChannelId : null;
-  const templateName = typeof record.metaTemplateName === "string" ? record.metaTemplateName.trim() : "";
-  const templateLanguage = typeof record.metaTemplateLanguage === "string" ? record.metaTemplateLanguage.trim() : "";
+  if (!name)
+    return Response.json(
+      { error: "invalid_input", message: "Dê um nome ao fluxo." },
+      { status: 400 },
+    );
+  if (!parsed.ok)
+    return Response.json({ error: "invalid_input", message: parsed.error }, { status: 400 });
+  const channelIds = Array.isArray(record.channelIds)
+    ? record.channelIds.map(String).filter(Boolean)
+    : [];
+  const dispatchChannelId =
+    typeof record.dispatchChannelId === "string" ? record.dispatchChannelId : null;
+  const templateName =
+    typeof record.metaTemplateName === "string" ? record.metaTemplateName.trim() : "";
+  const templateLanguage =
+    typeof record.metaTemplateLanguage === "string" ? record.metaTemplateLanguage.trim() : "";
   const takeChannels = record.takeChannels === true;
 
   if (status === "active" && kind === "attendance" && channelIds.length === 0) {
-    return Response.json({ error: "invalid_input", message: "Marque pelo menos um número para ativar o atendimento." }, { status: 400 });
+    return Response.json(
+      { error: "invalid_input", message: "Marque pelo menos um número para ativar o atendimento." },
+      { status: 400 },
+    );
   }
   if (status === "active" && kind === "sales") {
     if (!dispatchChannelId) {
-      return Response.json({ error: "invalid_input", message: "Escolha o número do disparo." }, { status: 400 });
+      return Response.json(
+        { error: "invalid_input", message: "Escolha o número do disparo." },
+        { status: 400 },
+      );
     }
     const channels = await listCompanyChannels(actor.companyId);
     const channel = channels.find((item) => item.id === dispatchChannelId);
-    if (!channel) return Response.json({ error: "invalid_input", message: "Número do disparo não encontrado." }, { status: 400 });
+    if (!channel)
+      return Response.json(
+        { error: "invalid_input", message: "Número do disparo não encontrado." },
+        { status: 400 },
+      );
     if (channel.channelType === "meta" && (!templateName || !templateLanguage)) {
       return Response.json(
-        { error: "invalid_input", message: "No número Meta, escolha uma mensagem de campanha já aprovada." },
+        {
+          error: "invalid_input",
+          message: "No número Meta, escolha uma mensagem de campanha já aprovada.",
+        },
         { status: 400 },
       );
     }
@@ -342,19 +394,21 @@ type SessionRow = {
 };
 
 async function loadContactVars(contactId: string, collected: Collected): Promise<FlowVars> {
-  const rows = await db()<{
-    name: string | null;
-    name_source: string | null;
-    whatsapp_profile_name: string | null;
-    phone: string | null;
-    reference: string | null;
-  }[]>`
+  const rows = await db()<
+    {
+      name: string | null;
+      name_source: string | null;
+      whatsapp_profile_name: string | null;
+      phone: string | null;
+      reference: string | null;
+    }[]
+  >`
     SELECT name, name_source, to_jsonb(ct)->>'whatsapp_profile_name' AS whatsapp_profile_name, phone, reference
     FROM public.contacts ct WHERE id = ${contactId}::uuid LIMIT 1
   `;
   const contact = rows[0];
   return {
-    nome: attendanceDisplayName(contact),
+    nome: attendanceContext.getStore() ? "" : attendanceDisplayName(contact),
     telefone: contact?.phone ?? "",
     endereco: collected.endereco || contact?.reference || "",
     prazo: collected.prazo ?? "",
@@ -362,9 +416,15 @@ async function loadContactVars(contactId: string, collected: Collected): Promise
   };
 }
 
-async function sendText(companyId: string, conversationId: string, text: string): Promise<boolean> {
+async function sendText(
+  companyId: string,
+  conversationId: string,
+  text: string,
+  stepId = "reply",
+): Promise<boolean> {
   const trimmed = text.trim();
   if (!trimmed) return false;
+  await assertFlowOwnership();
   if (attendanceContext.getStore()) {
     const allowed = await db()<{ id: string }[]>`SELECT c.id FROM public.conversations c
       WHERE c.id = ${conversationId}::uuid AND c.company_id = ${companyId}::uuid
@@ -373,7 +433,21 @@ async function sendText(companyId: string, conversationId: string, text: string)
           WHERE a.conversation_id = c.id AND a.active = true AND a.unassigned_at IS NULL) LIMIT 1`;
     if (!allowed[0]) throw new Error("automation_human_or_finished");
   }
-  const result = await sendConversationText({ companyId, conversationId, text: trimmed, sentByName: "Fluxo" });
+  const inboundId = inboundMessageContext.getStore();
+  const automationKey = inboundId ? `${inboundId}:${stepId}` : undefined;
+  if (automationKey) {
+    const sent = await db()<{ id: string }[]>`SELECT id FROM public.messages
+      WHERE conversation_id=${conversationId}::uuid AND direction='out' AND sent_by_name='Fluxo'
+        AND raw_payload->>'__nexaFlowSendKey'=${automationKey} LIMIT 1`;
+    if (sent[0]) return true;
+  }
+  const result = await sendConversationText({
+    companyId,
+    conversationId,
+    text: trimmed,
+    sentByName: "Fluxo",
+    automationKey,
+  });
   if (!result.ok) {
     console.error("[AUTOMATION_SEND_FAIL]", {
       companyId,
@@ -394,12 +468,21 @@ async function presentStep(params: {
   definition: FlowDefinition;
   stepId: string | null;
   collected: Collected;
-}): Promise<{ stepId: string | null; status: "waiting" | "transferred" | "ended"; collected: Collected }> {
+  session?: SessionRow;
+}): Promise<{
+  stepId: string | null;
+  status: "waiting" | "transferred" | "ended";
+  collected: Collected;
+}> {
   let current = stepById(params.definition, params.stepId);
   let hops = 0;
   let collected = { ...params.collected };
   while (current && hops < 8) {
     hops += 1;
+    if (current.type === "goto") {
+      current = stepById(params.definition, current.next);
+      continue;
+    }
     if (current.type === "condition") {
       const yes = replyMatches(collected.lastText ?? "", current.match);
       current = stepById(params.definition, yes ? current.yesNext : current.noNext);
@@ -407,25 +490,46 @@ async function presentStep(params: {
     }
     const vars = await loadContactVars(params.contactId, collected);
     const text = promptForStep(current, vars);
-    const sent = await sendText(params.companyId, params.conversationId, text);
+    const sent =
+      !text || (await sendText(params.companyId, params.conversationId, text, current.id));
     if (!sent) return { stepId: current.id, status: "ended", collected };
-    if (current.type === "transfer") return { stepId: current.id, status: "transferred", collected };
+    if (current.type === "message") {
+      current = stepById(params.definition, current.next);
+      if (params.session)
+        await saveSession(params.session, {
+          step_id: current?.id ?? null,
+          status: current ? "ready" : "ended",
+          collected,
+        });
+      continue;
+    }
+    if (current.type === "transfer")
+      return { stepId: current.id, status: "transferred", collected };
     if (current.type === "end") return { stepId: current.id, status: "ended", collected };
     return { stepId: current.id, status: "waiting", collected };
   }
+  if (current) throw new Error("automation_flow_hop_limit");
   return { stepId: null, status: "ended", collected };
 }
 
-async function saveSession(session: SessionRow, patch: Partial<SessionRow>) {
+async function saveSession(
+  session: SessionRow,
+  patch: Partial<SessionRow> & { stepId?: string | null },
+) {
+  await assertFlowOwnership();
   const next = { ...session, ...patch };
+  if ("stepId" in patch) next.step_id = patch.stepId ?? null;
   await db()`
     INSERT INTO public.automation_sessions (
       conversation_id, company_id, flow_id, contact_id, channel_id, step_id, status, collected, source
-    ) VALUES (
+    ) SELECT
       ${next.conversation_id}::uuid, ${next.company_id}::uuid, ${next.flow_id}::uuid,
       ${next.contact_id}::uuid, ${next.channel_id}::uuid, ${next.step_id},
-      ${next.status}, ${JSON.stringify(next.collected)}::jsonb, ${next.source}
-    )
+      ${next.status}, ${next.collected}::jsonb, ${next.source}
+    FROM public.conversations c
+    WHERE c.id=${next.conversation_id}::uuid AND c.company_id=${next.company_id}::uuid
+      AND (${!attendanceContext.getStore()} OR (c.status IN ('open','waiting')
+        AND NOT EXISTS(SELECT 1 FROM public.conversation_assignments a WHERE a.conversation_id=c.id AND a.active=true AND a.unassigned_at IS NULL)))
     ON CONFLICT (conversation_id) DO UPDATE SET
       flow_id = EXCLUDED.flow_id,
       step_id = EXCLUDED.step_id,
@@ -433,11 +537,19 @@ async function saveSession(session: SessionRow, patch: Partial<SessionRow>) {
       collected = EXCLUDED.collected,
       source = EXCLUDED.source,
       updated_at = now()
+    WHERE ${!attendanceContext.getStore()} OR public.automation_sessions.status NOT IN ('transferred','ended')
   `;
 }
 
-export async function onAutomationInbound(params: Parameters<typeof processAutomationInbound>[0]): Promise<void> {
-  return attendanceContext.run(true, () => processAutomationInbound(params));
+export async function onAutomationInbound(
+  params: Parameters<typeof processAutomationInbound>[0],
+): Promise<void> {
+  const process = () => attendanceContext.run(true, () => processAutomationInbound(params));
+  const run = () =>
+    params.processingToken
+      ? processingTokenContext.run(params.processingToken, process)
+      : process();
+  return params.inboundMessageId ? inboundMessageContext.run(params.inboundMessageId, run) : run();
 }
 
 async function processAutomationInbound(params: {
@@ -447,6 +559,9 @@ async function processAutomationInbound(params: {
   contactId: string;
   text: string;
   isMedia?: boolean;
+  restartCycle?: boolean;
+  inboundMessageId?: string;
+  processingToken?: string;
   throwErrors?: boolean;
 }): Promise<void> {
   try {
@@ -476,6 +591,21 @@ async function processAutomationInbound(params: {
       LIMIT 1
     `;
     const session = sessions[0];
+    if (session) {
+      if (typeof session.collected === "string") {
+        try {
+          session.collected = JSON.parse(session.collected);
+        } catch {
+          session.collected = {};
+        }
+      }
+      if (
+        !session.collected ||
+        typeof session.collected !== "object" ||
+        Array.isArray(session.collected)
+      )
+        session.collected = {};
+    }
     if (session?.status === "transferred" || session?.status === "ended") return;
     if (session?.status === "waiting") {
       if (text && !params.isMedia) await answerWaitingSession(session, text);
@@ -493,7 +623,10 @@ async function processAutomationInbound(params: {
     `;
     const flow = flows[0];
     if (!flow) {
-      console.error("[AUTOMATION_NO_FLOW]", { companyId: params.companyId, channelId: params.channelId });
+      console.error("[AUTOMATION_NO_FLOW]", {
+        companyId: params.companyId,
+        channelId: params.channelId,
+      });
       return;
     }
     const definition = asDefinition(flow.definition);
@@ -512,7 +645,7 @@ async function processAutomationInbound(params: {
     const greetingSent = !!greeting[0];
 
     // Existing outbound flow messages protect legacy conversations without a session.
-    if (greetingSent) return;
+    if (greetingSent && !session && !params.restartCycle) return;
 
     const created: SessionRow = {
       conversation_id: params.conversationId,
@@ -520,18 +653,21 @@ async function processAutomationInbound(params: {
       flow_id: flow.id,
       contact_id: params.contactId,
       channel_id: params.channelId,
-      step_id: definition.entryStepId,
-      status: "waiting",
-      collected: {},
+      step_id:
+        session?.status === "ready" && session.step_id ? session.step_id : definition.entryStepId,
+      status: "ready",
+      collected: session?.status === "ready" ? session.collected : { lastText: text },
       source: "inbound",
     };
+    await saveSession(created, {});
     const presented = await presentStep({
       companyId: params.companyId,
       conversationId: params.conversationId,
       contactId: params.contactId,
       definition,
-      stepId: definition.entryStepId,
-      collected: {},
+      stepId: created.step_id,
+      collected: created.collected,
+      session: created,
     });
     await saveSession(created, presented);
     if (!greetingSent) {
@@ -543,7 +679,8 @@ async function processAutomationInbound(params: {
         LIMIT 1
       `;
       if (!sentNow[0]) {
-        const note = "A saudação automática não foi enviada. Confira se o fluxo de atendimento está ativo neste ramal.";
+        const note =
+          "A saudação automática não foi enviada. Confira se o fluxo de atendimento está ativo neste ramal.";
         await db()`
           INSERT INTO public.messages (
             conversation_id, direction, message_type, message_text, from_me, status
@@ -591,6 +728,7 @@ async function answerWaitingSession(session: SessionRow, text: string) {
         session.company_id,
         session.conversation_id,
         `Toque em uma das opções.\n${promptForStep(step, vars)}`,
+        step.id + ":options",
       );
       return;
     }
@@ -615,6 +753,7 @@ async function answerWaitingSession(session: SessionRow, text: string) {
       definition,
       stepId: hit.next,
       collected,
+      session,
     });
     await saveSession(session, presented);
     return;
@@ -632,12 +771,16 @@ async function answerWaitingSession(session: SessionRow, text: string) {
       definition,
       stepId: step.next,
       collected,
+      session,
     });
     await saveSession(session, presented);
   }
 }
 
-export async function stopAutomationForConversation(conversationId: string, companyId: string): Promise<void> {
+export async function stopAutomationForConversation(
+  conversationId: string,
+  companyId: string,
+): Promise<void> {
   try {
     await ensureAutomationSchema();
     await db()`
@@ -645,18 +788,25 @@ export async function stopAutomationForConversation(conversationId: string, comp
       SET status = 'transferred', updated_at = now()
       WHERE conversation_id = ${conversationId}::uuid
         AND company_id = ${companyId}::uuid
-        AND status = 'waiting'
+        AND status IN ('waiting','ready')
     `;
   } catch (error) {
     console.error("[AUTOMATION_STOP]", error instanceof Error ? error.message : error);
   }
 }
 
-export async function dispatchAutomationFlow(actor: Actor, flowId: string, contactIds: string[]): Promise<Response> {
+export async function dispatchAutomationFlow(
+  actor: Actor,
+  flowId: string,
+  contactIds: string[],
+): Promise<Response> {
   await ensureAutomationSchema();
   const unique = [...new Set(contactIds)].slice(0, 30);
   if (unique.length === 0) {
-    return Response.json({ error: "invalid_input", message: "Escolha pelo menos um contato." }, { status: 400 });
+    return Response.json(
+      { error: "invalid_input", message: "Escolha pelo menos um contato." },
+      { status: 400 },
+    );
   }
   const flows = await db()<FlowRow[]>`
     SELECT id, name, kind, status, definition, dispatch_channel_id, meta_template_name, meta_template_language,
@@ -667,12 +817,19 @@ export async function dispatchAutomationFlow(actor: Actor, flowId: string, conta
   `;
   const flow = flows[0];
   if (!flow || flow.status !== "active" || !flow.dispatch_channel_id) {
-    return Response.json({ error: "invalid_input", message: "Ative o fluxo de vendas e escolha o número." }, { status: 400 });
+    return Response.json(
+      { error: "invalid_input", message: "Ative o fluxo de vendas e escolha o número." },
+      { status: 400 },
+    );
   }
   const definition = asDefinition(flow.definition);
   const channels = await listCompanyChannels(actor.companyId);
   const channel = channels.find((item) => item.id === flow.dispatch_channel_id);
-  if (!channel) return Response.json({ error: "invalid_input", message: "Número do disparo não encontrado." }, { status: 400 });
+  if (!channel)
+    return Response.json(
+      { error: "invalid_input", message: "Número do disparo não encontrado." },
+      { status: 400 },
+    );
 
   let sent = 0;
   const errors: string[] = [];
@@ -809,21 +966,23 @@ export async function dismissAutomationReminder(actor: Actor, id: string) {
 
 export async function resendAutomationReminder(actor: Actor, id: string) {
   await ensureAutomationSchema();
-  const rows = await db()<{
-    id: string;
-    flow_id: string;
-    contact_id: string;
-    channel_id: string;
-    conversation_id: string | null;
-    kind: FlowKind;
-    definition: unknown;
-    dispatch_channel_id: string | null;
-    meta_template_name: string | null;
-    meta_template_language: string | null;
-    phone: string | null;
-    name: string | null;
-    channel_type: string | null;
-  }[]>`
+  const rows = await db()<
+    {
+      id: string;
+      flow_id: string;
+      contact_id: string;
+      channel_id: string;
+      conversation_id: string | null;
+      kind: FlowKind;
+      definition: unknown;
+      dispatch_channel_id: string | null;
+      meta_template_name: string | null;
+      meta_template_language: string | null;
+      phone: string | null;
+      name: string | null;
+      channel_type: string | null;
+    }[]
+  >`
     SELECT r.id, r.flow_id, r.contact_id, r.channel_id, r.conversation_id,
            f.kind, f.definition, f.dispatch_channel_id, f.meta_template_name, f.meta_template_language,
            ct.phone, ct.name, ch.channel_type
@@ -836,15 +995,21 @@ export async function resendAutomationReminder(actor: Actor, id: string) {
   `;
   const row = rows[0];
   if (!row?.phone) return Response.json({ error: "not_found" }, { status: 404 });
-  const channelId = row.kind === "sales" ? row.dispatch_channel_id ?? row.channel_id : row.channel_id;
-  const conversationId = row.conversation_id ?? await upsertInboundConversation({
-    companyId: actor.companyId,
-    channelId,
-    contactId: row.contact_id,
-    initialUnread: 0,
-  });
+  const channelId =
+    row.kind === "sales" ? (row.dispatch_channel_id ?? row.channel_id) : row.channel_id;
+  const conversationId =
+    row.conversation_id ??
+    (await upsertInboundConversation({
+      companyId: actor.companyId,
+      channelId,
+      contactId: row.contact_id,
+      initialUnread: 0,
+    }));
   const definition = asDefinition(row.definition);
-  const isMeta = String(row.channel_type ?? "").toLowerCase() === "meta" && row.kind === "sales" && row.meta_template_name;
+  const isMeta =
+    String(row.channel_type ?? "").toLowerCase() === "meta" &&
+    row.kind === "sales" &&
+    row.meta_template_name;
   if (isMeta) {
     const sent = await sendMetaTemplateMessage({
       companyId: actor.companyId,
@@ -855,7 +1020,10 @@ export async function resendAutomationReminder(actor: Actor, id: string) {
       bodyParameters: [],
     });
     if (!sent.ok) {
-      return Response.json({ error: "send_failed", message: "Não foi possível reenviar a mensagem aprovada." }, { status: 502 });
+      return Response.json(
+        { error: "send_failed", message: "Não foi possível reenviar a mensagem aprovada." },
+        { status: 502 },
+      );
     }
   } else {
     const vars = await loadContactVars(row.contact_id, {});
@@ -881,11 +1049,13 @@ export async function resendAutomationReminder(actor: Actor, id: string) {
 }
 
 export async function listApprovedTemplates(companyId: string, channelId: string) {
-  const rows = await db()<{
-    template_name: string;
-    language_code: string;
-    components: unknown;
-  }[]>`
+  const rows = await db()<
+    {
+      template_name: string;
+      language_code: string;
+      components: unknown;
+    }[]
+  >`
     SELECT template_name, language_code, components
     FROM public.meta_message_templates
     WHERE company_id = ${companyId}::uuid
@@ -910,6 +1080,11 @@ export async function listApprovedTemplates(companyId: string, channelId: string
       created_at: "",
       updated_at: "",
     });
-    return { name: row.template_name, language: row.language_code, bodyText: view.bodyText, buttons: view.buttons };
+    return {
+      name: row.template_name,
+      language: row.language_code,
+      bodyText: view.bodyText,
+      buttons: view.buttons,
+    };
   });
 }
