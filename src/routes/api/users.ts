@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
+import { canAssignUserRole } from "@/lib/user-management-policy";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 
-const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI"]);
+const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI", "SUPER_ADMIN"]);
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(120),
@@ -23,7 +24,7 @@ async function getActor() {
   if (!uid) return null;
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id, active
-    FROM public.users WHERE id = ${uid}
+    FROM public.users WHERE active = true AND id = ${uid}
   `;
   return rows[0] ?? null;
 }
@@ -69,6 +70,9 @@ export const Route = createFileRoute("/api/users")({
             { status: 400 },
           );
         }
+
+        if (!canAssignUserRole(String(actor.role), parsed.data.role))
+          return Response.json({ error: "forbidden_role", message: "Sua conta não pode conceder este perfil." }, { status: 403 });
 
         const email = parsed.data.email.toLowerCase();
         // Empresa do novo usuário é SEMPRE a do administrador logado.

@@ -10,7 +10,7 @@ async function getActor() {
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id, active
     FROM public.users
-    WHERE id = ${uid}::uuid
+    WHERE id = ${uid}::uuid AND active = true
     LIMIT 1
   `;
   return rows[0] ?? null;

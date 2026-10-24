@@ -97,7 +97,7 @@ const nav: NavItem[] = [
   { to: "/gerencial", label: "Gerencial", icon: ChartColumn, gerencialOnly: true },
   { to: "/fluxos", label: "Fluxos", icon: Waypoints, flows: true },
   { to: "/lembretes", label: "Lembretes", icon: Bell, reminders: true },
-  { to: "/empresas", label: "Empresas", icon: Building2 },
+  { to: "/empresas", label: "Administração", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/canais", label: "Canais WhatsApp", icon: Smartphone },
   { to: "/automacoes", label: "Automações N8N", icon: Workflow },

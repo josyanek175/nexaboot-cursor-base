@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/plans")({
         if (!uid) return Response.json({ error: "unauthenticated" }, { status: 401 });
 
         const actor = await sql<{ role: string }[]>`
-          SELECT role FROM public.users WHERE id = ${uid}::uuid LIMIT 1
+          SELECT role FROM public.users WHERE id = ${uid}::uuid AND active = true LIMIT 1
         `;
         if (!actor[0]) return Response.json({ error: "unauthenticated" }, { status: 401 });
         if (!isPlatformRole(String(actor[0].role))) {
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/plans")({
         }
 
         const plans = await sql`
-          SELECT id, code, name, max_whatsapp_channels, active
+          SELECT id, code, name, max_whatsapp_channels, max_users, active
           FROM public.plans
           WHERE active = true
           ORDER BY max_whatsapp_channels ASC
