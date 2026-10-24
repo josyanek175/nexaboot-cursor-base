@@ -55,6 +55,7 @@ import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
 import { Route as ApiMessagesSendTemplateRouteImport } from './routes/api/messages/send-template'
 import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
 import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
+import { Route as ApiInternalPortalRouteImport } from './routes/api/internal/portal'
 import { Route as ApiInternalDbPoolStatusRouteImport } from './routes/api/internal/db-pool-status'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
 import { Route as ApiInternalChatUnreadCountRouteImport } from './routes/api/internal-chat/unread-count'
@@ -374,6 +375,11 @@ const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
   id: '/send',
   path: '/send',
   getParentRoute: () => ApiMessagesRoute,
+} as any)
+const ApiInternalPortalRoute = ApiInternalPortalRouteImport.update({
+  id: '/api/internal/portal',
+  path: '/api/internal/portal',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInternalDbPoolStatusRoute = ApiInternalDbPoolStatusRouteImport.update({
   id: '/api/internal/db-pool-status',
@@ -944,6 +950,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
+  '/api/internal/portal': typeof ApiInternalPortalRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1079,6 +1086,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
+  '/api/internal/portal': typeof ApiInternalPortalRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1218,6 +1226,7 @@ export interface FileRoutesById {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
+  '/api/internal/portal': typeof ApiInternalPortalRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1357,6 +1366,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
+    | '/api/internal/portal'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1492,6 +1502,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
+    | '/api/internal/portal'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1630,6 +1641,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
+    | '/api/internal/portal'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1731,6 +1743,7 @@ export interface RootRouteChildren {
   ApiInternalChatUnreadCountRoute: typeof ApiInternalChatUnreadCountRoute
   ApiInternalChatUsersRoute: typeof ApiInternalChatUsersRoute
   ApiInternalDbPoolStatusRoute: typeof ApiInternalDbPoolStatusRoute
+  ApiInternalPortalRoute: typeof ApiInternalPortalRoute
   ApiMetaChannelsRoute: typeof ApiMetaChannelsRouteWithChildren
   ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
   ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRouteWithChildren
@@ -2067,6 +2080,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/messages/send'
       preLoaderRoute: typeof ApiMessagesSendRouteImport
       parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/internal/portal': {
+      id: '/api/internal/portal'
+      path: '/api/internal/portal'
+      fullPath: '/api/internal/portal'
+      preLoaderRoute: typeof ApiInternalPortalRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/internal/db-pool-status': {
       id: '/api/internal/db-pool-status'
@@ -3135,6 +3155,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalChatUnreadCountRoute: ApiInternalChatUnreadCountRoute,
   ApiInternalChatUsersRoute: ApiInternalChatUsersRoute,
   ApiInternalDbPoolStatusRoute: ApiInternalDbPoolStatusRoute,
+  ApiInternalPortalRoute: ApiInternalPortalRoute,
   ApiMetaChannelsRoute: ApiMetaChannelsRouteWithChildren,
   ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
   ApiWebhooksMetaRoute: ApiWebhooksMetaRouteWithChildren,

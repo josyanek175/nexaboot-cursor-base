@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { canCreateTenant, canSuspendTenant, isPlatformRole } from "@/lib/permissions";
 import { pushAudit } from "@/lib/audit-log";
-import { CompanyAdminOverview } from "@/components/company-admin-overview";
 
 type CompanyRow = {
   id: string;
@@ -295,7 +294,7 @@ function EmpresasPage() {
         <div className="flex items-center gap-3">
           <Building2 className="h-5 w-5 text-whatsapp" />
           <div>
-            <h1 className="text-lg font-semibold">Portal de Administração</h1>
+            <h1 className="text-lg font-semibold">Empresas</h1>
             <p className="text-xs text-muted-foreground">
               {isPlatformView
                 ? "Empresas, funcionários e planos contratados"
@@ -320,7 +319,6 @@ function EmpresasPage() {
       )}
 
       <div className="flex-1 overflow-auto p-6">
-        {!loading && !error && <CompanyAdminOverview companies={items} plans={plans} platform={isPlatformView} reload={reload} />}
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando empresas…

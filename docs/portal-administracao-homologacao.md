@@ -1,6 +1,6 @@
 # Portal de Administração — primeira entrega
 
-Entrada: menu **Administração**, caminho `/empresas`.
+Esta foi a primeira entrega dentro do produto. A administração global agora está no **Portal Nexa**, módulo `/nexaboot`. Consulte `portal-nexa-integracao.md` para a configuração atual. A tela `/empresas` do produto permanece disponível conforme as permissões existentes.
 
 ## Disponível
 
