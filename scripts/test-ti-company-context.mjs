@@ -173,7 +173,7 @@ selected = a;
 let writes = 0;
 const userDb = async (strings, ...values) => {
   const query = strings.join("?");
-  if (query.includes("WHERE active = true")) return [{ id: uid, role, company_id: null }];
+  if (query.includes("SELECT id, email, name, role")) return [{ id: uid, role, company_id: null }];
   assert.ok(query.includes("company_id ="), "Every target read/write must have a company scope");
   const scopedCompany = values.at(-1);
   if (query.includes("UPDATE")) {
@@ -183,13 +183,11 @@ const userDb = async (strings, ...values) => {
   }
   return scopedCompany === b ? [{ id: a, role: "ATENDENTE" }] : [];
 };
-const policy = load("src/lib/user-management-policy.ts", { "./platform-roles": platform });
 const userHandlers = load("src/routes/api/users/$id.ts", {
   "@tanstack/react-router": { createFileRoute: () => (config) => config },
-  "@/lib/pg.server": { getSql: () => userDb },
+  "@/lib/pg.server": { sql: () => userDb, getSql: () => userDb },
   "@/lib/session.server": { getSessionUserId: () => uid },
   "@/lib/company.server": company,
-  "@/lib/user-management-policy": policy,
 }).Route.server.handlers;
 const reset = () =>
   userHandlers.PUT({

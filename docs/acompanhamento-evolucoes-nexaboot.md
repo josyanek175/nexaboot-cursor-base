@@ -21,6 +21,12 @@ Os testes não acessam banco real nem enviam mensagens.
 Compilação aprovada. A checagem global de tipos ainda apresenta erros já
 existentes na base, incluindo tipos das consultas SQL e uma ação de auditoria.
 
+Publicação isolada na main autorizada em 24/10/2026: somente correção TI e
+ajuste da transação de criação de empresa. A integração com o Portal Nexa e
+as demais evoluções da DEV não fazem parte desta publicação. Base anterior
+da main: `2fc8dcd17aebfd4c466567721deafad09ed93edb`.
+Aplicação pelo serviço web que utiliza a main; sem nova migração de banco.
+
 Validação pendente: homologar com login TI, criação de empresa e administrador,
 troca entre empresas, gestão de usuários, reset administrativo de senha e canais
 Meta. Confirmar separação do banco DEV antes de criar dados de teste.

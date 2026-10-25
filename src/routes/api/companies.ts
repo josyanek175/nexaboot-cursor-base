@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { sql } from "@/lib/pg.server";
+import { sql, getSql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
@@ -13,7 +13,7 @@ async function getActor() {
   const rows = await sql()`
     SELECT id, email, name, role, tenant_id, company_id, active
     FROM public.users
-    WHERE id = ${uid}::uuid
+    WHERE id = ${uid}::uuid AND active = true
     LIMIT 1
   `;
   return rows[0] ?? null;
@@ -102,7 +102,7 @@ export const Route = createFileRoute("/api/companies")({
         const hash = await bcrypt.hash(admin.password, 10);
 
         try {
-          const result = await sql.begin(async (tx) => {
+          const result = await getSql().begin(async (tx) => {
             const companies = await tx<{ id: string; name: string; active: boolean; created_at: string; updated_at: string }[]>`
               INSERT INTO public.companies (name, active)
               VALUES (${name}, ${active ?? true})
