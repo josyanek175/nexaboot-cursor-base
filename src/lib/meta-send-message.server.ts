@@ -1,6 +1,7 @@
 // Envio manual de texto outbound Meta WhatsApp Cloud API.
 
 import { sql } from "@/lib/pg.server";
+import { metaTextPayload, type ReplyButton } from "@/lib/meta-reply-buttons";
 import type { PgSql } from "@/lib/pg-types";
 import {
   bumpConversationAfterOutboundMessage,
@@ -249,6 +250,7 @@ export async function sendMetaManualText(params: {
   sentByUserId?: string | null;
   sentByName?: string | null;
   automationKey?: string;
+  replyButtons?: ReplyButton[];
 }): Promise<MetaManualSendResult> {
   const { companyId, conversationId, text, sentByUserId, sentByName } = params;
   const s = sql();
@@ -383,7 +385,7 @@ export async function sendMetaManualText(params: {
     });
   }
 
-  const sendResult = await resolved.provider.sendText(channel, phone, text);
+  const sendResult = await resolved.provider.sendText(channel, phone, text, params.replyButtons);
   if (!sendResult.ok) {
     const errorCode = sendResult.errorCode ?? sendResult.error ?? "meta_send_failed";
     const errorMessage = sendResult.errorMessage ?? sendResult.error ?? "meta_send_failed";
@@ -403,8 +405,7 @@ export async function sendMetaManualText(params: {
   const rawPayload = sanitizeMetaWebhookPayload({
     messaging_product: "whatsapp",
     to: phone,
-    type: "text",
-    text: { preview_url: false, body: text },
+    ...metaTextPayload(text, params.replyButtons),
     ...(params.automationKey ? { __nexaFlowSendKey: params.automationKey } : {}),
     meta_message_id: sendResult.providerMessageId ?? null,
   }) as Record<string, unknown>;

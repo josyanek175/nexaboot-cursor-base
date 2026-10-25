@@ -6,9 +6,9 @@ import {
   bootstrapDatabaseSchema,
   isDatabaseSchemaBootstrapEnabled,
   PG_POOL_MAX,
-  sql,
+  getSql,
 } from "./lib/pg.server";
-import { buildClearSetCookie, verifySessionToken } from "./lib/session.server";
+import { buildClearSetCookie, verifySessionToken, sessionPredatesPasswordChange } from "./lib/session.server";
 import { accessAllowedNow } from "./lib/access-hours.server";
 import {
   ACCESS_OUTSIDE_ALLOWED_HOURS,
@@ -133,6 +133,7 @@ async function attendantAccessHoursResponse(request: Request): Promise<Response 
   if (!path.startsWith("/api/")) return null;
   if (
     path.startsWith("/api/auth/login") ||
+    path.startsWith("/api/auth/password-recovery") ||
     path.startsWith("/api/health") ||
     path.startsWith("/api/webhooks") ||
     path.startsWith("/api/public")
@@ -142,9 +143,14 @@ async function attendantAccessHoursResponse(request: Request): Promise<Response 
   const userId = readSessionUserId(request);
   if (!userId) return null;
   try {
-    const users = await sql<{ role: string | null; company_id: string | null }[]>`
-      SELECT role, company_id FROM public.users WHERE id = ${userId}::uuid AND active = true LIMIT 1
+    const users = await getSql()<{ role: string | null; company_id: string | null; password_changed_at:string|null }[]>`
+      SELECT role, company_id, to_jsonb(u)->>'password_changed_at' AS password_changed_at
+      FROM public.users u WHERE id = ${userId}::uuid AND active = true LIMIT 1
     `;
+    const rawToken=request.headers.get('cookie')?.match(/(?:^|;\s*)nexa_session=([^;]+)/)?.[1];
+    if(!users[0] || (rawToken&&sessionPredatesPasswordChange(decodeURIComponent(rawToken),users[0].password_changed_at))){
+      return Response.json({error:'session_expired',message:'Entre novamente após a alteração da senha.'},{status:401,headers:{'Set-Cookie':buildClearSetCookie(),'Cache-Control':'private, no-store'}});
+    }
     const role = String(users[0]?.role ?? "").toUpperCase();
     if (role !== "ATENDENTE") return null;
     const hours = await accessAllowedNow({

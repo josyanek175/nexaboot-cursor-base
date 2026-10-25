@@ -84,7 +84,7 @@ function CanaisPage() {
             }
           : c;
       });
-      setChannels(merged);
+      setChannels(merged.filter((c: Channel) => c.channel_type?.toLowerCase() === "meta"));
       setEvolutionConfigured(data.evolutionConfigured ?? false);
     } catch (e) {
       toast.error(`Falha ao carregar canais: ${e instanceof Error ? e.message : "erro"}`);
@@ -189,7 +189,7 @@ function CanaisPage() {
           <div>
             <h1 className="text-lg font-semibold">Canais WhatsApp</h1>
             <p className="text-xs text-muted-foreground">
-              {channels.length} canal(is) · Evolution API e Meta Cloud API
+              {channels.length} canal(is) · Meta WhatsApp
             </p>
           </div>
         </div>
@@ -203,12 +203,6 @@ function CanaisPage() {
             </button>
           )}
           <button
-            onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" /> Adicionar Evolution
-          </button>
-          <button
             onClick={() => setShowAddMeta(true)}
             className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
           >
@@ -217,7 +211,7 @@ function CanaisPage() {
         </div>
       </header>
 
-      {!evolutionConfigured && (
+      {false && !evolutionConfigured && (
         <div className="flex items-center gap-2 border-b border-amber-300 bg-amber-50 px-6 py-2 text-xs text-amber-800">
           <ShieldAlert className="h-3.5 w-3.5" />
           Evolution não configurada. Defina EVOLUTION_API_URL e EVOLUTION_API_KEY no servidor para criar instâncias e gerar QR Code.
@@ -317,7 +311,7 @@ function CanaisPage() {
             })}
             {channels.length === 0 && (
               <div className="col-span-full rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                Nenhum canal cadastrado. Clique em “Adicionar Evolution” ou “Adicionar Meta” para começar.
+                Nenhum canal cadastrado. Clique em “Adicionar Meta” para começar.
               </div>
             )}
           </div>

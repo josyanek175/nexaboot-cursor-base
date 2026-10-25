@@ -28,8 +28,10 @@ export async function sendConversationText(params: {
   sentByUserId?: string | null;
   sentByName?: string | null;
   automationKey?: string;
+  replyButtons?: import("@/lib/meta-reply-buttons").ReplyButton[];
 }): Promise<SendConversationTextResult> {
-  const { companyId, conversationId, text, sentByUserId, sentByName } = params;
+  const { companyId, conversationId, sentByUserId, sentByName } = params;
+  let text=params.text;
 
   console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId });
   const s = sql();
@@ -82,6 +84,7 @@ export async function sendConversationText(params: {
       sentByUserId,
       sentByName,
       automationKey: params.automationKey,
+      replyButtons: params.replyButtons,
     });
     if (!result.ok) {
       return {
@@ -94,6 +97,7 @@ export async function sendConversationText(params: {
     return { ok: true, provider: "meta", message: result.message };
   }
 
+  if(params.replyButtons?.length)text += '\n'+params.replyButtons.map((b,i)=>`${i+1}. ${b.label}`).join('\n');
   const apiUrl = process.env.EVOLUTION_API_URL;
   const apiKey = process.env.EVOLUTION_API_KEY;
   const instance = conv.evolution_instance_name || process.env.EVOLUTION_INSTANCE_NAME;

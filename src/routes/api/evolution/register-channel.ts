@@ -11,7 +11,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
-import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelManager as requireCompanyId } from "@/lib/channel-permissions.server";
 
 const Body = z
   .object({

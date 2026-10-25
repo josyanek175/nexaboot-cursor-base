@@ -2,8 +2,9 @@
 // POST /api/meta/channels  — cadastro manual de canal Meta Cloud API.
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql } from "@/lib/pg.server";
+import { getSql as sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { allowedChannelIds,requireChannelManager } from "@/lib/channel-permissions.server";
 import {
   assertMetaPhoneNumberIdAvailable,
   buildMetaChannelPublic,
@@ -46,14 +47,16 @@ export const Route = createFileRoute("/api/meta/channels")({
             const channels = await perf.timedDb("list_meta_channels", () =>
               listMetaChannelsForCompany(company),
             );
-            perf.setResultCount(channels.length);
-            return Response.json({ channels });
+            const allowed=await allowedChannelIds(company);
+            const visible=allowed===null?channels:channels.filter(c=>allowed.includes(c.id));
+            perf.setResultCount(visible.length);
+            return Response.json({ channels:visible });
           },
         );
       },
 
       POST: async ({ request }) => {
-        const company = await requireCompanyId();
+        const company = await requireChannelManager();
         if (company instanceof Response) return company;
         const companyId = company;
 

@@ -1057,10 +1057,29 @@ export type ProcessCampaignWorkerTickOptions = {
  * Retorna delayMs sugerido até o próximo tick (política interna).
  * Exige sql injetado — não importa pg.server.
  */
+let lastAttendanceMaintenanceAt = 0;
+
 export async function processCampaignWorkerTick(
   options: ProcessCampaignWorkerTickOptions,
 ): Promise<WorkerTickResult> {
   const db = options.sql;
+  if (process.env.ATTENDANCE_MAINTENANCE_ENABLED === "true" && Date.now()-lastAttendanceMaintenanceAt>=60000) {
+    lastAttendanceMaintenanceAt=Date.now();
+    try {
+      const {expireUnansweredCampaigns}=await import("@/lib/company-operations.server");
+      const closed=await expireUnansweredCampaigns(db);
+      if(closed)console.log(JSON.stringify({event:"campaign_attendance_expired",count:closed}));
+    } catch(error) {
+      console.error(JSON.stringify({event:"campaign_attendance_expiry_failed",code:(error as {code?:string}).code??"maintenance_failed"}));
+    }
+  }
+  const result=await processCampaignWorkerTickCore(options);
+  return process.env.ATTENDANCE_MAINTENANCE_ENABLED === "true"
+    ? {...result,delayMs:Math.min(result.delayMs,60000)} : result;
+}
+
+async function processCampaignWorkerTickCore(options:ProcessCampaignWorkerTickOptions):Promise<WorkerTickResult>{
+  const db=options.sql;
   const processingStaleMs = readProcessingStaleMs();
 
   const campaigns = await loadDueCampaigns(db);

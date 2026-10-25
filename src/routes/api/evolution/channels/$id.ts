@@ -3,7 +3,7 @@
 // best-effort na Evolution.
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
-import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelManager as requireCompanyId } from "@/lib/channel-permissions.server";
 import { hasEvoConfig, logoutInstanceEvo } from "@/lib/evolution.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

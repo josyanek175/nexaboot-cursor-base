@@ -2,6 +2,7 @@
  * Consultas de conversas com filtros de fila de campanha (server-side).
  */
 import { sql } from "@/lib/pg.server";
+import { allowedChannelIds } from "@/lib/channel-permissions.server";
 import { normalizePhone, normalizePhoneForMatch } from "@/lib/phone";
 import { normalizeCampaignColor } from "@/lib/campaign-color.server";
 import { resolveConversationCampaignVisual } from "@/lib/conversation-campaign-visual";
@@ -65,6 +66,7 @@ const resolvedCampaignColorExpr = sql`
 
 export async function getCampaignQueueCounts(companyId: string): Promise<CampaignQueueCounts> {
   const s = sql();
+  const allowed = await allowedChannelIds(companyId);
   const rows = await s<
     {
       awaiting_reply: string;
@@ -99,6 +101,7 @@ export async function getCampaignQueueCounts(companyId: string): Promise<Campaig
       COUNT(*)::text AS total
     FROM public.conversations c
     WHERE c.company_id = ${companyId}::uuid
+      AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
       AND c.campaign_reply_campaign_id IS NOT NULL
       AND c.status IS DISTINCT FROM 'merged'
       AND c.status IS DISTINCT FROM 'archived'
@@ -123,6 +126,7 @@ export async function listConversationsForCompany(opts: {
 }) {
   const s = sql();
   const f = opts.filters;
+  const allowed = await allowedChannelIds(opts.companyId, opts.currentUserId);
   const limit = Math.min(Math.max(1, opts.limit ?? 100), 100);
   const campaignQueue = f.campaignQueue === true;
 
@@ -259,6 +263,7 @@ export async function listConversationsForCompany(opts: {
       AND a.unassigned_at IS NULL
     LEFT JOIN public.users au ON au.id = a.user_id
     WHERE c.company_id = ${opts.companyId}::uuid
+      AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
       AND c.status IS DISTINCT FROM 'merged'
       AND c.status IS DISTINCT FROM 'archived'
       AND ct.status IS DISTINCT FROM 'merged'

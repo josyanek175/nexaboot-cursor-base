@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { requireConversationAccess } from "@/lib/channel-permissions.server";
 
 const QuerySchema = z.object({
   conversation_id: z.string().uuid(),
@@ -29,6 +30,7 @@ export const Route = createFileRoute("/api/messages")({
 
         const parsed = QuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
         if (!parsed.success) return Response.json({ error: "invalid_query" }, { status: 400 });
+        const denied=await requireConversationAccess(companyId,parsed.data.conversation_id);if(denied)return denied;
 
         const limit = parseLimit(parsed.data.limit);
         const s = sql();

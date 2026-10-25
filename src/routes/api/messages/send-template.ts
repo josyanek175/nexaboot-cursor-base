@@ -2,6 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { requireCompanyId } from "@/lib/company.server";
+import { requireConversationAccess } from "@/lib/channel-permissions.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { sql } from "@/lib/pg.server";
 import { sendAttendanceWhatsappTemplate } from "@/lib/attendance-template.server";
@@ -29,12 +30,13 @@ export const Route = createFileRoute("/api/messages/send-template")({
           );
         }
 
+        const denied=await requireConversationAccess(company,parsed.data.conversationId);if(denied)return denied;
         const uid = getSessionUserId();
         const s = sql();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`
               SELECT id, name FROM public.users
-              WHERE id = ${uid}::uuid AND company_id = ${company}::uuid
+              WHERE id = ${uid}::uuid AND active=true AND (company_id = ${company}::uuid OR role IN ('TI','SUPER_ADMIN','ADMIN_GERAL'))
               LIMIT 1
             `
           : [];

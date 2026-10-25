@@ -4,6 +4,7 @@
 import { encryptToken, hasTokenEncryptionKey } from "@/lib/crypto/token-crypto.server";
 import { loadMetaAccessToken } from "@/lib/meta-access-token.server";
 import { sql } from "@/lib/pg.server";
+import { metaTextPayload, type ReplyButton } from "@/lib/meta-reply-buttons";
 import type {
   ProviderSendResult,
   ProviderStatusResult,
@@ -37,6 +38,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     channel: WhatsAppChannelRecord,
     to: string,
     body: string,
+    replyButtons?: ReplyButton[],
   ): Promise<ProviderSendResult> {
     const phoneNumberId = channel.phoneNumberId?.trim();
     if (!phoneNumberId) {
@@ -72,8 +74,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
         body: JSON.stringify({
           messaging_product: "whatsapp",
           to: toDigits,
-          type: "text",
-          text: { preview_url: false, body },
+          ...metaTextPayload(body, replyButtons),
         }),
       });
 

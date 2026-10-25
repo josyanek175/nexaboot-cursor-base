@@ -6,6 +6,7 @@ import { requireCompanyId } from "@/lib/company.server";
 import { sendConversationText } from "@/lib/message-send-router.server";
 import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireConversationAccess } from "@/lib/channel-permissions.server";
 
 const Body = z.object({
   conversationId: z.string().uuid(),
@@ -27,13 +28,14 @@ export const Route = createFileRoute("/api/messages/send")({
         }
 
         const { conversationId, text } = parsed.data;
+        const denied=await requireConversationAccess(companyId,conversationId);if(denied)return denied;
 
         const uid = getSessionUserId();
         const s = sql();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`
               SELECT id, name FROM public.users
-              WHERE id = ${uid}::uuid AND company_id = ${companyId}::uuid
+              WHERE id = ${uid}::uuid AND active=true AND (company_id = ${companyId}::uuid OR role IN ('TI','SUPER_ADMIN','ADMIN_GERAL'))
               LIMIT 1
             `
           : [];

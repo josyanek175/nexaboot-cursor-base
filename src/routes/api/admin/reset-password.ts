@@ -1,16 +1,14 @@
-// Rota TEMPORÁRIA e protegida para resetar a senha de um usuário existente.
+// Emergency password reset: disabled unless explicitly enabled with its own token.
 // Segurança:
-//  - Exige token que confira com process.env.ADMIN_SETUP_TOKEN (preferencial)
-//    ou, na ausência deste, com process.env.SESSION_SECRET (que já existe no Easypanel).
-//  - Se nenhum dos dois estiver configurado, a rota se recusa a operar.
+//  - Exige ADMIN_PASSWORD_RESET_ENABLED=true e ADMIN_SETUP_TOKEN próprio.
 //  - NUNCA grava senha pura: sempre bcrypt.hash(novaSenha, 10).
 //  - NUNCA retorna o hash.
 //
 // Uso:
 //   POST /api/admin/reset-password
-//   body: { "token": "<ADMIN_SETUP_TOKEN ou SESSION_SECRET>",
+//   body: { "token": "<ADMIN_SETUP_TOKEN>",
 //           "email": "josyane@nexaboot.com",
-//           "newPassword": "demo123" }   // newPassword é opcional (default: demo123)
+//           "newPassword": "<senha escolhida com pelo menos 10 caracteres>" }
 //
 // REMOVA esta rota após concluir o diagnóstico.
 import { createFileRoute } from "@tanstack/react-router";
@@ -21,11 +19,11 @@ import { sql } from "@/lib/pg.server";
 const Body = z.object({
   token: z.string().min(1),
   email: z.string().email().max(255),
-  newPassword: z.string().min(4).max(200).optional(),
+  newPassword: z.string().min(10).max(72).refine(p=>Buffer.byteLength(p,'utf8')<=72),
 });
 
 function expectedToken(): string | null {
-  return process.env.ADMIN_SETUP_TOKEN || process.env.SESSION_SECRET || null;
+  return process.env.ADMIN_PASSWORD_RESET_ENABLED === "true" ? process.env.ADMIN_SETUP_TOKEN || null : null;
 }
 
 function tokensMatch(provided: string, expected: string): boolean {
@@ -46,7 +44,7 @@ export const Route = createFileRoute("/api/admin/reset-password")({
             {
               error: "guard_not_configured",
               reason:
-                "Configure ADMIN_SETUP_TOKEN (ou tenha SESSION_SECRET) no ambiente para usar esta rota.",
+                "A recuperação emergencial está desativada.",
             },
             { status: 403 },
           );
@@ -64,7 +62,7 @@ export const Route = createFileRoute("/api/admin/reset-password")({
         }
 
         const email = parsed.data.email.trim().toLowerCase();
-        const newPassword = parsed.data.newPassword ?? "demo123";
+        const newPassword = parsed.data.newPassword;
 
         try {
           const s = sql();

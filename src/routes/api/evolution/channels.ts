@@ -3,8 +3,9 @@
 //   Evolution (se não existir) + configura webhook. Não expõe API key.
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql } from "@/lib/pg.server";
+import { getSql as sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { allowedChannelIds,requireChannelManager } from "@/lib/channel-permissions.server";
 import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
   instanceState, mapEvoStatus, webhookUrl,
@@ -51,14 +52,16 @@ export const Route = createFileRoute("/api/evolution/channels")({
                 AND company_id = ${companyId}::uuid
               ORDER BY created_at DESC
             `);
-            perf.setResultCount(channels.length);
-            return Response.json({ channels, evolutionConfigured: hasEvoConfig(), webhookUrl: webhookUrl() });
+            const allowed=await allowedChannelIds(companyId);
+            const visible=allowed===null?channels:channels.filter(c=>allowed.includes(c.id));
+            perf.setResultCount(visible.length);
+            return Response.json({ channels:visible, evolutionConfigured: hasEvoConfig() });
           },
         );
       },
 
       POST: async ({ request }) => {
-        const company = await requireCompanyId();
+        const company = await requireChannelManager();
         if (company instanceof Response) return company;
         const companyId = company;
 

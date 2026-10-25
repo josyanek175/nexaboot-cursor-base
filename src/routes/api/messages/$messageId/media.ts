@@ -13,6 +13,7 @@ import { downloadMetaMedia } from "@/lib/meta-media-download.server";
 import { loadChannelForCompany } from "@/lib/whatsapp/whatsapp-provider-router.server";
 import { resolveStoredMetaMedia } from "@/lib/stored-meta-media";
 import { messageMediaContentDisposition } from "@/lib/message-media.server";
+import { requireChannelAccess } from "@/lib/channel-permissions.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -58,6 +59,7 @@ export const Route = createFileRoute("/api/messages/$messageId/media")({
 
         const msg = rows[0];
         if (!msg) return jsonErr({ error: "Mensagem não encontrada", requestedId: messageId }, 404);
+        const denied=await requireChannelAccess(companyId,msg.whatsapp_channel_id);if(denied)return denied;
 
         if (!msg.media_base64) {
           const media = resolveStoredMetaMedia(msg.raw_payload);

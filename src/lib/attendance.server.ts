@@ -5,6 +5,7 @@
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireConversationAccess } from "@/lib/channel-permissions.server";
 import {
   onCampaignAssume,
   onCampaignFinish,
@@ -168,6 +169,7 @@ export async function assumeConversation(
 ): Promise<AssignmentResult | Response> {
   const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
+  const denied = await requireConversationAccess(actor.companyId,conversationId,actor.userId);if(denied)return denied;
 
   if (!canAssumeAttendance(actor.role)) {
     return Response.json(
@@ -384,6 +386,8 @@ export async function transferConversation(
 ): Promise<AssignmentResult | Response> {
   const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
+  const denied=await requireConversationAccess(actor.companyId,conversationId,actor.userId);if(denied)return denied;
+  const targetDenied=await requireConversationAccess(actor.companyId,conversationId,toUserId);if(targetDenied)return targetDenied;
 
   const s = sql();
   const owns = await s`
@@ -476,6 +480,7 @@ export async function finishConversation(
 ): Promise<{ ok: true; status: string; campaign_service_status: string | null } | Response> {
   const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
+  const denied=await requireConversationAccess(actor.companyId,conversationId,actor.userId);if(denied)return denied;
 
   if (!canAssumeAttendance(actor.role)) {
     return Response.json({ error: "forbidden" }, { status: 403 });
@@ -511,6 +516,7 @@ export async function reopenConversation(
 > {
   const actor = await requireAttendanceActor();
   if (actor instanceof Response) return actor;
+  const denied=await requireConversationAccess(actor.companyId,conversationId,actor.userId);if(denied)return denied;
 
   if (!canAssumeAttendance(actor.role)) {
     return Response.json({ error: "forbidden" }, { status: 403 });

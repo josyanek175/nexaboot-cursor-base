@@ -257,9 +257,9 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
       return;
     }
     setSending(true);
-    await requestPasswordReset(email);
-    setSending(false);
-    setSent(true);
+    try { await requestPasswordReset(email);setSent(true); }
+    catch { toast.error("Recuperação indisponível. Tente novamente ou contate o suporte."); }
+    finally {setSending(false);}
   }
 
   return (

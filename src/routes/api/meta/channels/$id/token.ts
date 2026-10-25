@@ -1,7 +1,7 @@
 // DELETE /api/meta/channels/:id/token — remove token cifrado para recadastro.
 import { createFileRoute } from "@tanstack/react-router";
 
-import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelManager as requireCompanyId } from "@/lib/channel-permissions.server";
 import {
   META_CHANNEL_UUID_RE,
   buildMetaChannelPublic,

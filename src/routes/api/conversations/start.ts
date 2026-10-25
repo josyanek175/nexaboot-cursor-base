@@ -10,6 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelAccess } from "@/lib/channel-permissions.server";
 
 const Body = z.object({
   contactId: z.string().uuid(),
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/api/conversations/start")({
         const parsed = Body.safeParse(json);
         if (!parsed.success) return Response.json({ error: "invalid_input" }, { status: 400 });
         const { contactId, channelId } = parsed.data;
+        const denied=await requireChannelAccess(companyId,channelId);if(denied)return denied;
 
         const s = sql();
 

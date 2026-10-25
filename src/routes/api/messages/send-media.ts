@@ -5,6 +5,7 @@ import { requireCompanyId } from "@/lib/company.server";
 import { sendConversationDocument } from "@/lib/document-send.server";
 import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireConversationAccess } from "@/lib/channel-permissions.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,13 +38,14 @@ export const Route = createFileRoute("/api/messages/send-media")({
         if (!(file instanceof File) && !retryMessageId) {
           return Response.json({ error: "missing_file", message: "Não foi possível enviar o documento" }, { status: 400 });
         }
+        const denied=await requireConversationAccess(companyId,conversationId);if(denied)return denied;
 
         const uid = getSessionUserId();
         const s = sql();
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`
               SELECT id, name FROM public.users
-              WHERE id = ${uid}::uuid AND company_id = ${companyId}::uuid
+              WHERE id = ${uid}::uuid AND active=true AND (company_id = ${companyId}::uuid OR role IN ('TI','SUPER_ADMIN','ADMIN_GERAL'))
               LIMIT 1
             `
           : [];

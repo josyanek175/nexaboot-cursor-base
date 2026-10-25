@@ -36,6 +36,7 @@ export const Route = createFileRoute("/api/internal-chat/list")({
           FROM internal_chats c
           JOIN internal_chat_members mem ON mem.chat_id = c.id
           WHERE mem.user_id = ${uid}
+            AND COALESCE((to_jsonb(c)->>'active')::boolean,true)=true
             AND c.company_id = ${companyId}::uuid
           ORDER BY last_message_at DESC NULLS LAST, c.created_at DESC
         `;
