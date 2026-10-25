@@ -25,7 +25,13 @@ Os testes não acessam banco real nem enviam mensagens.
 Compilação aprovada. A checagem global de tipos ainda apresenta erros já
 existentes na base, incluindo tipos das consultas SQL e uma ação de auditoria.
 
-Validação pendente: homologar com login TI, criação de empresa e administrador,
+Falha encontrada durante homologação: HTTP 500 na lista de empresas. A
+subconsulta de contagem de canais era retornada por uma função assíncrona e
+executada antes da consulta externa que define a empresa. Correção preparada
+na DEV, com teste de regressão para listagem global e por empresa, com e sem
+coluna deleted_at. Confirmar a resolução no ambiente publicado.
+
+Validação pendente: homologar com login TI e SUPER_ADMIN, criação pelo SUPER_ADMIN,
 troca entre empresas, gestão de usuários, reset administrativo de senha e canais
 Meta. Confirmar separação do banco DEV antes de criar dados de teste.
 
