@@ -3,6 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelAccess } from "@/lib/channel-permissions.server";
 import { META_CHANNEL_UUID_RE } from "@/lib/meta-channels.server";
 import {
   listMetaTemplatesForChannel,
@@ -20,6 +21,7 @@ export const Route = createFileRoute("/api/meta/channels/$id/templates")({
           return Response.json({ error: "invalid_id" }, { status: 400 });
         }
 
+        const denied=await requireChannelAccess(companyId,params.id);if(denied)return denied;
         const approvedOnly =
           new URL(request.url).searchParams.get("approved") !== "0";
 

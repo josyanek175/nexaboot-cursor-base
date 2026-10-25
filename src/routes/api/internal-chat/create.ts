@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { sql } from "@/lib/pg.server";
+import { getSql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { getCurrentUserCompanyInfo } from "@/lib/company.server";
+import { isPlatformRole } from "@/lib/platform-roles";
 
 const Body = z.object({
   title: z.string().trim().max(120).optional(),
@@ -29,7 +31,9 @@ export const Route = createFileRoute("/api/internal-chat/create")({
         }
         const { title, type, memberIds } = parsed.data;
 
-        const s = sql();
+        const actor=await getCurrentUserCompanyInfo();
+        if(type==='group'&&!(isPlatformRole(actor.role)||actor.role==='ADMIN_EMPRESA'))return Response.json({error:'forbidden'},{status:403});
+        return getSql().begin(async s=>{
 
         // Membros precisam ser da MESMA empresa do criador (nunca empresa B).
         const memberSet = Array.from(new Set(memberIds.filter((id) => id !== uid)));
@@ -43,7 +47,7 @@ export const Route = createFileRoute("/api/internal-chat/create")({
         if (memberSet.length > 0) {
           const found = await s`
             SELECT id FROM public.users
-            WHERE id = ANY(${memberSet}) AND company_id = ${companyId}::uuid
+            WHERE id = ANY(${memberSet}::uuid[]) AND company_id = ${companyId}::uuid AND active=true
           `;
           if (found.length !== memberSet.length) {
             return Response.json({ error: "member_outside_company" }, { status: 403 });
@@ -57,6 +61,7 @@ export const Route = createFileRoute("/api/internal-chat/create")({
 
         // Para direct, reutilizar se já existe entre os 2 (na mesma empresa).
         if (type === "direct") {
+          await s`SELECT pg_advisory_xact_lock(hashtextextended(${companyId+':'+allMembers.sort().join(':')},0))`;
           const other = memberSet[0];
           const existing = await s`
             SELECT c.id
@@ -83,13 +88,10 @@ export const Route = createFileRoute("/api/internal-chat/create")({
         const chat = inserted[0];
 
         // Inserir membros (ON CONFLICT evita duplicidade)
-        const values = allMembers.map((u) => ({ chat_id: chat.id, user_id: u }));
-        await s`
-          INSERT INTO internal_chat_members ${s(values, "chat_id", "user_id")}
-          ON CONFLICT DO NOTHING
-        `;
+        for(const member of allMembers)await s`INSERT INTO internal_chat_members(chat_id,user_id) VALUES(${chat.id}::uuid,${member}::uuid) ON CONFLICT DO NOTHING`;
 
         return Response.json({ chat, reused: false });
+        });
       },
     },
   },

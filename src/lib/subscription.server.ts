@@ -190,6 +190,8 @@ export async function listCompaniesWithPlanUsage(opts: {
     subscription_status: string | null;
     subscription_ends_at: string | null;
     whatsapp_channels_used: number;
+    active_users: number;
+    max_users: number | null;
   }>
 > {
   const filterId = opts.companyId ?? null;
@@ -207,6 +209,8 @@ export async function listCompaniesWithPlanUsage(opts: {
       p.name AS plan_name,
       p.code AS plan_code,
       p.max_whatsapp_channels,
+      p.max_users,
+      (SELECT COUNT(*)::int FROM public.users u WHERE u.company_id=c.id AND u.active=true) AS active_users,
       cs.status AS subscription_status,
       cs.ends_at AS subscription_ends_at,
       ${channelCount} AS whatsapp_channels_used
@@ -234,5 +238,7 @@ export async function listCompaniesWithPlanUsage(opts: {
     subscription_status: string | null;
     subscription_ends_at: string | null;
     whatsapp_channels_used: number;
+    active_users: number;
+    max_users: number | null;
   }[];
 }

@@ -3,6 +3,7 @@
 // Isolamento estrito por company_id.
 import { sql } from "@/lib/pg.server";
 import type { PgSql } from "@/lib/pg-types";
+import { allowedChannelIds, requireChannelAccess } from "@/lib/channel-permissions.server";
 import { requireCompanyId, getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { getSessionUserId } from "@/lib/session.server";
 import {
@@ -304,6 +305,7 @@ type ActorContext = {
 };
 
 export async function listCampaigns(companyId: string, status?: string): Promise<CampaignRow[]> {
+  const allowed=await allowedChannelIds(companyId);
   try {
     const rows = status
       ? await sql<CampaignRow[]>`
@@ -326,6 +328,7 @@ export async function listCampaigns(companyId: string, status?: string): Promise
           LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
             AND ch.company_id = c.company_id
           WHERE c.company_id = ${companyId}::uuid
+            AND (${allowed===null} OR c.whatsapp_channel_id IS NULL OR c.whatsapp_channel_id=ANY(${allowed??[]}::uuid[]))
             AND c.deleted_at IS NULL
             AND c.status = ${status}
           ORDER BY c.created_at DESC
@@ -350,6 +353,7 @@ export async function listCampaigns(companyId: string, status?: string): Promise
           LEFT JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
             AND ch.company_id = c.company_id
           WHERE c.company_id = ${companyId}::uuid
+            AND (${allowed===null} OR c.whatsapp_channel_id IS NULL OR c.whatsapp_channel_id=ANY(${allowed??[]}::uuid[]))
             AND c.deleted_at IS NULL
           ORDER BY c.created_at DESC
         `;
@@ -570,6 +574,8 @@ export async function validateCampaignChannel(
   | { ok: true; id: string; channel_type: "evolution" | "meta" }
   | { ok: false; error: string }
 > {
+  const denied=await requireChannelAccess(companyId,channelId);
+  if(denied)return {ok:false,error:'invalid_channel'};
   const rows = await sql<{ id: string; channel_type: string }[]>`
     SELECT id, lower(channel_type) AS channel_type
     FROM public.whatsapp_channels
@@ -1078,7 +1084,12 @@ export async function getCampaignById(
       AND c.deleted_at IS NULL
     LIMIT 1
   `;
-  return rows[0] ?? null;
+  const campaign=rows[0]??null;
+  if(campaign?.whatsapp_channel_id&&!db){
+    const denied=await requireChannelAccess(companyId,campaign.whatsapp_channel_id);
+    if(denied)return null;
+  }
+  return campaign;
 }
 
 export async function getCampaignDetail(

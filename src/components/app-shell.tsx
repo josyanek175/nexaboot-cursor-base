@@ -36,8 +36,10 @@ import {
 import { SessionProvider, useSession } from "@/lib/session";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { AttendanceAlertBanner } from "@/components/attendance-alert-banner";
 
 const ROLE_LABELS: Record<Role, string> = {
+  SUPER_ADMIN: "Super Admin · Plataforma",
   ADMIN_GERAL: "Super-Admin (plataforma)",
   TI: "TI · Plataforma",
   ADMIN_EMPRESA: "Admin Empresa",
@@ -52,6 +54,7 @@ const OPERATIONAL_PREFIXES = [
   "/dashboard",
   "/espera",
   "/usuarios",
+  "/equipes-numeros",
   "/grupos-internos",
   "/comunicacao-interna",
   "/fluxos",
@@ -106,6 +109,7 @@ const nav: NavItem[] = [
   { to: "/lembretes", label: "Lembretes", icon: Bell, reminders: true },
   { to: "/empresas", label: "Empresas", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
+  { to: "/equipes-numeros", label: "Equipes e números", icon: UsersRound },
   { to: "/canais", label: "Canais WhatsApp", icon: Smartphone },
   { to: "/automacoes", label: "Automações N8N", icon: Workflow },
   { to: "/logs", label: "Logs", icon: ScrollText },
@@ -264,6 +268,7 @@ function Shell() {
         <nav className="flex-1 overflow-y-auto p-2">
           {nav
             .filter((item) => !item.adminOnly || canManageInternalGroups(user.role))
+            .filter((item) => item.to !== "/equipes-numeros" || ["SUPER_ADMIN","TI","ADMIN_GERAL","ADMIN_EMPRESA","GERENTE"].includes(user.role))
             .filter((item) => {
               if (!item.accessHours) return true;
               const role = String(user.role ?? "");
@@ -370,7 +375,9 @@ function Shell() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {companyValid && !switchingCompany && <AttendanceAlertBanner companyId={companyId}/>}
+        <div className="min-h-0 flex-1 overflow-hidden">
         {switchingCompany ? (
           <div role="status" className="grid h-full place-items-center p-6 text-sm">
             Alterando empresa…
@@ -389,6 +396,7 @@ function Shell() {
         ) : (
           <Outlet />
         )}
+        </div>
       </main>
 
 

@@ -421,6 +421,7 @@ async function sendText(
   conversationId: string,
   text: string,
   stepId = "reply",
+  replyButtons?: import("@/lib/meta-reply-buttons").ReplyButton[],
 ): Promise<boolean> {
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -447,6 +448,7 @@ async function sendText(
     text: trimmed,
     sentByName: "Fluxo",
     automationKey,
+    replyButtons,
   });
   if (!result.ok) {
     console.error("[AUTOMATION_SEND_FAIL]", {
@@ -489,9 +491,13 @@ async function presentStep(params: {
       continue;
     }
     const vars = await loadContactVars(params.contactId, collected);
-    const text = promptForStep(current, vars);
+    const choices = current.type === "buttons" ? current.buttons : current.type === "reminder" ? current.options : undefined;
+    const fullPrompt = promptForStep(current, vars);
+    const body = choices ? fullPrompt.split("\n").slice(0, -choices.length).join("\n").trim() || "Escolha uma opção:" : fullPrompt;
+    const interactive = choices && body.length <= 1024 && new Set(choices.map(c => c.label)).size === choices.length;
+    const text = interactive ? body : fullPrompt;
     const sent =
-      !text || (await sendText(params.companyId, params.conversationId, text, current.id));
+      !text || (await sendText(params.companyId, params.conversationId, text, current.id, interactive ? choices : undefined));
     if (!sent) return { stepId: current.id, status: "ended", collected };
     if (current.type === "message") {
       current = stepById(params.definition, current.next);

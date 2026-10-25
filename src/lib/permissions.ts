@@ -2,7 +2,7 @@
 // Ver: src/lib/session.tsx para a sessão atual.
 
 import type { Role, User, Tenant } from "./mocks";
-import { isPlatformRole } from "./platform-roles";
+import { canCreateCompany, isPlatformRole } from "./platform-roles";
 
 export { isPlatformRole };
 
@@ -27,8 +27,7 @@ export function canViewUsersScreen(actor: ActingUser): boolean {
 /** Pode criar/editar/bloquear/resetar senha de usuários (dentro do escopo). */
 export function canManageUsers(actor: ActingUser): boolean {
   return (
-    actor.role === "ADMIN_GERAL" ||
-    actor.role === "TI" ||
+    isPlatformRole(actor.role) ||
     actor.role === "ADMIN_EMPRESA" ||
     actor.role === "GERENTE" ||
     actor.role === "SUPERVISOR"
@@ -44,7 +43,7 @@ export function canEditUser(actor: ActingUser, target: User): boolean {
 export function canDeleteUser(actor: ActingUser, target: User): boolean {
   if (target.id === actor.id) return false;
   if (!inTenantScope(actor, target.tenantId)) return false;
-  return actor.role === "ADMIN_GERAL" || actor.role === "TI" || actor.role === "ADMIN_EMPRESA";
+  return isPlatformRole(actor.role) || actor.role === "ADMIN_EMPRESA";
 }
 
 export function canBlockUser(actor: ActingUser, target: User): boolean {
@@ -59,9 +58,7 @@ export function canResetPassword(actor: ActingUser, target: User): boolean {
 
 // ─── Empresas ────────────────────────────────────────────────────────────────
 export function canCreateTenant(actor: ActingUser): boolean {
-  return (
-    actor.role === "ADMIN_GERAL" || actor.role === "TI" || (actor.role as string) === "SUPER_ADMIN"
-  );
+  return canCreateCompany(actor.role);
 }
 
 export function canEditTenant(actor: ActingUser, target: Tenant): boolean {
@@ -84,12 +81,12 @@ export function canManageMetaCoexistence(role: string | null | undefined): boole
 
 // ─── Canais ──────────────────────────────────────────────────────────────────
 export function canManageChannels(actor: ActingUser): boolean {
-  return actor.role === "ADMIN_GERAL" || actor.role === "TI" || actor.role === "ADMIN_EMPRESA";
+  return isPlatformRole(actor.role) || actor.role === "ADMIN_EMPRESA";
 }
 
 // ─── Integrações globais (Evolution, Meta, N8N, etc.) ───────────────────────
 export function canManageIntegrations(actor: ActingUser): boolean {
-  return actor.role === "ADMIN_GERAL" || actor.role === "TI";
+  return isPlatformRole(actor.role);
 }
 
 // ─── Relatórios ─────────────────────────────────────────────────────────────
@@ -175,8 +172,7 @@ export function actingUserFromAuth(user: {
 /** Admins/TI/Supervisores/Gerente/Atendente_Geral enxergam todas as conversas do tenant. */
 export function canSeeAllConversations(actor: ActingUser): boolean {
   return (
-    actor.role === "ADMIN_GERAL" ||
-    actor.role === "TI" ||
+    isPlatformRole(actor.role) ||
     actor.role === "ADMIN_EMPRESA" ||
     actor.role === "GERENTE" ||
     actor.role === "SUPERVISOR" ||

@@ -7,6 +7,7 @@ export type MessageDirection = "in" | "out";
 export type MessageStatus = "sent" | "delivered" | "read" | "error";
 export type ConversationStatus = "open" | "waiting" | "finished";
 export type Role =
+  | "SUPER_ADMIN"
   | "ADMIN_GERAL"
   | "TI"
   | "ADMIN_EMPRESA"

@@ -5,7 +5,7 @@ import { sql, getSql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { getCurrentUserCompanyInfo } from "@/lib/company.server";
 import { listCompaniesWithPlanUsage } from "@/lib/subscription.server";
-import { isPlatformRole } from "@/lib/platform-roles";
+import { canCreateCompany, isPlatformRole } from "@/lib/platform-roles";
 
 async function getActor() {
   const uid = getSessionUserId();
@@ -68,8 +68,8 @@ export const Route = createFileRoute("/api/companies")({
       POST: async ({ request }) => {
         const actor = await getActor();
         if (!actor) return Response.json({ error: "unauthenticated" }, { status: 401 });
-        if (!isPlatformRole(String(actor.role))) {
-          return Response.json({ error: "forbidden" }, { status: 403 });
+        if (!canCreateCompany(String(actor.role))) {
+          return Response.json({ error: "forbidden", message: "Somente SUPER_ADMIN pode criar empresas." }, { status: 403 });
         }
 
         const json = await request.json().catch(() => null);

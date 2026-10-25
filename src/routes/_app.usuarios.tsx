@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { isPlatformRole } from "@/lib/platform-roles";
+import { COMPANY_USER_ROLES, PLATFORM_USER_ROLES } from "@/lib/user-management-policy";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -24,15 +26,14 @@ type DbUser = {
   updated_at: string;
 };
 
-const ROLES = ["ADMIN", "USER", "ADMIN_EMPRESA", "GERENTE", "SUPERVISOR", "ATENDENTE", "TI"];
-const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI"]);
+const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI", "SUPER_ADMIN"]);
 
 export const Route = createFileRoute("/_app/usuarios")({
   component: UsuariosPage,
 });
 
 function UsuariosPage() {
-  const { user: me } = useAuth();
+  const { user: me, companyName, companyId, hydrated } = useAuth();
   const canManage = !!me && ADMIN_ROLES.has(String(me.role));
 
   const [items, setItems] = useState<DbUser[]>([]);
@@ -61,7 +62,7 @@ function UsuariosPage() {
       setLoading(false);
     }
   }
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { if (hydrated && canManage) reload(); }, [hydrated, companyId, canManage]);
 
   if (!canManage) {
     return (
@@ -190,7 +191,7 @@ function UsuariosPage() {
           <div>
             <h1 className="text-lg font-semibold">Usuários e Perfis</h1>
             <p className="text-xs text-muted-foreground">
-              Logado como <b>{me?.name}</b> ({me?.role}) · tenant {me?.tenantId}
+              Logado como <b>{me?.name}</b> ({me?.role}) · {companyName ?? "Selecione uma empresa"}
             </p>
           </div>
         </div>
@@ -295,6 +296,7 @@ function UsuariosPage() {
 
       {editOpen && editing && (
         <EditModal
+          roles={isPlatformRole(me?.role) ? [...COMPANY_USER_ROLES, ...PLATFORM_USER_ROLES] : COMPANY_USER_ROLES}
           draft={editing}
           onChange={setEditing}
           onClose={() => setEditOpen(false)}
@@ -317,7 +319,8 @@ type EditDraft = {
   password: string;
 };
 
-function EditModal({ draft, onChange, onClose, onSave }: {
+function EditModal({ draft, onChange, onClose, onSave, roles }: {
+  roles: string[];
   draft: EditDraft;
   onChange: (d: EditDraft) => void;
   onClose: () => void;
@@ -331,7 +334,7 @@ function EditModal({ draft, onChange, onClose, onSave }: {
           <Field label="E-mail" value={draft.email} onChange={(v) => onChange({ ...draft, email: v })} />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Select label="Perfil" value={draft.role} options={ROLES}
+          <Select label="Perfil" value={draft.role} options={roles}
             onChange={(v) => onChange({ ...draft, role: v })} />
           <Select label="Status" value={draft.active ? "ATIVO" : "INATIVO"} options={["ATIVO", "INATIVO"]}
             onChange={(v) => onChange({ ...draft, active: v === "ATIVO" })} />

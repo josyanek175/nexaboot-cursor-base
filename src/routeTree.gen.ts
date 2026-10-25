@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermosDeUsoRouteImport } from './routes/termos-de-uso'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as PoliticaDePrivacidadeRouteImport } from './routes/politica-de-privacidade'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ExclusaoDeDadosRouteImport } from './routes/exclusao-de-dados'
@@ -18,16 +19,20 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WebhookEvolutionRouteImport } from './routes/webhook/evolution'
 import { Route as ApiUsersRouteImport } from './routes/api/users'
+import { Route as ApiTeamAccessRouteImport } from './routes/api/team-access'
 import { Route as ApiPlansRouteImport } from './routes/api/plans'
 import { Route as ApiMessagesRouteImport } from './routes/api/messages'
+import { Route as ApiInternalGroupsRouteImport } from './routes/api/internal-groups'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiDashboardRouteImport } from './routes/api/dashboard'
 import { Route as ApiConversationsRouteImport } from './routes/api/conversations'
 import { Route as ApiContactsRouteImport } from './routes/api/contacts'
+import { Route as ApiCompanyOperationsRouteImport } from './routes/api/company-operations'
 import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
 import { Route as ApiCampaignsRouteImport } from './routes/api/campaigns'
 import { Route as ApiAutomationFlowsRouteImport } from './routes/api/automation-flows'
 import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
+import { Route as ApiAttendanceAlertsRouteImport } from './routes/api/attendance-alerts'
 import { Route as ApiAccessHoursRouteImport } from './routes/api/access-hours'
 import { Route as AppUsuariosRouteImport } from './routes/_app.usuarios'
 import { Route as AppLogsRouteImport } from './routes/_app.logs'
@@ -37,6 +42,7 @@ import { Route as AppGruposInternosRouteImport } from './routes/_app.grupos-inte
 import { Route as AppGerencialRouteImport } from './routes/_app.gerencial'
 import { Route as AppFluxosRouteImport } from './routes/_app.fluxos'
 import { Route as AppEsperaRouteImport } from './routes/_app.espera'
+import { Route as AppEquipesNumerosRouteImport } from './routes/_app.equipes-numeros'
 import { Route as AppEmpresasRouteImport } from './routes/_app.empresas'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppContatosRouteImport } from './routes/_app.contatos'
@@ -55,6 +61,7 @@ import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
 import { Route as ApiMessagesSendTemplateRouteImport } from './routes/api/messages/send-template'
 import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
 import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
+import { Route as ApiInternalPortalRouteImport } from './routes/api/internal/portal'
 import { Route as ApiInternalDbPoolStatusRouteImport } from './routes/api/internal/db-pool-status'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
 import { Route as ApiInternalChatUnreadCountRouteImport } from './routes/api/internal-chat/unread-count'
@@ -83,6 +90,7 @@ import { Route as ApiCampaignsDispatchBlocksRouteImport } from './routes/api/cam
 import { Route as ApiCampaignsCostsRouteImport } from './routes/api/campaigns/costs'
 import { Route as ApiCampaignsIdRouteImport } from './routes/api/campaigns/$id'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
+import { Route as ApiAuthPasswordRecoveryRouteImport } from './routes/api/auth/password-recovery'
 import { Route as ApiAuthOperationalCompanyRouteImport } from './routes/api/auth/operational-company'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
@@ -156,6 +164,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
+  id: '/redefinir-senha',
+  path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PoliticaDePrivacidadeRoute = PoliticaDePrivacidadeRouteImport.update({
   id: '/politica-de-privacidade',
   path: '/politica-de-privacidade',
@@ -190,6 +203,11 @@ const ApiUsersRoute = ApiUsersRouteImport.update({
   path: '/api/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTeamAccessRoute = ApiTeamAccessRouteImport.update({
+  id: '/api/team-access',
+  path: '/api/team-access',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPlansRoute = ApiPlansRouteImport.update({
   id: '/api/plans',
   path: '/api/plans',
@@ -198,6 +216,11 @@ const ApiPlansRoute = ApiPlansRouteImport.update({
 const ApiMessagesRoute = ApiMessagesRouteImport.update({
   id: '/api/messages',
   path: '/api/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalGroupsRoute = ApiInternalGroupsRouteImport.update({
+  id: '/api/internal-groups',
+  path: '/api/internal-groups',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
@@ -220,6 +243,11 @@ const ApiContactsRoute = ApiContactsRouteImport.update({
   path: '/api/contacts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCompanyOperationsRoute = ApiCompanyOperationsRouteImport.update({
+  id: '/api/company-operations',
+  path: '/api/company-operations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCompaniesRoute = ApiCompaniesRouteImport.update({
   id: '/api/companies',
   path: '/api/companies',
@@ -238,6 +266,11 @@ const ApiAutomationFlowsRoute = ApiAutomationFlowsRouteImport.update({
 const ApiAttendantsRoute = ApiAttendantsRouteImport.update({
   id: '/api/attendants',
   path: '/api/attendants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAttendanceAlertsRoute = ApiAttendanceAlertsRouteImport.update({
+  id: '/api/attendance-alerts',
+  path: '/api/attendance-alerts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAccessHoursRoute = ApiAccessHoursRouteImport.update({
@@ -283,6 +316,11 @@ const AppFluxosRoute = AppFluxosRouteImport.update({
 const AppEsperaRoute = AppEsperaRouteImport.update({
   id: '/espera',
   path: '/espera',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEquipesNumerosRoute = AppEquipesNumerosRouteImport.update({
+  id: '/equipes-numeros',
+  path: '/equipes-numeros',
   getParentRoute: () => AppRoute,
 } as any)
 const AppEmpresasRoute = AppEmpresasRouteImport.update({
@@ -374,6 +412,11 @@ const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
   id: '/send',
   path: '/send',
   getParentRoute: () => ApiMessagesRoute,
+} as any)
+const ApiInternalPortalRoute = ApiInternalPortalRouteImport.update({
+  id: '/api/internal/portal',
+  path: '/api/internal/portal',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInternalDbPoolStatusRoute = ApiInternalDbPoolStatusRouteImport.update({
   id: '/api/internal/db-pool-status',
@@ -517,6 +560,11 @@ const ApiCampaignsIdRoute = ApiCampaignsIdRouteImport.update({
 const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
   id: '/api/auth/register',
   path: '/api/auth/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthPasswordRecoveryRoute = ApiAuthPasswordRecoveryRouteImport.update({
+  id: '/api/auth/password-recovery',
+  path: '/api/auth/password-recovery',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthOperationalCompanyRoute =
@@ -866,6 +914,7 @@ export interface FileRoutesByFullPath {
   '/exclusao-de-dados': typeof ExclusaoDeDadosRoute
   '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/register': typeof RegisterRoute
   '/termos-de-uso': typeof TermosDeUsoRoute
   '/atendimento': typeof AppAtendimentoRoute
@@ -877,6 +926,7 @@ export interface FileRoutesByFullPath {
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
+  '/equipes-numeros': typeof AppEquipesNumerosRoute
   '/espera': typeof AppEsperaRoute
   '/fluxos': typeof AppFluxosRoute
   '/gerencial': typeof AppGerencialRouteWithChildren
@@ -886,16 +936,20 @@ export interface FileRoutesByFullPath {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/attendance-alerts': typeof ApiAttendanceAlertsRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
+  '/api/company-operations': typeof ApiCompanyOperationsRoute
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/dashboard': typeof ApiDashboardRouteWithChildren
   '/api/health': typeof ApiHealthRoute
+  '/api/internal-groups': typeof ApiInternalGroupsRoute
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
+  '/api/team-access': typeof ApiTeamAccessRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
@@ -916,6 +970,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
+  '/api/auth/password-recovery': typeof ApiAuthPasswordRecoveryRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
@@ -944,6 +999,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
+  '/api/internal/portal': typeof ApiInternalPortalRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1003,6 +1059,7 @@ export interface FileRoutesByTo {
   '/exclusao-de-dados': typeof ExclusaoDeDadosRoute
   '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/register': typeof RegisterRoute
   '/termos-de-uso': typeof TermosDeUsoRoute
   '/atendimento': typeof AppAtendimentoRoute
@@ -1013,6 +1070,7 @@ export interface FileRoutesByTo {
   '/contatos': typeof AppContatosRoute
   '/dashboard': typeof AppDashboardRoute
   '/empresas': typeof AppEmpresasRoute
+  '/equipes-numeros': typeof AppEquipesNumerosRoute
   '/espera': typeof AppEsperaRoute
   '/fluxos': typeof AppFluxosRoute
   '/grupos-internos': typeof AppGruposInternosRoute
@@ -1021,16 +1079,20 @@ export interface FileRoutesByTo {
   '/logs': typeof AppLogsRoute
   '/usuarios': typeof AppUsuariosRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/attendance-alerts': typeof ApiAttendanceAlertsRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
+  '/api/company-operations': typeof ApiCompanyOperationsRoute
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/dashboard': typeof ApiDashboardRouteWithChildren
   '/api/health': typeof ApiHealthRoute
+  '/api/internal-groups': typeof ApiInternalGroupsRoute
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
+  '/api/team-access': typeof ApiTeamAccessRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/campanhas/$id': typeof AppCampanhasIdRoute
@@ -1051,6 +1113,7 @@ export interface FileRoutesByTo {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
+  '/api/auth/password-recovery': typeof ApiAuthPasswordRecoveryRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
@@ -1079,6 +1142,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
+  '/api/internal/portal': typeof ApiInternalPortalRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1140,6 +1204,7 @@ export interface FileRoutesById {
   '/exclusao-de-dados': typeof ExclusaoDeDadosRoute
   '/login': typeof LoginRoute
   '/politica-de-privacidade': typeof PoliticaDePrivacidadeRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/register': typeof RegisterRoute
   '/termos-de-uso': typeof TermosDeUsoRoute
   '/_app/atendimento': typeof AppAtendimentoRoute
@@ -1151,6 +1216,7 @@ export interface FileRoutesById {
   '/_app/contatos': typeof AppContatosRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/empresas': typeof AppEmpresasRoute
+  '/_app/equipes-numeros': typeof AppEquipesNumerosRoute
   '/_app/espera': typeof AppEsperaRoute
   '/_app/fluxos': typeof AppFluxosRoute
   '/_app/gerencial': typeof AppGerencialRouteWithChildren
@@ -1160,16 +1226,20 @@ export interface FileRoutesById {
   '/_app/logs': typeof AppLogsRoute
   '/_app/usuarios': typeof AppUsuariosRoute
   '/api/access-hours': typeof ApiAccessHoursRoute
+  '/api/attendance-alerts': typeof ApiAttendanceAlertsRoute
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
   '/api/companies': typeof ApiCompaniesRouteWithChildren
+  '/api/company-operations': typeof ApiCompanyOperationsRoute
   '/api/contacts': typeof ApiContactsRouteWithChildren
   '/api/conversations': typeof ApiConversationsRouteWithChildren
   '/api/dashboard': typeof ApiDashboardRouteWithChildren
   '/api/health': typeof ApiHealthRoute
+  '/api/internal-groups': typeof ApiInternalGroupsRoute
   '/api/messages': typeof ApiMessagesRouteWithChildren
   '/api/plans': typeof ApiPlansRoute
+  '/api/team-access': typeof ApiTeamAccessRoute
   '/api/users': typeof ApiUsersRouteWithChildren
   '/webhook/evolution': typeof WebhookEvolutionRoute
   '/_app/campanhas/$id': typeof AppCampanhasIdRoute
@@ -1190,6 +1260,7 @@ export interface FileRoutesById {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/operational-company': typeof ApiAuthOperationalCompanyRoute
+  '/api/auth/password-recovery': typeof ApiAuthPasswordRecoveryRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/campaigns/$id': typeof ApiCampaignsIdRouteWithChildren
   '/api/campaigns/costs': typeof ApiCampaignsCostsRoute
@@ -1218,6 +1289,7 @@ export interface FileRoutesById {
   '/api/internal-chat/unread-count': typeof ApiInternalChatUnreadCountRoute
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
+  '/api/internal/portal': typeof ApiInternalPortalRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1279,6 +1351,7 @@ export interface FileRouteTypes {
     | '/exclusao-de-dados'
     | '/login'
     | '/politica-de-privacidade'
+    | '/redefinir-senha'
     | '/register'
     | '/termos-de-uso'
     | '/atendimento'
@@ -1290,6 +1363,7 @@ export interface FileRouteTypes {
     | '/contatos'
     | '/dashboard'
     | '/empresas'
+    | '/equipes-numeros'
     | '/espera'
     | '/fluxos'
     | '/gerencial'
@@ -1299,16 +1373,20 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/access-hours'
+    | '/api/attendance-alerts'
     | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
+    | '/api/company-operations'
     | '/api/contacts'
     | '/api/conversations'
     | '/api/dashboard'
     | '/api/health'
+    | '/api/internal-groups'
     | '/api/messages'
     | '/api/plans'
+    | '/api/team-access'
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
@@ -1329,6 +1407,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
+    | '/api/auth/password-recovery'
     | '/api/auth/register'
     | '/api/campaigns/$id'
     | '/api/campaigns/costs'
@@ -1357,6 +1436,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
+    | '/api/internal/portal'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1416,6 +1496,7 @@ export interface FileRouteTypes {
     | '/exclusao-de-dados'
     | '/login'
     | '/politica-de-privacidade'
+    | '/redefinir-senha'
     | '/register'
     | '/termos-de-uso'
     | '/atendimento'
@@ -1426,6 +1507,7 @@ export interface FileRouteTypes {
     | '/contatos'
     | '/dashboard'
     | '/empresas'
+    | '/equipes-numeros'
     | '/espera'
     | '/fluxos'
     | '/grupos-internos'
@@ -1434,16 +1516,20 @@ export interface FileRouteTypes {
     | '/logs'
     | '/usuarios'
     | '/api/access-hours'
+    | '/api/attendance-alerts'
     | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
+    | '/api/company-operations'
     | '/api/contacts'
     | '/api/conversations'
     | '/api/dashboard'
     | '/api/health'
+    | '/api/internal-groups'
     | '/api/messages'
     | '/api/plans'
+    | '/api/team-access'
     | '/api/users'
     | '/webhook/evolution'
     | '/campanhas/$id'
@@ -1464,6 +1550,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
+    | '/api/auth/password-recovery'
     | '/api/auth/register'
     | '/api/campaigns/$id'
     | '/api/campaigns/costs'
@@ -1492,6 +1579,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
+    | '/api/internal/portal'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1552,6 +1640,7 @@ export interface FileRouteTypes {
     | '/exclusao-de-dados'
     | '/login'
     | '/politica-de-privacidade'
+    | '/redefinir-senha'
     | '/register'
     | '/termos-de-uso'
     | '/_app/atendimento'
@@ -1563,6 +1652,7 @@ export interface FileRouteTypes {
     | '/_app/contatos'
     | '/_app/dashboard'
     | '/_app/empresas'
+    | '/_app/equipes-numeros'
     | '/_app/espera'
     | '/_app/fluxos'
     | '/_app/gerencial'
@@ -1572,16 +1662,20 @@ export interface FileRouteTypes {
     | '/_app/logs'
     | '/_app/usuarios'
     | '/api/access-hours'
+    | '/api/attendance-alerts'
     | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
     | '/api/companies'
+    | '/api/company-operations'
     | '/api/contacts'
     | '/api/conversations'
     | '/api/dashboard'
     | '/api/health'
+    | '/api/internal-groups'
     | '/api/messages'
     | '/api/plans'
+    | '/api/team-access'
     | '/api/users'
     | '/webhook/evolution'
     | '/_app/campanhas/$id'
@@ -1602,6 +1696,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/me'
     | '/api/auth/operational-company'
+    | '/api/auth/password-recovery'
     | '/api/auth/register'
     | '/api/campaigns/$id'
     | '/api/campaigns/costs'
@@ -1630,6 +1725,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/unread-count'
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
+    | '/api/internal/portal'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1691,19 +1787,24 @@ export interface RootRouteChildren {
   ExclusaoDeDadosRoute: typeof ExclusaoDeDadosRoute
   LoginRoute: typeof LoginRoute
   PoliticaDePrivacidadeRoute: typeof PoliticaDePrivacidadeRoute
+  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   RegisterRoute: typeof RegisterRoute
   TermosDeUsoRoute: typeof TermosDeUsoRoute
   ApiAccessHoursRoute: typeof ApiAccessHoursRoute
+  ApiAttendanceAlertsRoute: typeof ApiAttendanceAlertsRoute
   ApiAttendantsRoute: typeof ApiAttendantsRoute
   ApiAutomationFlowsRoute: typeof ApiAutomationFlowsRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
+  ApiCompanyOperationsRoute: typeof ApiCompanyOperationsRoute
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
   ApiConversationsRoute: typeof ApiConversationsRouteWithChildren
   ApiDashboardRoute: typeof ApiDashboardRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
+  ApiInternalGroupsRoute: typeof ApiInternalGroupsRoute
   ApiMessagesRoute: typeof ApiMessagesRouteWithChildren
   ApiPlansRoute: typeof ApiPlansRoute
+  ApiTeamAccessRoute: typeof ApiTeamAccessRoute
   ApiUsersRoute: typeof ApiUsersRouteWithChildren
   WebhookEvolutionRoute: typeof WebhookEvolutionRoute
   ApiAdminAuthCheckRoute: typeof ApiAdminAuthCheckRoute
@@ -1714,6 +1815,7 @@ export interface RootRouteChildren {
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthOperationalCompanyRoute: typeof ApiAuthOperationalCompanyRoute
+  ApiAuthPasswordRecoveryRoute: typeof ApiAuthPasswordRecoveryRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
   ApiDebugColsRoute: typeof ApiDebugColsRoute
   ApiDebugCurrentUserRoute: typeof ApiDebugCurrentUserRoute
@@ -1731,6 +1833,7 @@ export interface RootRouteChildren {
   ApiInternalChatUnreadCountRoute: typeof ApiInternalChatUnreadCountRoute
   ApiInternalChatUsersRoute: typeof ApiInternalChatUsersRoute
   ApiInternalDbPoolStatusRoute: typeof ApiInternalDbPoolStatusRoute
+  ApiInternalPortalRoute: typeof ApiInternalPortalRoute
   ApiMetaChannelsRoute: typeof ApiMetaChannelsRouteWithChildren
   ApiWebhooksEvolutionRoute: typeof ApiWebhooksEvolutionRoute
   ApiWebhooksMetaRoute: typeof ApiWebhooksMetaRouteWithChildren
@@ -1758,6 +1861,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redefinir-senha': {
+      id: '/redefinir-senha'
+      path: '/redefinir-senha'
+      fullPath: '/redefinir-senha'
+      preLoaderRoute: typeof RedefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/politica-de-privacidade': {
@@ -1809,6 +1919,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/team-access': {
+      id: '/api/team-access'
+      path: '/api/team-access'
+      fullPath: '/api/team-access'
+      preLoaderRoute: typeof ApiTeamAccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/plans': {
       id: '/api/plans'
       path: '/api/plans'
@@ -1821,6 +1938,13 @@ declare module '@tanstack/react-router' {
       path: '/api/messages'
       fullPath: '/api/messages'
       preLoaderRoute: typeof ApiMessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal-groups': {
+      id: '/api/internal-groups'
+      path: '/api/internal-groups'
+      fullPath: '/api/internal-groups'
+      preLoaderRoute: typeof ApiInternalGroupsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health': {
@@ -1851,6 +1975,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiContactsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/company-operations': {
+      id: '/api/company-operations'
+      path: '/api/company-operations'
+      fullPath: '/api/company-operations'
+      preLoaderRoute: typeof ApiCompanyOperationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/companies': {
       id: '/api/companies'
       path: '/api/companies'
@@ -1877,6 +2008,13 @@ declare module '@tanstack/react-router' {
       path: '/api/attendants'
       fullPath: '/api/attendants'
       preLoaderRoute: typeof ApiAttendantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/attendance-alerts': {
+      id: '/api/attendance-alerts'
+      path: '/api/attendance-alerts'
+      fullPath: '/api/attendance-alerts'
+      preLoaderRoute: typeof ApiAttendanceAlertsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/access-hours': {
@@ -1940,6 +2078,13 @@ declare module '@tanstack/react-router' {
       path: '/espera'
       fullPath: '/espera'
       preLoaderRoute: typeof AppEsperaRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/equipes-numeros': {
+      id: '/_app/equipes-numeros'
+      path: '/equipes-numeros'
+      fullPath: '/equipes-numeros'
+      preLoaderRoute: typeof AppEquipesNumerosRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/empresas': {
@@ -2067,6 +2212,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/messages/send'
       preLoaderRoute: typeof ApiMessagesSendRouteImport
       parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/internal/portal': {
+      id: '/api/internal/portal'
+      path: '/api/internal/portal'
+      fullPath: '/api/internal/portal'
+      preLoaderRoute: typeof ApiInternalPortalRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/internal/db-pool-status': {
       id: '/api/internal/db-pool-status'
@@ -2262,6 +2414,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/register'
       fullPath: '/api/auth/register'
       preLoaderRoute: typeof ApiAuthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/password-recovery': {
+      id: '/api/auth/password-recovery'
+      path: '/api/auth/password-recovery'
+      fullPath: '/api/auth/password-recovery'
+      preLoaderRoute: typeof ApiAuthPasswordRecoveryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/operational-company': {
@@ -2755,6 +2914,7 @@ interface AppRouteChildren {
   AppContatosRoute: typeof AppContatosRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppEmpresasRoute: typeof AppEmpresasRoute
+  AppEquipesNumerosRoute: typeof AppEquipesNumerosRoute
   AppEsperaRoute: typeof AppEsperaRoute
   AppFluxosRoute: typeof AppFluxosRoute
   AppGerencialRoute: typeof AppGerencialRouteWithChildren
@@ -2775,6 +2935,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppContatosRoute: AppContatosRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppEmpresasRoute: AppEmpresasRoute,
+  AppEquipesNumerosRoute: AppEquipesNumerosRoute,
   AppEsperaRoute: AppEsperaRoute,
   AppFluxosRoute: AppFluxosRoute,
   AppGerencialRoute: AppGerencialRouteWithChildren,
@@ -3095,19 +3256,24 @@ const rootRouteChildren: RootRouteChildren = {
   ExclusaoDeDadosRoute: ExclusaoDeDadosRoute,
   LoginRoute: LoginRoute,
   PoliticaDePrivacidadeRoute: PoliticaDePrivacidadeRoute,
+  RedefinirSenhaRoute: RedefinirSenhaRoute,
   RegisterRoute: RegisterRoute,
   TermosDeUsoRoute: TermosDeUsoRoute,
   ApiAccessHoursRoute: ApiAccessHoursRoute,
+  ApiAttendanceAlertsRoute: ApiAttendanceAlertsRoute,
   ApiAttendantsRoute: ApiAttendantsRoute,
   ApiAutomationFlowsRoute: ApiAutomationFlowsRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
+  ApiCompanyOperationsRoute: ApiCompanyOperationsRoute,
   ApiContactsRoute: ApiContactsRouteWithChildren,
   ApiConversationsRoute: ApiConversationsRouteWithChildren,
   ApiDashboardRoute: ApiDashboardRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
+  ApiInternalGroupsRoute: ApiInternalGroupsRoute,
   ApiMessagesRoute: ApiMessagesRouteWithChildren,
   ApiPlansRoute: ApiPlansRoute,
+  ApiTeamAccessRoute: ApiTeamAccessRoute,
   ApiUsersRoute: ApiUsersRouteWithChildren,
   WebhookEvolutionRoute: WebhookEvolutionRoute,
   ApiAdminAuthCheckRoute: ApiAdminAuthCheckRoute,
@@ -3118,6 +3284,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthOperationalCompanyRoute: ApiAuthOperationalCompanyRoute,
+  ApiAuthPasswordRecoveryRoute: ApiAuthPasswordRecoveryRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
   ApiDebugColsRoute: ApiDebugColsRoute,
   ApiDebugCurrentUserRoute: ApiDebugCurrentUserRoute,
@@ -3135,6 +3302,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalChatUnreadCountRoute: ApiInternalChatUnreadCountRoute,
   ApiInternalChatUsersRoute: ApiInternalChatUsersRoute,
   ApiInternalDbPoolStatusRoute: ApiInternalDbPoolStatusRoute,
+  ApiInternalPortalRoute: ApiInternalPortalRoute,
   ApiMetaChannelsRoute: ApiMetaChannelsRouteWithChildren,
   ApiWebhooksEvolutionRoute: ApiWebhooksEvolutionRoute,
   ApiWebhooksMetaRoute: ApiWebhooksMetaRouteWithChildren,

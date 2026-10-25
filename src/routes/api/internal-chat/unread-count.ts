@@ -38,9 +38,11 @@ export const Route = createFileRoute("/api/internal-chat/unread-count")({
               SELECT COUNT(*)::int AS count
               FROM internal_notifications n
               JOIN internal_chats c ON c.id = n.chat_id
+              JOIN internal_chat_members mem ON mem.chat_id=c.id AND mem.user_id=n.user_id
               WHERE n.user_id = ${uid}
                 AND n.read_at IS NULL
                 AND c.company_id = ${info.companyId}::uuid
+                AND COALESCE((to_jsonb(c)->>'active')::boolean,true)=true
             `);
             perf.setResultCount(1);
             return Response.json({ count: rows[0]?.count ?? 0 });

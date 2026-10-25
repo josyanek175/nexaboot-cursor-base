@@ -6,6 +6,7 @@ import { requireCompanyId } from "@/lib/company.server";
 import { sendMetaManualText } from "@/lib/meta-send-message.server";
 import { sql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
+import { requireConversationAccess } from "@/lib/channel-permissions.server";
 
 const Body = z
   .object({
@@ -32,6 +33,7 @@ export const Route = createFileRoute("/api/meta/messages/send-text")({
         }
 
         const conversationId = parsed.data.conversationId ?? parsed.data.conversation_id!;
+        const denied=await requireConversationAccess(companyId,conversationId);if(denied)return denied;
         const { text } = parsed.data;
 
         console.log("[SEND_MESSAGE_REQUEST_RECEIVED]", { conversationId, companyId, route: "meta/send-text" });
@@ -41,7 +43,7 @@ export const Route = createFileRoute("/api/meta/messages/send-text")({
         const attendantRows = uid
           ? await s<{ id: string; name: string | null }[]>`
               SELECT id, name FROM public.users
-              WHERE id = ${uid}::uuid AND company_id = ${companyId}::uuid
+              WHERE id = ${uid}::uuid AND active=true AND (company_id = ${companyId}::uuid OR role IN ('TI','SUPER_ADMIN','ADMIN_GERAL'))
               LIMIT 1
             `
           : [];

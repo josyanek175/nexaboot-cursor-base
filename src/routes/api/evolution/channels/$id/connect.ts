@@ -2,7 +2,7 @@
 // configura o webhook e retorna o QR Code para escanear.
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
-import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelManager as requireCompanyId } from "@/lib/channel-permissions.server";
 import {
   hasEvoConfig, instanceExists, createInstanceEvo, setInstanceWebhook,
   connectInstanceEvo, extractQr, instanceState, mapEvoStatus,

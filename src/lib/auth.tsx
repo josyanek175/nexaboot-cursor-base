@@ -399,17 +399,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
-    await new Promise((r) => setTimeout(r, 400));
-    pushAudit({
-      tenantId: null,
-      actorId: "anonymous",
-      actorName: email,
-      action: "auth.password.reset_requested",
-      targetType: "auth",
-      targetId: email,
-      result: "success",
-      reason: `Recuperação solicitada para ${email}`,
-    });
+    const response=await fetch('/api/auth/password-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    if(!response.ok)throw new Error('recovery_unavailable');
   }, []);
 
   const tenant = useMemo(() => operationalTenant(companyId, companyName, companyValid), [companyId, companyName, companyValid]);

@@ -84,14 +84,16 @@ export function createSessionToken(userId: string) {
 
 export function verifySessionToken(token: string): string | null {
   try {
-    const [b64, sig] = token.split(".");
-    if (!b64 || !sig) return null;
+    const [b64, sig, extra] = token.split(".");
+    if (!b64 || !sig || extra !== undefined) return null;
     const expected = sign(b64);
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);
     if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
     const payload = Buffer.from(b64, "base64url").toString();
-    const [userId] = payload.split(".");
+    const [userId,issuedAt,extraPayload] = payload.split(".");
+    const issued=Number(issuedAt),now=Date.now();
+    if(extraPayload!==undefined||!Number.isFinite(issued)||issued<=0||issued>now+60000||now-issued>MAX_AGE*1000)return null;
     return userId || null;
   } catch {
     return null;
@@ -106,6 +108,15 @@ export function setSessionCookie(userId: string) {
     path: "/",
     maxAge: MAX_AGE,
   });
+}
+
+/** Invalidates earlier sessions after either email recovery or an administrator reset. */
+export function sessionPredatesPasswordChange(token:string, changedAt:string|null):boolean {
+  if(!changedAt)return false;
+  if(!verifySessionToken(token))return true;
+  const payload=Buffer.from(token.split('.')[0],'base64url').toString();
+  const issued=Number(payload.split('.')[1]),changed=new Date(changedAt).getTime();
+  return !Number.isFinite(changed)||issued<=changed;
 }
 
 export function clearSessionCookie() {

@@ -1,7 +1,7 @@
 // GET /api/evolution/channels/:id/qrcode — solicita o QR Code da instância.
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
-import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelManager as requireCompanyId } from "@/lib/channel-permissions.server";
 import {
   hasEvoConfig, connectInstanceEvo, extractQr, instanceState, mapEvoStatus,
 } from "@/lib/evolution.server";

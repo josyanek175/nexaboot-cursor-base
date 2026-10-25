@@ -89,6 +89,7 @@ export interface WhatsAppProvider {
     _channel: WhatsAppChannelRecord,
     _to: string,
     _body: string,
+    _replyButtons?: import("@/lib/meta-reply-buttons").ReplyButton[],
   ): Promise<ProviderSendResult>;
 }
 

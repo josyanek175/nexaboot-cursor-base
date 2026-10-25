@@ -2,6 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelAccess } from "@/lib/channel-permissions.server";
 import { fetchMetaChannelLiveStatus } from "@/lib/meta-channel-status.server";
 import {
   META_CHANNEL_UUID_RE,
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/api/meta/channels/$id/status")({
           return Response.json({ error: "invalid_id" }, { status: 400 });
         }
 
+        const denied=await requireChannelAccess(companyId,params.id);if(denied)return denied;
         const row = await getMetaChannelRowForCompany(params.id, companyId);
         if (!row) {
           return Response.json({ error: "not_found" }, { status: 404 });

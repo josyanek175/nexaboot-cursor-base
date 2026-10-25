@@ -3,6 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelAccess } from "@/lib/channel-permissions.server";
 import { hasEvoConfig, instanceState, mapEvoStatus } from "@/lib/evolution.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/api/evolution/channels/$id/status")({
         if (company instanceof Response) return company;
         const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
+        const denied=await requireChannelAccess(companyId,params.id);if(denied)return denied;
 
         const s = sql();
         const rows = await s<{ evolution_instance_name: string | null }[]>`

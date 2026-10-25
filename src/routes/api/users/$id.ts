@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
+import { canAssignUserRole, canManageUserTarget } from "@/lib/user-management-policy";
 import { z } from "zod";
-import { sql } from "@/lib/pg.server";
+import { getSql } from "@/lib/pg.server";
 import { getSessionUserId } from "@/lib/session.server";
 import { requireCompanyId } from "@/lib/company.server";
 
-const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI"]);
+const ADMIN_ROLES = new Set(["ADMIN", "ADMIN_GERAL", "ADMIN_EMPRESA", "TI", "SUPER_ADMIN"]);
 
 const UpdateBody = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -19,9 +20,9 @@ const UpdateBody = z.object({
 async function getActor() {
   const uid = getSessionUserId();
   if (!uid) return null;
-  const rows = await sql()`
+  const rows = await getSql()`
     SELECT id, email, name, role, tenant_id, company_id
-    FROM public.users WHERE id = ${uid}
+    FROM public.users WHERE active = true AND id = ${uid}
   `;
   return rows[0] ?? null;
 }
@@ -43,7 +44,7 @@ export const Route = createFileRoute("/api/users/$id")({
           return Response.json({ error: "forbidden" }, { status: 403 });
         }
         if (!isUuid(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
-        const rows = await sql()`
+        const rows = await getSql()`
           SELECT id, tenant_id, company_id, name, email, role, active, avatar_url,
                  last_login_at, created_at, updated_at
           FROM public.users
@@ -73,19 +74,25 @@ export const Route = createFileRoute("/api/users/$id")({
           );
         }
 
-        const target = await sql()`
-          SELECT id FROM public.users
+        const target = await getSql()`
+          SELECT id, role FROM public.users
           WHERE id = ${params.id} AND company_id = ${companyId}::uuid
         `;
         if (!target[0]) return Response.json({ error: "not_found" }, { status: 404 });
 
+        if (!canManageUserTarget(String(actor.role), String(target[0].role)))
+          return Response.json({ error: "forbidden" }, { status: 403 });
         const d = parsed.data;
+        if (d.role && !canAssignUserRole(String(actor.role), d.role))
+          return Response.json({ error: "forbidden_role" }, { status: 403 });
+        if (params.id === String(actor.id) && (d.active === false || (d.role && d.role !== actor.role)))
+          return Response.json({ error: "cannot_change_own_access" }, { status: 400 });
         const passwordHash =
           d.password && d.password.length > 0 ? await bcrypt.hash(d.password, 10) : null;
         const email = d.email ? d.email.toLowerCase() : null;
 
         try {
-          const rows = await sql()`
+          const rows = await getSql()`
             UPDATE public.users SET
               name          = COALESCE(${d.name ?? null}, name),
               email         = COALESCE(${email}, email),
@@ -125,7 +132,11 @@ export const Route = createFileRoute("/api/users/$id")({
         if (params.id === String(actor.id)) {
           return Response.json({ error: "cannot_delete_self" }, { status: 400 });
         }
-        const rows = await sql()`
+        const targets = await getSql()`SELECT role FROM public.users WHERE id=${params.id}::uuid AND company_id=${companyId}::uuid`;
+        if (!targets[0]) return Response.json({ error: "not_found" }, { status: 404 });
+        if (!canManageUserTarget(String(actor.role), String(targets[0].role)))
+          return Response.json({ error: "forbidden" }, { status: 403 });
+        const rows = await getSql()`
           UPDATE public.users SET active = false, updated_at = now()
           WHERE id = ${params.id} AND company_id = ${companyId}::uuid
           RETURNING id, active

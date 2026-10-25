@@ -62,14 +62,14 @@ function normalizeReply(text: string): string {
   return text.trim().toLowerCase();
 }
 
-export function matchChoice<T extends { label: string }>(text: string, choices: T[]): T | null {
+export function matchChoice<T extends { label: string; id?: string }>(text: string, choices: T[]): T | null {
   const normalized = normalizeReply(text);
   if (!normalized) return null;
   const asNumber = Number(normalized);
   if (Number.isInteger(asNumber) && asNumber >= 1 && asNumber <= choices.length) {
     return choices[asNumber - 1] ?? null;
   }
-  return choices.find((choice) => normalizeReply(choice.label) === normalized) ?? null;
+  return choices.find((choice) => normalizeReply(choice.label) === normalized || choice.id === text.trim()) ?? null;
 }
 
 export function replyMatches(text: string, match: string): boolean {
@@ -128,6 +128,8 @@ function parseStep(raw: unknown): { ok: true; step: FlowStep } | { ok: false; er
     }
     const choices = source.map(parseChoice);
     if (choices.some((choice) => !choice)) return { ok: false, error: "Botão sem texto." };
+    if (new Set(choices.map(c=>c!.id)).size!==choices.length || new Set(choices.map(c=>c!.label.toLowerCase())).size!==choices.length)
+      return {ok:false,error:"Use identificadores e textos diferentes para cada botão."};
     if (type === "reminder") {
       const options = choices.map((choice, index) => {
         const daysRaw = Number((source[index] as { days?: unknown }).days);

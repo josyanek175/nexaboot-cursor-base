@@ -1,7 +1,7 @@
 // POST /api/meta/channels/:id/templates/sync — sincroniza templates aprovados da Meta.
 import { createFileRoute } from "@tanstack/react-router";
 
-import { requireCompanyId } from "@/lib/company.server";
+import { requireChannelManager as requireCompanyId } from "@/lib/channel-permissions.server";
 import { META_CHANNEL_UUID_RE } from "@/lib/meta-channels.server";
 import { syncMetaTemplatesForChannel } from "@/lib/meta-message-templates.server";
 

@@ -68,6 +68,7 @@ export const Route = createFileRoute("/api/internal-chat/send")({
           JOIN internal_chats c ON c.id = mem.chat_id
           WHERE mem.chat_id = ${chatId} AND mem.user_id = ${uid}
             AND c.company_id = ${companyId}::uuid
+            AND COALESCE((to_jsonb(c)->>'active')::boolean,true)=true
         `;
         if (!member.length) return Response.json({ error: "forbidden" }, { status: 403 });
 

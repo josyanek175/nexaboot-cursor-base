@@ -3,6 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
 import { requireCompanyId } from "@/lib/company.server";
+import { requireConversationAccess } from "@/lib/channel-permissions.server";
 import { withApiTiming } from "@/lib/perf-diag.server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
         if (company instanceof Response) return company;
         const companyId = company;
         if (!UUID_RE.test(params.id)) return Response.json({ error: "invalid_id" }, { status: 400 });
+        const denied=await requireConversationAccess(companyId,params.id);if(denied)return denied;
 
         const url = new URL(request.url);
         const limit = parseLimit(url.searchParams.get("limit"));

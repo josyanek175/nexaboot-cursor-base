@@ -18,6 +18,8 @@ type CompanyRow = {
   subscription_status: string | null;
   subscription_ends_at: string | null;
   whatsapp_channels_used: number;
+  active_users: number;
+  max_users: number | null;
 };
 
 type PlanOption = {
@@ -25,6 +27,7 @@ type PlanOption = {
   code: string;
   name: string;
   max_whatsapp_channels: number;
+  max_users: number | null;
 };
 
 type EditDraft = {
@@ -291,10 +294,10 @@ function EmpresasPage() {
         <div className="flex items-center gap-3">
           <Building2 className="h-5 w-5 text-whatsapp" />
           <div>
-            <h1 className="text-lg font-semibold">Empresas / Tenants</h1>
+            <h1 className="text-lg font-semibold">Empresas</h1>
             <p className="text-xs text-muted-foreground">
               {isPlatformView
-                ? "Visão global · plano e uso de canais"
+                ? "Empresas, funcionários e planos contratados"
                 : `Sua empresa · plano e consumo (${companySubtitle})`}
             </p>
           </div>
@@ -440,6 +443,9 @@ function EmpresasPage() {
 
       {creating && (
         <Modal title="Nova empresa" onClose={() => setCreating(null)}>
+          <p className="text-xs text-muted-foreground">
+            Cadastre a empresa, selecione o plano e defina o administrador que fará o primeiro acesso.
+          </p>
           <Field label="Nome da empresa" value={creating.name} onChange={(v) => setCreating({ ...creating, name: v })} />
           <Select
             label="Status"

@@ -21,6 +21,11 @@ const uid = "11111111-1111-4111-8111-111111111111";
 const a = "22222222-2222-4222-8222-222222222222";
 const b = "33333333-3333-4333-8333-333333333333";
 const platform = load("src/lib/platform-roles.ts");
+const permissions = load("src/lib/permissions.ts", { "./platform-roles": platform });
+assert.equal(permissions.canCreateTenant({ id: uid, role: "SUPER_ADMIN", tenantId: "" }), true);
+for (const deniedRole of ["TI", "ADMIN_GERAL", "ADMIN_EMPRESA", "GERENTE", "ATENDENTE"]) {
+  assert.equal(permissions.canCreateTenant({ id: uid, role: deniedRole, tenantId: a }), false);
+}
 const context = load("src/lib/company-context.ts");
 const auth = load("src/lib/auth-user.ts", {
   "./platform-roles": platform,
@@ -173,7 +178,7 @@ selected = a;
 let writes = 0;
 const userDb = async (strings, ...values) => {
   const query = strings.join("?");
-  if (query.includes("SELECT id, email, name, role")) return [{ id: uid, role, company_id: null }];
+  if (query.includes("WHERE active = true")) return [{ id: uid, role, company_id: null }];
   assert.ok(query.includes("company_id ="), "Every target read/write must have a company scope");
   const scopedCompany = values.at(-1);
   if (query.includes("UPDATE")) {
@@ -183,11 +188,13 @@ const userDb = async (strings, ...values) => {
   }
   return scopedCompany === b ? [{ id: a, role: "ATENDENTE" }] : [];
 };
+const policy = load("src/lib/user-management-policy.ts", { "./platform-roles": platform });
 const userHandlers = load("src/routes/api/users/$id.ts", {
   "@tanstack/react-router": { createFileRoute: () => (config) => config },
-  "@/lib/pg.server": { sql: () => userDb, getSql: () => userDb },
+  "@/lib/pg.server": { getSql: () => userDb },
   "@/lib/session.server": { getSessionUserId: () => uid },
   "@/lib/company.server": company,
+  "@/lib/user-management-policy": policy,
 }).Route.server.handlers;
 const reset = () =>
   userHandlers.PUT({
@@ -203,7 +210,7 @@ selected = b;
 assert.equal((await reset()).status, 200);
 assert.equal(writes, 1);
 
-// TI can create a company with its administrator and subscription in one transaction.
+// Only SUPER_ADMIN creates a company; TI retains support access.
 let transactionWrites = 0;
 const tx = async (strings) => {
   const query = strings.join("?");
@@ -231,6 +238,14 @@ const companies = load("src/routes/api/companies.ts", {
 }).Route.server.handlers;
 assert.equal((await (await companies.GET()).json()).companies.length, 2);
 const createCompany = () => companies.POST({ request: new Request("https://example.test/api/companies", { method: "POST", body: JSON.stringify({ name: "Empresa B", plan_id: a, admin: { name: "Administrador", email: "admin@example.test", password: "isolated-password" } }) }) });
+for (const deniedRole of ["TI", "ADMIN_GERAL", "ADMIN_EMPRESA", "GERENTE", "ATENDENTE"]) {
+  role = deniedRole;
+  assert.equal(platform.canCreateCompany(role), false);
+  assert.equal((await createCompany()).status, 403);
+  assert.equal(transactionWrites, 0);
+}
+role = "SUPER_ADMIN";
+assert.equal(platform.canCreateCompany(role), true);
 assert.equal((await createCompany()).status, 201);
 assert.equal(transactionWrites, 3);
 role = "ADMIN_EMPRESA";
