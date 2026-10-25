@@ -4,16 +4,40 @@ const { pg, db } = await isolatedPostgres();
 try {
   const [{ id: user }] =
     await db`INSERT INTO users(name,role) VALUES('User','ATENDENTE') RETURNING id`;
-  let uid = null;
+  let token = null;
+  let unavailable = false;
+  process.env.SESSION_SECRET = "isolated-diagnostics-test-secret";
+  const sessions = tsLoader({ "@tanstack/react-start/server": { getCookie: () => token } })(
+    "src/lib/session.server.ts",
+  );
   const guard = tsLoader({
-    "@/lib/pg.server": { getSql: () => db },
-    "@/lib/session.server": { getSessionUserId: () => uid },
+    "@/lib/pg.server": {
+      getSql: () => {
+        if (unavailable) throw new Error("offline");
+        return db;
+      },
+    },
+    "@/lib/session.server": sessions,
   })("src/lib/platform-diagnostics.server.ts");
   assert.equal((await guard.requirePlatformDiagnostics()).status, 401);
-  uid = user;
+  token = sessions.createSessionToken(user);
   assert.equal((await guard.requirePlatformDiagnostics()).status, 403);
   await db`UPDATE users SET role='TI' WHERE id=${user}::uuid`;
   assert.equal(await guard.requirePlatformDiagnostics(), null);
+  const originalNow = Date.now;
+  Date.now = () => originalNow() - 60000;
+  token = sessions.createSessionToken(user);
+  Date.now = originalNow;
+  await db`UPDATE users SET password_hash='changed' WHERE id=${user}::uuid`;
+  assert.equal((await guard.requirePlatformDiagnostics()).status, 401);
+  Date.now = () => originalNow() + 1000;
+  token = sessions.createSessionToken(user);
+  Date.now = originalNow;
+  unavailable = true;
+  const blocked = await guard.requirePlatformDiagnostics();
+  assert.equal(blocked.status, 503);
+  assert.equal(blocked.headers.get("cache-control"), "private, no-store");
+  unavailable = false;
   await db`UPDATE users SET active=false WHERE id=${user}::uuid`;
   assert.equal((await guard.requirePlatformDiagnostics()).status, 403);
   const routes = [

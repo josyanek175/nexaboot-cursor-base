@@ -21,7 +21,12 @@ const overrides = {
       throw Error("Diagnostic must authorize before data queries");
     },
   },
-  "@/lib/session.server": { getSessionUserId: () => uid, hasSessionSecret: () => false },
+  "@/lib/session.server": {
+    getSessionToken: () => uid,
+    verifySessionToken: (token) => token,
+    sessionPredatesPasswordChange: () => false,
+    hasSessionSecret: () => false,
+  },
   "@/lib/subscription.server": {},
 };
 function load(path) {
