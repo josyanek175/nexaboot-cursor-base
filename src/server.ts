@@ -188,7 +188,17 @@ export default {
       if (blocked) return blocked;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      const normalized = await normalizeCatastrophicSsrResponse(response);
+      if (new URL(request.url).pathname.startsWith("/api/")) {
+        const headers = new Headers(normalized.headers);
+        headers.set("Cache-Control", "private, no-store");
+        return new Response(normalized.body, {
+          status: normalized.status,
+          statusText: normalized.statusText,
+          headers,
+        });
+      }
+      return normalized;
     } catch (error) {
       console.error(error);
       return brandedErrorResponse();

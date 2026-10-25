@@ -58,7 +58,7 @@ export const Route = createFileRoute("/_app/empresas")({
 });
 
 function EmpresasPage() {
-  const { user, companyId, companyName, hydrated } = useAuth();
+  const { user, companyId, companyName, hydrated, setOperationalCompany, switchingCompany } = useAuth();
   const actor = {
     id: user?.id ?? "",
     role: user?.role ?? "ATENDENTE",
@@ -381,6 +381,19 @@ function EmpresasPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
+                          {isPlatformView && (
+                            <button
+                              disabled={!t.active || switchingCompany}
+                              onClick={() => {
+                                void setOperationalCompany(t.id).catch(() =>
+                                  toast.error("Não foi possível selecionar a empresa."),
+                                );
+                              }}
+                              className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-40"
+                            >
+                              {companyId === t.id ? "Empresa selecionada" : "Selecionar empresa"}
+                            </button>
+                          )}
                           <button
                             disabled={!editable}
                             onClick={() => openEdit(t)}

@@ -80,7 +80,7 @@ export interface CurrentUserCompanyInfo {
 }
 
 export const PLATFORM_NO_COMPANY_MESSAGE =
-  "Selecione uma empresa para gerenciar campanhas.";
+  "Selecione uma empresa para acessar os módulos operacionais.";
 
 /** Tempos internos de getCurrentUserCompanyInfo (diagnóstico temporário). */
 export type CompanyInfoTiming = {
@@ -126,7 +126,7 @@ export async function getCurrentUserCompanyInfo(
 
   const tUser0 = Date.now();
   const users = await s<{ id: string; role: string; company_id: string | null }[]>`
-    SELECT id, role, company_id FROM public.users WHERE id = ${uid} LIMIT 1
+    SELECT id, role, company_id FROM public.users WHERE id = ${uid} AND active = true LIMIT 1
   `;
   if (timing) timing.userQueryMs = Date.now() - tUser0;
 

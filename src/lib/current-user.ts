@@ -2,7 +2,8 @@
 // Backend: /api/auth/login + /api/auth/me.
 import { useMemo } from "react";
 import { useAuth } from "./auth";
-import { tenants, type Role } from "./mocks";
+import type { Role } from "./mocks";
+import { isPlatformRole } from "./platform-roles";
 
 export interface CurrentUser {
   id: string;
@@ -21,14 +22,15 @@ export function useCurrentUser(): CurrentUser | null {
   const { user } = useAuth();
   return useMemo(() => {
     if (!user) return null;
-    const t = tenants.find((x) => x.id === user.tenantId);
     return {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      tenant_id: user.tenantId,
-      tenant_name: t?.name ?? user.tenantId,
+      tenant_id: user.companyValid ? (user.companyId ?? "") : "",
+      tenant_name: user.companyValid
+        ? (user.companyName ?? "Empresa selecionada")
+        : "Nenhuma empresa selecionada",
       avatarColor: user.avatarColor,
     };
   }, [user]);
@@ -42,5 +44,5 @@ export function getCurrentUserSnapshot(): CurrentUser | null {
 
 /** Permissão simples para gestão de grupos internos. */
 export function canManageInternalGroups(role: Role | undefined): boolean {
-  return role === "ADMIN_GERAL" || role === "ADMIN_EMPRESA" || role === "TI";
+  return isPlatformRole(role) || role === "ADMIN_EMPRESA";
 }

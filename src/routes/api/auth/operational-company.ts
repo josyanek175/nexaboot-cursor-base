@@ -69,6 +69,7 @@ export const Route = createFileRoute("/api/auth/operational-company")({
         }
 
         const setCookie = buildOperationalCompanySetCookie(uid, company[0].id);
+        console.info("[OPERATIONAL_COMPANY_SELECTED]", { actorUserId: uid, companyId: company[0].id });
         return Response.json(
           {
             company_id: company[0].id,

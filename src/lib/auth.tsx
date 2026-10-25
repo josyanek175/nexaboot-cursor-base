@@ -9,10 +9,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { tenants, type Tenant } from "./mocks";
+import type { Tenant } from "./mocks";
+import { operationalTenant } from "./company-context";
 import { pushAudit } from "./audit-log";
 import { toast } from "sonner";
 import {
@@ -44,6 +46,7 @@ interface AuthContextValue {
   refreshSession: () => Promise<void>;
   /** Plataforma: define empresa operacional ativa (cookie assinado). */
   setOperationalCompany: (companyId: string) => Promise<void>;
+  switchingCompany: boolean;
   attempts: number;
   lockedUntil: number | null;
   login: (email: string, password: string, remember: boolean) => Promise<LoginResult>;
@@ -73,6 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [companyMessage, setCompanyMessage] = useState<string | null>(null);
   const [platformAccess, setPlatformAccess] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [switchingCompany, setSwitchingCompany] = useState(false);
+  const companyChangeInFlight = useRef(false);
 
   const applyMeResponse = useCallback(
     (data: { user: MeUserPayload | null; company_message?: string }) => {
@@ -126,19 +131,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     applyMeResponse(data);
   }, [applyMeResponse]);
 
-  const setOperationalCompany = useCallback(
-    async (id: string) => {
+  const setOperationalCompany = useCallback(async (id: string) => {
+    if (companyChangeInFlight.current) throw new Error("Troca de empresa em andamento.");
+    companyChangeInFlight.current = true;
+    setSwitchingCompany(true);
+    try {
       const res = await fetch("/api/auth/operational-company", {
         method: "POST",
         credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ company_id: id }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await refreshSession();
-    },
-    [refreshSession],
-  );
+      // Rebuild every operational screen after the server has accepted the signed context.
+      if (typeof window !== "undefined") {
+        window.location.reload();
+      } else {
+        await refreshSession();
+        companyChangeInFlight.current = false;
+        setSwitchingCompany(false);
+      }
+    } catch (error) {
+      companyChangeInFlight.current = false;
+      setSwitchingCompany(false);
+      throw error;
+    }
+  }, [refreshSession]);
 
   // Hidratação: pergunta ao backend quem está logado pelo cookie.
   useEffect(() => {
@@ -393,20 +412,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const tenant = useMemo(
-    () =>
-      user
-        ? tenants.find((t) => t.id === user.tenantId) ?? {
-            id: user.tenantId,
-            name: user.tenantId,
-            cnpj: "",
-            plan: "Free" as const,
-            status: "ativo" as const,
-            sharedAttendance: false,
-          }
-        : null,
-    [user],
-  );
+  const tenant = useMemo(() => operationalTenant(companyId, companyName, companyValid), [companyId, companyName, companyValid]);
 
   const value: AuthContextValue = {
     user,
@@ -420,6 +426,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     companyId,
     refreshSession,
     setOperationalCompany,
+    switchingCompany,
     attempts,
     lockedUntil,
     login,
