@@ -1,6 +1,7 @@
 // Normalização da resposta de autenticação (snake_case da API + camelCase legado).
 import type { Role, User } from "./mocks";
 import { isPlatformRole } from "./platform-roles";
+import { operationalCompanyId } from "./company-context";
 
 /** Payload bruto de /api/auth/me ou /api/auth/login (aceita ambos os formatos). */
 export type MeUserPayload = {
@@ -31,9 +32,8 @@ export function normalizeAuthUser(raw: MeUserPayload): AuthUser {
   const companyId = raw.company_id ?? raw.companyId ?? null;
   const companyName = raw.company_name ?? raw.companyName ?? null;
   const companyValid = raw.company_valid ?? raw.companyValid ?? false;
-  const platformAccess =
-    raw.platform_access ?? raw.platformAccess ?? isPlatformRole(raw.role);
-  const tenantId = raw.tenant_id ?? raw.tenantId ?? "default";
+  const platformAccess = raw.platform_access ?? raw.platformAccess ?? isPlatformRole(raw.role);
+  const tenantId = operationalCompanyId(companyId, companyValid);
 
   return {
     id: raw.id,
