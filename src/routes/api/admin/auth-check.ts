@@ -5,6 +5,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import bcrypt from "bcryptjs";
 import { sql } from "@/lib/pg.server";
 import { hasSessionSecret } from "@/lib/session.server";
+import { requirePlatformDiagnostics } from "@/lib/platform-diagnostics.server";
 
 const BCRYPT_PREFIX_RE = /^\$2[aby]\$/;
 
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/api/admin/auth-check")({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        const denied=await requirePlatformDiagnostics();if(denied)return denied;
         const url = new URL(request.url);
         const emailParam = (url.searchParams.get("email") ?? "").trim().toLowerCase();
         const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -64,6 +66,7 @@ export const Route = createFileRoute("/api/admin/auth-check")({
       // POST { email, password } -> roda bcrypt.compare SEM expor o hash.
       // Use para confirmar passo 2 do diagnóstico de forma segura.
       POST: async ({ request }) => {
+        const denied=await requirePlatformDiagnostics();if(denied)return denied;
         const hasDatabaseUrl = !!process.env.DATABASE_URL;
         const sessionSecretPresent = hasSessionSecret();
         const json = (await request.json().catch(() => null)) as
