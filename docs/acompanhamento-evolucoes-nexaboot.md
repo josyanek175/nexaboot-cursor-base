@@ -6,8 +6,12 @@ As alterações começam na DEV; a produção não é o ambiente de teste.
 
 ## 6 — TI e gestão das empresas — aguardando homologação na DEV
 
-TI deve listar e criar empresas, selecionar uma empresa e atuar com poderes de
+TI deve listar empresas, selecionar uma empresa e atuar com poderes de
 administrador dentro dela, preservando a identidade do usuário TI.
+Conforme ajuste posterior do usuário, criar uma empresa é exclusivo de
+SUPER_ADMIN; TI e ADMIN_GERAL não podem criar novas empresas.
+O cadastro fica em Empresas → Nova empresa, com plano e administrador inicial.
+Somente SUPER_ADMIN pode conceder esse perfil ou alterar outra conta SUPER_ADMIN.
 
 Correção atual: contexto da interface baseado na empresa real selecionada,
 remoção do seletor fictício de usuários, recarga ao trocar de empresa,

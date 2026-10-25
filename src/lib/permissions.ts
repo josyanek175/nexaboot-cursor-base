@@ -2,7 +2,7 @@
 // Ver: src/lib/session.tsx para a sessão atual.
 
 import type { Role, User, Tenant } from "./mocks";
-import { isPlatformRole } from "./platform-roles";
+import { canCreateCompany, isPlatformRole } from "./platform-roles";
 
 export { isPlatformRole };
 
@@ -59,9 +59,7 @@ export function canResetPassword(actor: ActingUser, target: User): boolean {
 
 // ─── Empresas ────────────────────────────────────────────────────────────────
 export function canCreateTenant(actor: ActingUser): boolean {
-  return (
-    actor.role === "ADMIN_GERAL" || actor.role === "TI" || (actor.role as string) === "SUPER_ADMIN"
-  );
+  return canCreateCompany(actor.role);
 }
 
 export function canEditTenant(actor: ActingUser, target: Tenant): boolean {

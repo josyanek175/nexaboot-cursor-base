@@ -38,6 +38,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
 const ROLE_LABELS: Record<Role, string> = {
+  SUPER_ADMIN: "Super Admin · Plataforma",
   ADMIN_GERAL: "Super-Admin (plataforma)",
   TI: "TI · Plataforma",
   ADMIN_EMPRESA: "Admin Empresa",

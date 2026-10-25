@@ -5,3 +5,8 @@ export function isPlatformRole(role: string | null | undefined): boolean {
   const r = String(role ?? "").toUpperCase();
   return r === "SUPER_ADMIN" || r === "TI" || r === "ADMIN_GERAL";
 }
+
+/** Provisionar uma nova empresa é uma ação exclusiva do dono da plataforma. */
+export function canCreateCompany(role: string | null | undefined): boolean {
+  return role === "SUPER_ADMIN";
+}

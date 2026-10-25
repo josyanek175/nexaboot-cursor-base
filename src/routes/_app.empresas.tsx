@@ -443,6 +443,9 @@ function EmpresasPage() {
 
       {creating && (
         <Modal title="Nova empresa" onClose={() => setCreating(null)}>
+          <p className="text-xs text-muted-foreground">
+            Cadastre a empresa, selecione o plano e defina o administrador que fará o primeiro acesso.
+          </p>
           <Field label="Nome da empresa" value={creating.name} onChange={(v) => setCreating({ ...creating, name: v })} />
           <Select
             label="Status"

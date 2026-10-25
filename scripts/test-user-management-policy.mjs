@@ -35,6 +35,11 @@ for (const role of policy.PLATFORM_USER_ROLES) {
   assert.equal(policy.canAssignUserRole("SUPER_ADMIN", role), true);
 }
 assert.equal(policy.canAssignUserRole("TI", "invented-role"), false);
+for (const role of ["TI", "ADMIN_GERAL", "ADMIN_EMPRESA"]) {
+  assert.equal(policy.canAssignUserRole(role, "SUPER_ADMIN"), false);
+  assert.equal(policy.canManageUserTarget(role, "SUPER_ADMIN"), false);
+}
+assert.equal(policy.canManageUserTarget("SUPER_ADMIN", "SUPER_ADMIN"), true);
 
 let mutations = 0;
 const actor = { id: "11111111-1111-4111-8111-111111111111", role: "ADMIN_EMPRESA", active: true };
