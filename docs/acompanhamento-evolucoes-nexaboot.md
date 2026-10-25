@@ -27,6 +27,14 @@ as demais evoluções da DEV não fazem parte desta publicação. Base anterior
 da main: `2fc8dcd17aebfd4c466567721deafad09ed93edb`.
 Aplicação pelo serviço web que utiliza a main; sem nova migração de banco.
 
+Falha encontrada durante homologação: HTTP 500 na lista de empresas. A
+subconsulta de contagem de canais era retornada por uma função assíncrona e
+executada antes da consulta externa que define a empresa. Correção preparada
+na DEV, com teste de regressão para listagem global e por empresa, com e sem
+coluna deleted_at. Usuária confirmou a atualização na DEV e autorizou publicar
+esta correção isolada na main. A restrição de criação ao SUPER_ADMIN continua
+fora desta publicação.
+
 Validação pendente: homologar com login TI, criação de empresa e administrador,
 troca entre empresas, gestão de usuários, reset administrativo de senha e canais
 Meta. Confirmar separação do banco DEV antes de criar dados de teste.

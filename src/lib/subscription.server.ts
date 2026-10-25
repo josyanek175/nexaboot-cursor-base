@@ -1,6 +1,6 @@
 // Planos comerciais e assinaturas por empresa (server-only).
 // Fase 1: leitura e exibição — sem bloqueio de login/canais.
-import { sql } from "@/lib/pg.server";
+import { sql, getSql } from "@/lib/pg.server";
 
 export interface PlanRow {
   id: string;
@@ -54,15 +54,16 @@ async function channelsHaveDeletedAtColumn(): Promise<boolean> {
 }
 
 /** Subquery de contagem de canais por empresa (compatível com/sem deleted_at). */
-async function channelCountSubquery() {
-  const hasDeletedAt = await channelsHaveDeletedAtColumn();
+function channelCountSubquery(db: ReturnType<typeof getSql>, hasDeletedAt: boolean) {
+  // SQL fragments are thenables: never return them from an async function.
+  // They must execute only as part of the outer query that defines alias c.
   return hasDeletedAt
-    ? sql`(
+    ? db`(
         SELECT COUNT(*)::int
         FROM public.whatsapp_channels ch
         WHERE ch.company_id = c.id AND ch.deleted_at IS NULL
       )`
-    : sql`(
+    : db`(
         SELECT COUNT(*)::int
         FROM public.whatsapp_channels ch
         WHERE ch.company_id = c.id
@@ -192,9 +193,11 @@ export async function listCompaniesWithPlanUsage(opts: {
   }>
 > {
   const filterId = opts.companyId ?? null;
-  const channelCount = await channelCountSubquery();
+  const hasDeletedAt = await channelsHaveDeletedAtColumn();
+  const db = getSql();
+  const channelCount = channelCountSubquery(db, hasDeletedAt);
 
-  const rows = await sql`
+  const rows = await db`
     SELECT
       c.id,
       c.name,
@@ -216,7 +219,7 @@ export async function listCompaniesWithPlanUsage(opts: {
       LIMIT 1
     ) cs ON true
     LEFT JOIN public.plans p ON p.id = cs.plan_id
-    ${filterId ? sql`WHERE c.id = ${filterId}::uuid` : sql``}
+    ${filterId ? db`WHERE c.id = ${filterId}::uuid` : db``}
     ORDER BY c.name ASC
   `;
   return rows as typeof rows & {
