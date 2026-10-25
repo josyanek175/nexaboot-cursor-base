@@ -83,6 +83,10 @@ SESSION_SECRET como senha de manutenção.
 
 ## Verificação local reproduzível
 
+Nesta entrega: 23/23 suítes aprovadas e compilação aprovada. Nenhum novo local
+de erro de TypeScript foi detectado contra a base `0e4a125`; permanecem 504
+diagnósticos antigos na checagem global.
+
 ```sh
 npm ci
 npm run test:operations

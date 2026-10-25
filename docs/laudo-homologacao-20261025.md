@@ -67,6 +67,12 @@ Há testes específicos de rollback de grupo, reuso de conversa direta, idempot�
 do encerramento, esquema antigo com unicidade de conversa e sessões revogadas no
 gate real do servidor. Os scripts ficam em `scripts/test-operations-suite.mjs`.
 
+Resultado final local: **23/23 suítes aprovadas**, compilação aprovada e lockfile
+Bun congelado validado. A comparação TypeScript com `0e4a125` encontrou 527 erros
+na base e 504 na entrega, sem novos locais de erro por arquivo/código/trecho.
+O script `scripts/check-type-regressions.mjs` reproduz essa comparação; o
+typecheck global continua reprovado pelos diagnósticos existentes.
+
 ## Pendências e limitações concretas
 
 - **Limites de plano:** a listagem mostra capacidade e uso, mas as rotas atuais
@@ -80,7 +86,7 @@ gate real do servidor. Os scripts ficam em `scripts/test-operations-suite.mjs`.
   O PGlite local não simula múltiplos workers conectados a um servidor remoto.
 - A base já contém erros globais de TypeScript, principalmente na tipagem do
   wrapper SQL. Compilação bem-sucedida não equivale a typecheck global aprovado.
-- `npm audit --omit=dev` apontou 20 avisos na árvore instalada: 1 moderado, 13 altos
+- `npm audit --omit=dev` sinalizou 20 dependências na árvore instalada: 1 moderada, 13 altas
   e 6 críticos. Os pacotes apontados não são as novas dependências de SMTP/testes.
   Parte da árvore inclui ferramentas de build declaradas como dependências;
   severidade do aviso não comprova exploração no serviço publicado. A atualização

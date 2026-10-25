@@ -89,6 +89,11 @@ remoto. O controle universal dos limites de plano permanece como lacuna do laudo
 
 ## Entrega para homologação
 
+Resultado local: 23/23 suítes e compilação aprovadas. Comparação de tipos contra
+`0e4a125` sem novos locais de erro (527 na base, 504 atuais). A revisão encontrou
+rotas públicas antigas com risco crítico; o bloqueio está separado em `0587d32`
+para publicação prioritária sem migração ou novas funcionalidades.
+
 Consultar `homologacao-operacoes-20261025.md` antes de implantar: migração DEV,
 SMTP e ativação expressa da manutenção de campanhas. Nada desta entrega completa
 foi aplicado automaticamente na produção.
