@@ -2,6 +2,7 @@
 // GET /api/debug/plans-selects
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
+import { requirePlatformDiagnostics } from "@/lib/platform-diagnostics.server";
 import {
   listCompaniesWithPlanUsage,
   getCompanyPlanUsage,
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/api/debug/plans-selects")({
   server: {
     handlers: {
       GET: async () => {
+        const denied=await requirePlatformDiagnostics();if(denied)return denied;
         if (!process.env.DATABASE_URL) {
           return Response.json({ error: "DATABASE_URL não configurada" }, { status: 500 });
         }

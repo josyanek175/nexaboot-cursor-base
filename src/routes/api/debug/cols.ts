@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
+import { requirePlatformDiagnostics } from "@/lib/platform-diagnostics.server";
 
 export const Route = createFileRoute("/api/debug/cols")({
   server: {
     handlers: {
       GET: async () => {
+        const denied=await requirePlatformDiagnostics();if(denied)return denied;
         const s = sql();
         const tables = await s`
           SELECT table_schema, table_name

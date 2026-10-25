@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { sql } from "@/lib/pg.server";
+import { requirePlatformDiagnostics } from "@/lib/platform-diagnostics.server";
 
 /** Decompõe a DATABASE_URL para comparação, sem expor a senha. */
 function describeDbUrl(raw: string | undefined) {
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/api/debug/db")({
   server: {
     handlers: {
       GET: async () => {
+        const denied=await requirePlatformDiagnostics();if(denied)return denied;
         const hasDatabaseUrl = !!process.env.DATABASE_URL;
         const databaseUrl = describeDbUrl(process.env.DATABASE_URL);
         if (!hasDatabaseUrl) {
