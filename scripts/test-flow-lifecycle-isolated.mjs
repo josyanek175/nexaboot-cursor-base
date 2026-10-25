@@ -68,10 +68,13 @@ try {
   assert.equal(sent[1].replyButtons[0].id, "support");
   await inbound("", { isMedia: true });
   assert.equal(sends, 2);
+  await inbound("Oi novamente");
+  assert.equal(sent.at(-1).replyButtons[0].id, "support", "Unrecognized reply must resend clickable buttons");
+  assert.equal(sent.at(-1).text, "Toque em uma das opções.\nComo podemos ajudar?");
   await inbound("support");
-  assert.equal(sends, 3);
+  assert.equal(sends, 4);
   await inbound("Oi de novo");
-  assert.equal(sends, 3, "Transferred conversations must not restart bot");
+  assert.equal(sends, 4, "Transferred conversations must not restart bot");
   await lifecycle.onCampaignFinish({ companyId: company, conversationId: conversation });
   const closed = conversation;
   conversation = await crm.upsertInboundConversation({
@@ -83,15 +86,15 @@ try {
   });
   assert.notEqual(conversation, closed);
   await inbound("Voltei");
-  assert.equal(sends, 5);
-  assert.equal(sent[3].text, "Olá");
+  assert.equal(sends, 6);
+  assert.equal(sent[4].text, "Olá");
   assert.equal(
     (await db`SELECT count(*) AS n FROM messages WHERE conversation_id=${closed}::uuid`)[0].n,
-    3,
+    4,
   );
   await db`INSERT INTO conversation_assignments(conversation_id,user_id) VALUES(${conversation}::uuid,gen_random_uuid())`;
   await inbound("support");
-  assert.equal(sends, 5, "Active human assignment must stop automation");
+  assert.equal(sends, 6, "Active human assignment must stop automation");
   console.log(
     "PASS: isolated PostgreSQL — real flow engine, Meta button choices, media wait, human handoff, finish/new greeting and preserved history. No Graph requests.",
   );

@@ -730,11 +730,16 @@ async function answerWaitingSession(session: SessionRow, text: string) {
     const hit = matchChoice(text, choices);
     if (!hit) {
       const vars = await loadContactVars(session.contact_id, collected);
+      const fullPrompt = promptForStep(step, vars);
+      const body = fullPrompt.split("\n").slice(0, -choices.length).join("\n").trim() || "Escolha uma opção:";
+      const retryBody = `Toque em uma das opções.\n${body}`;
+      const interactive = retryBody.length <= 1024 && new Set(choices.map(c => c.label)).size === choices.length;
       await sendText(
         session.company_id,
         session.conversation_id,
-        `Toque em uma das opções.\n${promptForStep(step, vars)}`,
+        interactive ? retryBody : `Toque em uma das opções.\n${fullPrompt}`,
         step.id + ":options",
+        interactive ? choices : undefined,
       );
       return;
     }
