@@ -470,7 +470,7 @@ function ComunicacaoInternaPage() {
                           </a>
                         )}
 
-                        {m.body && <div className="whitespace-pre-wrap break-words">{m.body}</div>}
+                        {m.body && <div className="whitespace-pre-wrap break-words">{m.body.split(/(https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=[^\s]+)/g).map((part, index) => part.startsWith("https://www.google.com/maps/search/?api=1&query=") ? <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="underline">Abrir localização no mapa</a> : part)}</div>}
                         <div className={`mt-1 text-right text-[10px] ${mine ? "opacity-80" : "text-muted-foreground"}`}>
                           {formatTime(m.created_at)}
                         </div>

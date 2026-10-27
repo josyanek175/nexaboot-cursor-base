@@ -13,7 +13,8 @@ const result = await build({
       setup(b) {
         const mocks = {
           "@tanstack/react-router": "export const createFileRoute=()=>x=>x;",
-          "@/lib/pg.server": "export const sql=()=>globalThis.__mediaFixture.sql;",
+          "@/lib/pg.server": "export const getSql=()=>globalThis.__mediaFixture.sql;",
+          "@/lib/channel-permissions.server": "export const requireChannelAccess=async()=>null;",
           "@/lib/company.server":
             "export const requireCompanyId=()=>globalThis.__mediaFixture.company;",
           "@/lib/meta-media-download.server":

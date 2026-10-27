@@ -9,6 +9,8 @@ import {
   Wifi, WifiOff, ContactRound,
   Megaphone, FileStack,
 } from "lucide-react";
+import { ForwardMessageDialog } from "@/components/forward-message-dialog";
+import { parseSharedLocation, locationMapUrl, type SharedLocation } from "@/lib/whatsapp-location";
 import { SendTemplateModal } from "@/components/send-template-modal";
 import { subscribeToConversation } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
@@ -49,6 +51,7 @@ import {
 type Provider = "META" | "EVOLUTION" | "INTERNAL";
 type ConversationStatus = "open" | "waiting" | "finished";
 type MessageType =
+  | "location"
   | "text"
   | "image"
   | "audio"
@@ -113,6 +116,7 @@ interface Conversation {
   resolvedCampaignColor?: string;
 }
 interface Message {
+  location?: SharedLocation;
   id: string;
   conversationId: string;
   direction: MessageDirection;
@@ -509,7 +513,8 @@ function transformApiMessage(m: any, conversationId: string): Message {
   let type: MessageType =
     rawType === "sticker"
       ? "image"
-      : rawType === "image" ||
+      : rawType === "location" ||
+          rawType === "image" ||
           rawType === "audio" ||
           rawType === "video" ||
           rawType === "document" ||
@@ -520,6 +525,7 @@ function transformApiMessage(m: any, conversationId: string): Message {
           rawType === "system"
         ? (rawType as MessageType)
         : "text";
+  if (parseSharedLocation(m.location)) type = "location";
   if (String(m.direction || "").toLowerCase() === "system") {
     type = "system";
   }
@@ -582,6 +588,7 @@ function transformApiMessage(m: any, conversationId: string): Message {
     direction,
     type,
     text: finalText,
+    location: parseSharedLocation(m.location) ?? undefined,
     mediaUrl,
     fileName: m.media_filename ?? m.file_name ?? m.fileName ?? undefined,
     mimeType,
@@ -643,6 +650,7 @@ const campaignSubFilters: { value: CampaignSubFilter; label: string }[] = [
 
 // ───────── Página ─────────
 function AtendimentoPage() {
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   const { session, user, tenant } = useSession();
   const actor = { id: session.userId, role: session.role, tenantId: session.tenantId };
 
@@ -1614,6 +1622,7 @@ function AtendimentoPage() {
 
   return (
     <div className="flex h-full w-full">
+      {forwardingMessage && <ForwardMessageDialog message={forwardingMessage} onClose={() => setForwardingMessage(null)} />}
       {/* Coluna esquerda — lista de conversas */}
       <section
         className={`${mobileView === "chat" ? "hidden" : "flex"} w-full shrink-0 flex-col border-r border-border bg-card lg:flex lg:w-80`}
@@ -1901,7 +1910,7 @@ function AtendimentoPage() {
                   </div>
                 )}
                 {!loadingMsgs && !msgsError && messages.map((m) => (
-                  <Bubble key={m.id} m={m} onRetryDocument={retryDocumentMessage} />
+                  <Bubble key={m.id} m={m} onRetryDocument={retryDocumentMessage} onForward={setForwardingMessage} />
                 ))}
                 {!loadingMsgs && !msgsError && messages.length === 0 && (
                   <div className="py-10 text-center text-xs text-muted-foreground">Sem mensagens.</div>
@@ -2350,9 +2359,11 @@ function ChannelModeBadge({ channel }: { channel: Channel }) {
 }
 
 // ───────── Balão ─────────
-function Bubble({ m, onRetryDocument }: { m: Message; onRetryDocument?: (id: string) => void }) {
+function Bubble({ m, onRetryDocument, onForward }: { m: Message; onRetryDocument?: (id: string) => void; onForward?: (m: Message) => void }) {
   try {
-    return <BubbleInner m={m} onRetryDocument={onRetryDocument} />;
+    return <div><BubbleInner m={m} onRetryDocument={onRetryDocument} />
+      {onForward && !m.isInternalNote && ["text", "image", "document", "location"].includes(m.type) && <div className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}><button type="button" onClick={() => onForward(m)} aria-label="Encaminhar mensagem" className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted focus-visible:ring-2">↪ Encaminhar</button></div>}
+    </div>;
   } catch (err) {
     console.error("[BUBBLE_RENDER_ERROR]", err);
     return (
@@ -2391,6 +2402,13 @@ function BubbleInner({ m, onRetryDocument }: { m: Message; onRetryDocument?: (id
         </span>
       </div>
     );
+  }
+  if (m.type === "location") {
+    return <div className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}><div className="max-w-[78%] rounded-lg border bg-card p-3 text-sm shadow-sm">
+      <div className="font-semibold">📍 Localização compartilhada</div>
+      {m.location ? <><p>{m.location.name}</p><p className="text-muted-foreground">{m.location.address}</p><p className="my-1 text-xs">{m.location.latitude}, {m.location.longitude}</p><a href={locationMapUrl(m.location)} target="_blank" rel="noopener noreferrer" className="inline-block rounded-md bg-whatsapp px-3 py-2 text-white">Abrir no Google Maps</a><button className="ml-2 rounded-md border px-3 py-2" onClick={() => { void navigator.clipboard.writeText(`${m.location!.latitude}, ${m.location!.longitude}`).then(() => toast.success("Coordenadas copiadas.")).catch(() => toast.error("Não foi possível copiar.")); }}>Copiar coordenadas</button></> : <p>{m.text || "Localização indisponível"}</p>}
+      <div className="mt-2 text-right text-[10px] text-muted-foreground">{formatTime(m.createdAt)}</div>
+    </div></div>;
   }
   if (m.type === "contact" || m.type === "contacts") {
     const out = m.direction === "out";

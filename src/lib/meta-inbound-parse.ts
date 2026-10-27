@@ -1,9 +1,10 @@
 // Extract de mensagens inbound Meta (texto, botão, interactive) — sem dependências de servidor.
 
+import { parseSharedLocation, locationMessageText } from "./whatsapp-location.ts";
 import { sanitizeMetaWebhookPayload } from "./meta-webhook-parse.ts";
 import { isValidE164Digits, normalizePhoneE164 } from "./phone.ts";
 
-export type MetaInboundMessageType = "text" | "button" | "interactive";
+export type MetaInboundMessageType = "text" | "button" | "interactive" | "location";
 
 export type MetaInboundMediaType = "image" | "audio" | "video" | "document" | "sticker";
 
@@ -107,6 +108,10 @@ export function resolveMetaInboundMessageText(
   const type = readString(messageRec.type);
   if (!type) return null;
 
+  if (type === "location") {
+    const location = parseSharedLocation(messageRec.location);
+    return location ? { text: locationMessageText(location), usedFallback: false, buttonText: null, buttonPayload: null, interactiveType: null, replyId: null, replyTitle: null } : null;
+  }
   if (type === "text") {
     const textNode = asRecord(messageRec.text);
     const body = readString(textNode?.body);
@@ -240,7 +245,7 @@ export function extractMetaInboundTextMessages(payload: unknown): MetaInboundTex
         if (!messageRec) continue;
 
         const messageType = readString(messageRec.type);
-        if (messageType !== "text" && messageType !== "button" && messageType !== "interactive") {
+        if (messageType !== "text" && messageType !== "button" && messageType !== "interactive" && messageType !== "location") {
           continue;
         }
 

@@ -109,6 +109,7 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
           conversationId,
           externalMessageId: input.externalMessageId,
           messageText: input.text,
+          messageType: input.messageType === "location" ? "location" : "text",
           rawPayload: storedPayload,
         });
   if (!messageId) return { contactId, conversationId, messageId: null };

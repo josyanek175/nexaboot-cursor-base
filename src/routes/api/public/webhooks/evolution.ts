@@ -8,6 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { sql } from "@/lib/pg.server";
 import { isValidE164Digits, normalizePhoneE164, normalizePhoneForMatch } from "@/lib/phone";
+import { parseSharedLocation, locationMessageText } from "@/lib/whatsapp-location";
 import { parseContactMessageNode } from "@/lib/whatsapp-contact-message";
 import { handleCampaignInboundReply } from "@/lib/campaign-response.server";
 import { runWebhookWithConcurrencyLimit } from "@/lib/pg-pool-gate.server";
@@ -30,7 +31,7 @@ type ChannelRow = {
 };
 
 type ParsedMsg = {
-  type: "text" | "image" | "audio" | "video" | "document" | "reaction" | "contact" | "contacts";
+  type: "location" | "text" | "image" | "audio" | "video" | "document" | "reaction" | "contact" | "contacts";
   body?: string;
   mimeType?: string;
   fileName?: string;
@@ -41,6 +42,10 @@ type ParsedMsg = {
 
 function pickMessageType(msg: Json): ParsedMsg {
   const m = (msg.message ?? {}) as any;
+  if (m.locationMessage) {
+    const location = parseSharedLocation(m.locationMessage);
+    return location ? { type: "location", body: locationMessageText(location) } : { type: "text", body: "[Localização inválida]" };
+  }
   // Reação (emoji) do WhatsApp — nunca tratar como "não suportada".
   if (m.reactionMessage) {
     const emoji = typeof m.reactionMessage.text === "string" ? m.reactionMessage.text : "";
