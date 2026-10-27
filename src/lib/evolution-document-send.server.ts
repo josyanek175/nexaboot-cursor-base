@@ -9,6 +9,7 @@ export type EvolutionDocumentSendInput = {
   mimeType: string;
   fileName: string;
   caption?: string | null;
+  mediaType?: "document" | "image";
 };
 
 export type EvolutionDocumentSendResult =
@@ -39,7 +40,7 @@ export async function sendEvolutionDocument(
 
   const payload: Record<string, unknown> = {
     number: input.number.replace(/\D/g, ""),
-    mediatype: "document",
+    mediatype: input.mediaType ?? "document",
     mimetype: input.mimeType,
     media: input.base64,
     fileName: input.fileName,

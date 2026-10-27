@@ -14,6 +14,7 @@ export type MetaDocumentSendInput = {
   mimeType: string;
   fileName: string;
   caption?: string | null;
+  mediaType?: "document" | "image";
 };
 
 export type MetaDocumentSendResult =
@@ -112,6 +113,7 @@ export async function sendMetaDocumentMessage(
   fileName: string,
   caption: string | null | undefined,
   fetchFn: typeof fetch = fetch,
+  mediaType: "document" | "image" = "document",
 ): Promise<
   | { ok: true; providerMessageId: string | null; raw: Record<string, unknown> }
   | { ok: false; error: string; userMessage: string; errorCode?: string; httpStatus?: number }
@@ -129,7 +131,7 @@ export async function sendMetaDocumentMessage(
 
   const document: Record<string, unknown> = {
     id: mediaId,
-    filename: fileName,
+    ...(mediaType === "document" ? { filename: fileName } : {}),
   };
   if (caption?.trim()) document.caption = caption.trim();
 
@@ -137,8 +139,8 @@ export async function sendMetaDocumentMessage(
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: toDigits,
-    type: "document",
-    document,
+    type: mediaType,
+    [mediaType]: document,
   };
 
   try {
@@ -241,6 +243,7 @@ export async function sendMetaDocument(
     input.fileName,
     input.caption,
     fetchFn,
+    input.mediaType,
   );
   if (!send.ok) {
     return send;
@@ -250,10 +253,10 @@ export async function sendMetaDocument(
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: input.toPhone.replace(/\D/g, ""),
-    type: "document",
-    document: {
+    type: input.mediaType ?? "document",
+    [input.mediaType ?? "document"]: {
       id: upload.mediaId,
-      filename: input.fileName,
+      ...(input.mediaType === "image" ? {} : { filename: input.fileName }),
       ...(input.caption?.trim() ? { caption: input.caption.trim() } : {}),
     },
     meta_message_id: send.providerMessageId,

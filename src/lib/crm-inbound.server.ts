@@ -162,6 +162,7 @@ export async function insertInboundTextMessage(params: {
   conversationId: string;
   externalMessageId: string;
   messageText: string;
+  messageType?: "text" | "location";
   rawPayload: unknown;
 }): Promise<string | null> {
   const { conversationId, externalMessageId, messageText, rawPayload } = params;
@@ -173,7 +174,7 @@ export async function insertInboundTextMessage(params: {
       message_type, message_text, from_me, raw_payload, status
     ) VALUES (
       ${conversationId}::uuid, ${externalMessageId}, ${externalMessageId}, 'in',
-      'text', ${messageText}, false, ${rawPayload}::jsonb, 'received'
+      ${params.messageType ?? 'text'}, ${messageText}, false, ${rawPayload}::jsonb, 'received'
     )
     ON CONFLICT (conversation_id, external_message_id) WHERE external_message_id IS NOT NULL
     DO NOTHING

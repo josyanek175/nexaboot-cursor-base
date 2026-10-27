@@ -60,6 +60,7 @@ export const Route = createFileRoute("/api/conversations/$id/messages")({
                   m.message_type,
                   m.message_type AS type,
                   m.media_type,
+                  COALESCE(m.raw_payload #> '{message,location}', m.raw_payload #> '{message,locationMessage}', m.raw_payload #> '{data,message,locationMessage}') AS location,
                   m.message_text AS body,
                   m.media_url,
                   m.media_error,

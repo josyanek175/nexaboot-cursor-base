@@ -1,5 +1,6 @@
-// Orquestra envio de documento outbound (Meta ou Evolution) com persistência.
+// Orquestra envio de documento/imagem outbound (Meta ou Evolution) com persistência.
 
+import { validateForwardImage } from "@/lib/forward-image-validation.server";
 import { sql } from "@/lib/pg.server";
 import {
   bumpConversationAfterOutboundMessage,
@@ -26,6 +27,7 @@ import {
 import { isValidE164Digits, normalizePhoneE164 } from "@/lib/phone";
 import { metaWhatsAppProvider } from "@/lib/whatsapp/providers/meta-whatsapp-provider.server";
 
+type OutboundFile = Omit<ValidatedWhatsAppDocument, "extension"> & { extension: string };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type SendConversationDocumentResult =
@@ -60,7 +62,8 @@ async function getLastInboundMessageAt(conversationId: string): Promise<Date | n
 async function insertPendingDocumentMessage(params: {
   conversationId: string;
   caption: string | null;
-  doc: ValidatedWhatsAppDocument;
+  doc: OutboundFile;
+  mediaType?: "document" | "image";
   sentByUserId?: string | null;
   sentByName?: string | null;
 }): Promise<string | null> {
@@ -75,9 +78,9 @@ async function insertPendingDocumentMessage(params: {
        media_caption, media_base64,
        sent_by_user_id, sent_by_name)
     VALUES
-      (${conversationId}::uuid, 'out', 'document',
+      (${conversationId}::uuid, 'out', ${params.mediaType ?? 'document'},
        ${caption || doc.fileName}, true, 'pending',
-       'document', ${doc.mimeType}, ${doc.mimeType}, ${doc.fileName}, ${doc.size},
+       ${params.mediaType ?? 'document'}, ${doc.mimeType}, ${doc.mimeType}, ${doc.fileName}, ${doc.size},
        ${caption || null}, ${base64},
        ${sentByUserId ?? null}::uuid, ${sentByName ?? null})
     RETURNING id
@@ -94,7 +97,7 @@ async function resetPendingDocumentMessage(params: {
   conversationId: string;
   companyId: string;
   caption: string | null;
-  doc: ValidatedWhatsAppDocument;
+  doc: OutboundFile;
 }): Promise<boolean> {
   const { messageId, conversationId, companyId, caption, doc } = params;
   const base64 = doc.buffer.toString("base64");
@@ -219,7 +222,7 @@ export async function sendConversationDocument(params: {
     size: file?.size ?? null,
   });
 
-  if (mediaType !== "document") {
+  if (mediaType !== "document" && mediaType !== "image") {
     return { ok: false, status: 400, error: "unsupported_media_type", message: "Formato de arquivo não permitido" };
   }
 
@@ -231,11 +234,14 @@ export async function sendConversationDocument(params: {
     return { ok: false, status: 400, error: "missing_file", message: "Não foi possível enviar o documento" };
   }
 
-  let doc: ValidatedWhatsAppDocument;
+  if (mediaType === "image" && retryMessageId) {
+    return { ok: false, status: 400, error: "invalid_retry_message_id" };
+  }
+  let doc: OutboundFile;
 
   if (file) {
     try {
-      doc = await validateWhatsAppDocument(file);
+      doc = mediaType === "image" ? await validateForwardImage(file) : await validateWhatsAppDocument(file);
     } catch (e) {
       if (e instanceof DocumentValidationError) {
         return {
@@ -361,6 +367,7 @@ export async function sendConversationDocument(params: {
       doc,
       sentByUserId,
       sentByName,
+      mediaType,
     });
   }
 
@@ -369,7 +376,7 @@ export async function sendConversationDocument(params: {
   }
 
   const base64 = doc.buffer.toString("base64");
-  const lastMessagePreview = caption || `[documento: ${doc.fileName}]`;
+  const lastMessagePreview = caption || (mediaType === "image" ? "[imagem]" : `[documento: ${doc.fileName}]`);
 
   if (providerKind === "meta") {
     const resolved = await resolveProviderForChannel(conv.whatsapp_channel_id, companyId);
@@ -460,6 +467,7 @@ export async function sendConversationDocument(params: {
         mimeType: doc.mimeType,
         fileName: doc.fileName,
         caption,
+        mediaType,
       },
       fetchFn,
     );
@@ -568,6 +576,7 @@ export async function sendConversationDocument(params: {
       mimeType: doc.mimeType,
       fileName: doc.fileName,
       caption,
+      mediaType,
     },
     fetchFn,
   );
@@ -588,7 +597,7 @@ export async function sendConversationDocument(params: {
     messageId,
     providerMessageId: evoResult.providerMessageId,
     rawPayload: {
-      mediatype: "document",
+      mediatype: mediaType,
       mimetype: doc.mimeType,
       fileName: doc.fileName,
       provider: "evolution",

@@ -175,6 +175,7 @@ async function persistOneMetaInboundTextMessage(msg: MetaInboundTextMessage): Pr
     profileName: msg.contactName,
     externalMessageId: msg.externalMessageId,
     text: msg.textBody,
+    messageType: msg.messageType,
     rawPayload: msg.rawPayload,
   });
   if (!messageId) {

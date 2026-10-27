@@ -61,6 +61,7 @@ import { Route as ApiMetaChannelsRouteImport } from './routes/api/meta/channels'
 import { Route as ApiMessagesSendTemplateRouteImport } from './routes/api/messages/send-template'
 import { Route as ApiMessagesSendMediaRouteImport } from './routes/api/messages/send-media'
 import { Route as ApiMessagesSendRouteImport } from './routes/api/messages/send'
+import { Route as ApiMessagesForwardRouteImport } from './routes/api/messages/forward'
 import { Route as ApiInternalPortalRouteImport } from './routes/api/internal/portal'
 import { Route as ApiInternalDbPoolStatusRouteImport } from './routes/api/internal/db-pool-status'
 import { Route as ApiInternalChatUsersRouteImport } from './routes/api/internal-chat/users'
@@ -411,6 +412,11 @@ const ApiMessagesSendMediaRoute = ApiMessagesSendMediaRouteImport.update({
 const ApiMessagesSendRoute = ApiMessagesSendRouteImport.update({
   id: '/send',
   path: '/send',
+  getParentRoute: () => ApiMessagesRoute,
+} as any)
+const ApiMessagesForwardRoute = ApiMessagesForwardRouteImport.update({
+  id: '/forward',
+  path: '/forward',
   getParentRoute: () => ApiMessagesRoute,
 } as any)
 const ApiInternalPortalRoute = ApiInternalPortalRouteImport.update({
@@ -1000,6 +1006,7 @@ export interface FileRoutesByFullPath {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/internal/portal': typeof ApiInternalPortalRoute
+  '/api/messages/forward': typeof ApiMessagesForwardRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1143,6 +1150,7 @@ export interface FileRoutesByTo {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/internal/portal': typeof ApiInternalPortalRoute
+  '/api/messages/forward': typeof ApiMessagesForwardRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1290,6 +1298,7 @@ export interface FileRoutesById {
   '/api/internal-chat/users': typeof ApiInternalChatUsersRoute
   '/api/internal/db-pool-status': typeof ApiInternalDbPoolStatusRoute
   '/api/internal/portal': typeof ApiInternalPortalRoute
+  '/api/messages/forward': typeof ApiMessagesForwardRoute
   '/api/messages/send': typeof ApiMessagesSendRouteWithChildren
   '/api/messages/send-media': typeof ApiMessagesSendMediaRoute
   '/api/messages/send-template': typeof ApiMessagesSendTemplateRoute
@@ -1437,6 +1446,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
     | '/api/internal/portal'
+    | '/api/messages/forward'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1580,6 +1590,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
     | '/api/internal/portal'
+    | '/api/messages/forward'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -1726,6 +1737,7 @@ export interface FileRouteTypes {
     | '/api/internal-chat/users'
     | '/api/internal/db-pool-status'
     | '/api/internal/portal'
+    | '/api/messages/forward'
     | '/api/messages/send'
     | '/api/messages/send-media'
     | '/api/messages/send-template'
@@ -2211,6 +2223,13 @@ declare module '@tanstack/react-router' {
       path: '/send'
       fullPath: '/api/messages/send'
       preLoaderRoute: typeof ApiMessagesSendRouteImport
+      parentRoute: typeof ApiMessagesRoute
+    }
+    '/api/messages/forward': {
+      id: '/api/messages/forward'
+      path: '/forward'
+      fullPath: '/api/messages/forward'
+      preLoaderRoute: typeof ApiMessagesForwardRouteImport
       parentRoute: typeof ApiMessagesRoute
     }
     '/api/internal/portal': {
@@ -3116,6 +3135,7 @@ const ApiMessagesSendRouteWithChildren = ApiMessagesSendRoute._addFileChildren(
 )
 
 interface ApiMessagesRouteChildren {
+  ApiMessagesForwardRoute: typeof ApiMessagesForwardRoute
   ApiMessagesSendRoute: typeof ApiMessagesSendRouteWithChildren
   ApiMessagesSendMediaRoute: typeof ApiMessagesSendMediaRoute
   ApiMessagesSendTemplateRoute: typeof ApiMessagesSendTemplateRoute
@@ -3123,6 +3143,7 @@ interface ApiMessagesRouteChildren {
 }
 
 const ApiMessagesRouteChildren: ApiMessagesRouteChildren = {
+  ApiMessagesForwardRoute: ApiMessagesForwardRoute,
   ApiMessagesSendRoute: ApiMessagesSendRouteWithChildren,
   ApiMessagesSendMediaRoute: ApiMessagesSendMediaRoute,
   ApiMessagesSendTemplateRoute: ApiMessagesSendTemplateRoute,
