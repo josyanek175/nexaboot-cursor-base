@@ -3,7 +3,8 @@
  * Histórico: 1ª atribuição − último inbound antes de assumir.
  * Fila atual: sem responsável, última mensagem do cliente.
  */
-import { sql } from "@/lib/pg.server";
+import { getSql } from "@/lib/pg.server";
+import { allowedChannelIds } from "@/lib/channel-permissions.server";
 import type { PgSql } from "@/lib/pg-types";
 import { resolveCostPeriod, type CampaignCostPeriodPreset } from "@/lib/campaign-costs";
 import { averageSeconds } from "@/lib/campaign-metrics";
@@ -44,9 +45,11 @@ export async function getAttendanceWaitReport(
     from?: string | null;
     to?: string | null;
     db?: PgSql;
+    userId?: string | null;
   },
 ): Promise<AttendanceWaitPayload> {
-  const s = opts?.db ?? sql();
+  const allowed = await allowedChannelIds(companyId, opts?.userId);
+  const s = opts?.db ?? getSql();
   const period = resolveCostPeriod({
     preset: opts?.preset,
     from: opts?.from,
@@ -67,6 +70,7 @@ export async function getAttendanceWaitReport(
       FROM public.conversation_assignments a
       INNER JOIN public.conversations c ON c.id = a.conversation_id
       WHERE c.company_id = ${companyId}::uuid
+        AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
         AND c.status IS DISTINCT FROM 'merged'
         AND a.assigned_at >= (${period.from}::date AT TIME ZONE 'America/Sao_Paulo')
         AND a.assigned_at < ((${period.to}::date + 1) AT TIME ZONE 'America/Sao_Paulo')
@@ -121,14 +125,9 @@ export async function getAttendanceWaitReport(
       ? null
       : assumedCount % 2 === 1
         ? sorted[Math.floor(assumedCount / 2)]
-        : Math.round(
-            (sorted[assumedCount / 2 - 1] + sorted[assumedCount / 2]) / 2,
-          );
+        : Math.round((sorted[assumedCount / 2 - 1] + sorted[assumedCount / 2]) / 2);
 
-  const byAgent = new Map<
-    string,
-    { userName: string | null; total: number; count: number }
-  >();
+  const byAgent = new Map<string, { userName: string | null; total: number; count: number }>();
   for (const r of assumed) {
     const uid = r.user_id;
     if (!uid) continue;
@@ -172,6 +171,7 @@ export async function getAttendanceWaitReport(
           LIMIT 1
         ) lm ON true
         WHERE c.company_id = ${companyId}::uuid
+        AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
           AND c.status IS DISTINCT FROM 'merged'
           AND c.status IS DISTINCT FROM 'archived'
           AND c.status IS DISTINCT FROM 'finished'
@@ -215,6 +215,7 @@ export async function getAttendanceWaitReport(
         LIMIT 1
       ) lm ON true
       WHERE c.company_id = ${companyId}::uuid
+        AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
         AND c.status IS DISTINCT FROM 'merged'
         AND c.status IS DISTINCT FROM 'archived'
         AND c.status IS DISTINCT FROM 'finished'

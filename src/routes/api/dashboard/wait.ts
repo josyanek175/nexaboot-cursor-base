@@ -39,11 +39,12 @@ export const Route = createFileRoute("/api/dashboard/wait")({
         try {
           const url = new URL(request.url);
           const report = await getAttendanceWaitReport(actor.companyId, {
+            userId: actor.userId,
             preset: url.searchParams.get("preset"),
             from: url.searchParams.get("from"),
             to: url.searchParams.get("to"),
           });
-          return Response.json(report);
+          return Response.json(report, { headers: { "Cache-Control": "private, no-store" } });
         } catch (e) {
           const err = e as Error;
           console.error("[DASHBOARD_WAIT_GET_FAIL]", {
@@ -54,9 +55,8 @@ export const Route = createFileRoute("/api/dashboard/wait")({
             {
               error: "load_failed",
               message: "Não foi possível carregar o tempo de espera.",
-              detail: err?.message?.slice(0, 300) ?? null,
             },
-            { status: 500 },
+            { status: 503, headers: { "Cache-Control": "private, no-store" } },
           );
         }
       },

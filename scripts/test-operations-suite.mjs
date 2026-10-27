@@ -11,6 +11,7 @@ const cases = [
   "test-flow-lifecycle-isolated.mjs",
   "test-meta-flow-buttons.mjs",
   "test-channel-permissions.mjs",
+  "test-dashboard-channel-permissions.mjs",
   "test-internal-groups.mjs",
   "test-password-recovery.mjs",
   "test-session-expiry.mjs",
