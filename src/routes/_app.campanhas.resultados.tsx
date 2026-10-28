@@ -157,12 +157,12 @@ function CampanhasResultadosPage() {
   ];
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-4">
+    <div className="campaign-page flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <ChartColumn className="h-5 w-5 text-whatsapp" />
           <div>
-            <h1 className="text-lg font-semibold">Resultados</h1>
+            <h1 className="text-lg font-semibold [overflow-wrap:anywhere]">Resultados</h1>
             <p className="text-xs text-muted-foreground">
               Disparos, quem interagiu e quem demonstrou interesse
             </p>
@@ -176,7 +176,7 @@ function CampanhasResultadosPage() {
         </Link>
       </header>
 
-      <div className="flex-1 space-y-6 overflow-auto p-6">
+      <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-auto p-3 sm:p-6">
         <section className="space-y-3 rounded-lg border border-border bg-card p-4">
           <p className="text-sm font-medium">Período</p>
           <div className="flex flex-wrap gap-2">
@@ -256,7 +256,7 @@ function CampanhasResultadosPage() {
               <StatCard label="Taxa interesse" value={pct(summary.interestedRate)} emphasize />
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
+            <div className="campaign-table overflow-x-auto rounded-lg border border-border bg-card">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                   <tr>
@@ -282,7 +282,7 @@ function CampanhasResultadosPage() {
                   ) : (
                     campaigns.map((row) => (
                       <tr key={row.campaignId} className="border-t border-border">
-                        <td className="px-4 py-3">
+                        <td data-label="Campanha" className="px-4 py-3">
                           <Link
                             to="/campanhas/$id"
                             params={{ id: row.campaignId }}
@@ -291,20 +291,20 @@ function CampanhasResultadosPage() {
                             {row.campaignName}
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums">{row.sentCount}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">
+                        <td data-label="Disparos" className="px-4 py-3 text-right tabular-nums">{row.sentCount}</td>
+                        <td data-label="Interagiram" className="px-4 py-3 text-right tabular-nums">
                           {row.interactedCount}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums">
+                        <td data-label="Interação" className="px-4 py-3 text-right tabular-nums">
                           {pct(row.interactRate)}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums font-medium">
+                        <td data-label="Interessados" className="px-4 py-3 text-right tabular-nums font-medium">
                           {row.interestedCount}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums">
+                        <td data-label="Interesse" className="px-4 py-3 text-right tabular-nums">
                           {pct(row.interestedRate)}
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <td data-label="Último envio" className="px-4 py-3 text-xs text-muted-foreground">
                           {formatDt(row.lastSentAt)}
                         </td>
                       </tr>

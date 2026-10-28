@@ -20,7 +20,7 @@ export function CampaignColorPicker({ value, onChange, disabled }: Props) {
             disabled={disabled}
             title={c}
             onClick={() => onChange(c)}
-            className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-105 disabled:opacity-50 ${
+            className={`h-11 w-11 rounded-full border-2 transition-transform hover:scale-105 disabled:opacity-50 sm:h-8 sm:w-8 ${
               current.toUpperCase() === c.toUpperCase()
                 ? "border-foreground ring-2 ring-ring ring-offset-2"
                 : "border-transparent"
@@ -29,7 +29,7 @@ export function CampaignColorPicker({ value, onChange, disabled }: Props) {
           />
         ))}
         <label
-          className={`relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-input bg-background text-[10px] text-muted-foreground ${
+          className={`relative flex h-11 w-11 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-input bg-background text-[10px] text-muted-foreground sm:h-8 sm:w-8 ${
             disabled ? "pointer-events-none opacity-50" : ""
           }`}
           title="Cor personalizada"

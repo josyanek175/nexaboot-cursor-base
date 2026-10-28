@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { canManageCampaigns, actingUserFromAuth } from "@/lib/permissions";
+import { canManageCampaigns, canManageChannels, actingUserFromAuth } from "@/lib/permissions";
 import { previewEvolutionTemplate, EVOLUTION_TEMPLATE_VARIABLES } from "@/lib/campaign-template-variables";
 
 type ChannelOption = { id: string; name: string; channel_type: string };
@@ -55,6 +55,7 @@ function CampanhasModelosPage() {
     ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
     : { id: "", role: "ATENDENTE" as const, tenantId: "" };
   const canManage = canManageCampaigns(actor) && companyValid;
+  const canSyncMeta = canManage && canManageChannels(actor);
 
   const [tab, setTab] = useState<"meta" | "evolution">("evolution");
   const [channels, setChannels] = useState<ChannelOption[]>([]);
@@ -127,15 +128,17 @@ function CampanhasModelosPage() {
   }, [tab, metaChannelId]);
 
   async function syncMeta() {
-    if (!metaChannelId) return;
+    if (!canSyncMeta || !metaChannelId) return;
     setSyncingMeta(true);
     try {
       const res = await fetch(
         `/api/meta/channels/${encodeURIComponent(metaChannelId)}/templates/sync`,
         { method: "POST", credentials: "include" },
       );
-      const j = (await res.json().catch(() => ({}))) as { synced?: number; approved?: number; error?: string };
-      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      const j = (await res.json().catch(() => ({}))) as { synced?: number; approved?: number; error?: string; message?: string };
+      if (!res.ok) throw new Error(res.status === 403
+        ? "Seu perfil não pode sincronizar modelos. Peça a um administrador da empresa para atualizar a lista."
+        : j.message ?? "Não foi possível sincronizar os modelos da Meta. Tente novamente.");
       toast.success(`Sincronizados ${j.synced ?? 0} (${j.approved ?? 0} aprovados)`);
       await loadMetaTemplates(metaChannelId);
     } catch (e) {
@@ -260,15 +263,15 @@ function CampanhasModelosPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center gap-3">
+    <div className="campaign-page flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           <Link to="/campanhas" className="rounded-md p-1.5 text-muted-foreground hover:bg-accent">
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <FileText className="h-5 w-5 text-whatsapp" />
           <div>
-            <h1 className="text-lg font-semibold">Modelos de campanha</h1>
+            <h1 className="text-lg font-semibold [overflow-wrap:anywhere]">Modelos de campanha</h1>
             <p className="text-xs text-muted-foreground">
               Meta (sincronizados) e Evolution (editáveis pela empresa)
             </p>
@@ -285,7 +288,7 @@ function CampanhasModelosPage() {
         )}
       </header>
 
-      <div className="flex gap-2 border-b border-border px-6 py-2">
+      <div className="flex shrink-0 gap-2 overflow-x-auto whitespace-nowrap border-b border-border px-3 py-2 sm:px-6">
         <button
           type="button"
           onClick={() => setTab("evolution")}
@@ -306,7 +309,7 @@ function CampanhasModelosPage() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-6">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
@@ -327,7 +330,7 @@ function CampanhasModelosPage() {
                   ))}
                 </select>
               </label>
-              <button
+              {canSyncMeta ? <button
                 type="button"
                 onClick={() => void syncMeta()}
                 disabled={syncingMeta || !metaChannelId}
@@ -335,7 +338,7 @@ function CampanhasModelosPage() {
               >
                 {syncingMeta ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Sincronizar
-              </button>
+              </button> : <p className="text-xs text-muted-foreground">Para atualizar os modelos da Meta, peça a um administrador da empresa.</p>}
             </div>
             <p className="text-xs text-muted-foreground">
               Templates Meta são somente leitura (aprovados pela Meta). Use &quot;Criar versão Evolution&quot; para reutilizar o conteúdo.
@@ -406,7 +409,7 @@ function CampanhasModelosPage() {
                   <p className="mb-1 text-xs font-medium text-muted-foreground">Preview</p>
                   <pre className="whitespace-pre-wrap text-sm">{formPreview}</pre>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => void saveEvolutionTemplate()}

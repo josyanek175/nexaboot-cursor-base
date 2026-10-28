@@ -179,3 +179,71 @@
     font-size: 1rem;
   }
 }
+
+@media (max-width: 47.999rem) {
+  .campaign-page button {
+    min-height: 2.75rem;
+  }
+  .campaign-page header a,
+  .campaign-table td a[title] {
+    display: inline-flex;
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    align-items: center;
+    justify-content: center;
+  }
+  .campaign-page label { min-width: 0; max-width: 100%; }
+  .campaign-page pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .campaign-page .tabular-nums { overflow-wrap: anywhere; }
+  .campaign-table {
+    position: relative;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .campaign-table table,
+  .campaign-table tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .campaign-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .campaign-table tbody tr {
+    display: block;
+    margin-bottom: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--card);
+  }
+  .campaign-table tbody td {
+    display: block;
+    max-width: 100%;
+    padding: 0.5rem 0;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+  }
+  .campaign-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--muted-foreground);
+    font-size: 0.6875rem;
+    font-weight: 500;
+  }
+  .campaign-table td:first-child { padding-top: 0; }
+  .campaign-table td:last-child { padding-bottom: 0; }
+  .campaign-table td[colspan] { text-align: center; }
+  .campaign-table td .justify-end { justify-content: flex-start; flex-wrap: wrap; }
+  .campaign-table td .truncate { white-space: normal; overflow: visible; }
+}
