@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Megaphone, ArrowLeft, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { canManageCampaigns, actingUserFromAuth } from "@/lib/permissions";
+import { canManageCampaigns, canManageChannels, actingUserFromAuth } from "@/lib/permissions";
 import { CampaignAudienceImport } from "@/components/campaign-audience-import";
 import {
   parseSpreadsheetRow,
@@ -99,6 +99,7 @@ function NovaCampanhaPage() {
     ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
     : { id: "", role: "ATENDENTE" as const, tenantId: "" };
   const canManage = canManageCampaigns(actor) && companyValid;
+  const canSyncMetaTemplates = canManage && canManageChannels(actor);
 
   const [step, setStep] = useState(1);
   const [campaignId, setCampaignId] = useState<string | null>(null);
@@ -235,7 +236,7 @@ function NovaCampanhaPage() {
   }
 
   async function syncMetaTemplates() {
-    if (!channelId || !isMetaChannel) return;
+    if (!canSyncMetaTemplates || !channelId || !isMetaChannel) return;
     setSyncingMeta(true);
     try {
       const res = await fetch(
@@ -244,11 +245,18 @@ function NovaCampanhaPage() {
       );
       const j = (await res.json().catch(() => ({}))) as {
         error?: string;
+        message?: string;
         approved?: number;
         synced?: number;
       };
       if (!res.ok) {
-        throw new Error(j.error ?? `HTTP ${res.status}`);
+        throw new Error(
+          res.status === 403
+            ? j.message ?? "Seu perfil não pode sincronizar modelos. Peça a um administrador da empresa para atualizar a lista."
+            : res.status === 401
+              ? "Sessão expirada. Faça login novamente."
+              : j.message ?? "Não foi possível sincronizar os modelos da Meta. Tente novamente.",
+        );
       }
       toast.success(
         `Sincronizados ${j.synced ?? 0} modelos (${j.approved ?? 0} aprovados)`,
@@ -642,7 +650,7 @@ function NovaCampanhaPage() {
                 Canal Meta: use apenas templates aprovados (HSM). Mensagem livre não é permitida
                 fora da janela de 24h.
               </p>
-              <button
+              {canSyncMetaTemplates ? <button
                 type="button"
                 onClick={() => void syncMetaTemplates()}
                 disabled={syncingMeta || !channelId}
@@ -650,7 +658,9 @@ function NovaCampanhaPage() {
               >
                 {syncingMeta && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Sincronizar modelos da Meta
-              </button>
+              </button> : <p className="text-xs text-muted-foreground">
+                Você pode usar os modelos disponíveis. Para atualizar a lista da Meta, peça a um administrador da empresa.
+              </p>}
             </div>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">
