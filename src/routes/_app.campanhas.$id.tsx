@@ -793,15 +793,15 @@ function EditarCampanhaPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Link to="/campanhas" className="rounded-md p-1.5 text-muted-foreground hover:bg-accent">
+    <div className="campaign-page flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link to="/campanhas" aria-label="Voltar para campanhas" className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <Megaphone className="h-5 w-5 text-whatsapp" />
+          <Megaphone className="h-5 w-5 shrink-0 text-whatsapp" />
           <div>
-            <h1 className="text-lg font-semibold">{campaign.name}</h1>
+            <h1 title={campaign.name} className="line-clamp-2 text-base font-semibold leading-snug [overflow-wrap:anywhere] sm:line-clamp-none sm:text-lg">{campaign.name}</h1>
             <p className="text-xs text-muted-foreground">
               {campaign.status === "draft"
                 ? "Rascunho"
@@ -823,7 +823,7 @@ function EditarCampanhaPage() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end [&>button]:min-h-11">
         {canManage && (
           <button
             type="button"
@@ -880,7 +880,7 @@ function EditarCampanhaPage() {
           </button>
         )}
         {canManage && isDraft && tab === "dados" && (
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <button
               type="button"
               onClick={handleSave}
@@ -904,24 +904,24 @@ function EditarCampanhaPage() {
         </div>
       </header>
 
-      <div className="flex gap-1 border-b border-border px-6">
+      <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-border px-3 sm:flex sm:px-6">
         <button
           type="button"
           onClick={() => setTab("dados")}
-          className={`px-4 py-2 text-sm ${tab === "dados" ? "border-b-2 border-whatsapp font-medium" : "text-muted-foreground"}`}
+          className={`px-2 py-2 text-xs sm:px-4 sm:text-sm ${tab === "dados" ? "border-b-2 border-whatsapp font-medium" : "text-muted-foreground"}`}
         >
           Dados da campanha
         </button>
         <button
           type="button"
           onClick={() => setTab("publico")}
-          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm ${tab === "publico" ? "border-b-2 border-whatsapp font-medium" : "text-muted-foreground"}`}
+          className={`inline-flex items-center justify-center gap-1.5 px-2 py-2 text-xs sm:px-4 sm:text-sm ${tab === "publico" ? "border-b-2 border-whatsapp font-medium" : "text-muted-foreground"}`}
         >
           <Users className="h-3.5 w-3.5" /> Público ({audienceTotal} total)
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-6">
         {tab === "dados" && (
           <div className="mx-auto max-w-lg space-y-4">
             {channelUnavailable && (
@@ -1102,7 +1102,7 @@ function EditarCampanhaPage() {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-whatsapp disabled:opacity-60"
               />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">
                   Horário inicial
@@ -1178,7 +1178,7 @@ function EditarCampanhaPage() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Carregando público…
               </div>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <div className="campaign-table overflow-x-auto rounded-lg border border-border bg-card">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                     <tr>
@@ -1203,9 +1203,9 @@ function EditarCampanhaPage() {
                     ) : (
                       audience.map((row) => (
                         <tr key={row.id} className="border-t border-border">
-                          <td className="px-4 py-3">{row.name ?? "—"}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{row.phone}</td>
-                          <td className="px-4 py-3 text-xs">
+                          <td data-label="Nome" className="px-4 py-3">{row.name ?? "—"}</td>
+                          <td data-label="Telefone" className="px-4 py-3 font-mono text-xs">{row.phone}</td>
+                          <td data-label="Status" className="px-4 py-3 text-xs">
                             {row.status === "skipped" ? (
                               <span className="text-amber-700" title={row.skip_reason ?? ""}>
                                 {row.skip_reason === "invalid_phone"
@@ -1230,14 +1230,14 @@ function EditarCampanhaPage() {
                               "Pendente"
                             )}
                           </td>
-                          <td className="max-w-[200px] truncate px-4 py-3 text-xs text-muted-foreground">
+                          <td data-label="Resposta" className="max-w-[200px] truncate px-4 py-3 text-xs text-muted-foreground">
                             {row.response_text || "—"}
                           </td>
-                          <td className="px-4 py-3 text-xs">
+                          <td data-label="Intenção" className="px-4 py-3 text-xs">
                             {intentLabel(row.response_intent)}
                           </td>
                           {canManage && isDraft && (
-                            <td className="px-4 py-3 text-right">
+                            <td data-label="Ações" className="px-4 py-3 text-right">
                               <button
                                 type="button"
                                 onClick={() => removeContact(row.id)}
@@ -1265,11 +1265,12 @@ function EditarCampanhaPage() {
           onClick={() => setPickerOpen(false)}
         >
           <div
-            className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg border border-border bg-card shadow-xl"
+            role="dialog" aria-modal="true" aria-label="Adicionar contatos ao público"
+            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-lg border border-border bg-card shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-border p-4">
-              <h2 className="text-lg font-semibold">Adicionar contatos ao público</h2>
+            <div className="shrink-0 border-b border-border p-4">
+              <h2 className="text-lg font-semibold [overflow-wrap:anywhere]">Adicionar contatos ao público</h2>
               <div className="relative mt-3">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <input
@@ -1280,7 +1281,7 @@ function EditarCampanhaPage() {
                 />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
               {pickerLoading ? (
                 <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" /> Buscando…
@@ -1308,7 +1309,7 @@ function EditarCampanhaPage() {
                 ))
               )}
             </div>
-            <div className="flex justify-end gap-2 border-t border-border p-4">
+            <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border p-4">
               <button
                 type="button"
                 onClick={() => setPickerOpen(false)}

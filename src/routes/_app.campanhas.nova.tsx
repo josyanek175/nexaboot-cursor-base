@@ -535,23 +535,24 @@ function NovaCampanhaPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border bg-card px-6 py-4">
+    <div className="campaign-page flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
         <Link to="/campanhas" className="rounded-md p-1.5 text-muted-foreground hover:bg-accent">
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <Megaphone className="h-5 w-5 text-whatsapp" />
         <div className="flex-1">
-          <h1 className="text-lg font-semibold">Nova campanha</h1>
+          <h1 className="text-lg font-semibold [overflow-wrap:anywhere]">Nova campanha</h1>
           <p className="text-xs text-muted-foreground">Etapa {step} de 5 — {STEPS[step - 1].label}</p>
         </div>
       </header>
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-border bg-muted/20 px-4 py-2">
+      <nav aria-label="Etapas da campanha" className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-muted/20 px-3 py-2 sm:px-4">
         {STEPS.map((s) => (
           <span
             key={s.id}
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+            aria-current={s.id === step ? "step" : undefined}
+            className={`${s.id === step ? "" : "hidden sm:inline-flex"} shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
               s.id === step
                 ? "bg-whatsapp text-whatsapp-foreground"
                 : s.id < step
@@ -564,7 +565,7 @@ function NovaCampanhaPage() {
         ))}
       </nav>
 
-      <div className="mx-auto w-full max-w-2xl flex-1 overflow-auto p-6 space-y-4">
+      <div className="mx-auto min-h-0 min-w-0 w-full max-w-2xl flex-1 space-y-4 overflow-auto p-3 sm:p-6">
         {step === 1 && (
           <>
             <label className="block">
@@ -710,7 +711,7 @@ function NovaCampanhaPage() {
                       ? selectedMetaTemplate.variables
                       : ["1"]
                     ).map((v) => (
-                      <label key={v} className="flex items-center gap-2 text-xs">
+                      <label key={v} className="flex min-w-0 flex-col items-start gap-2 text-xs sm:flex-row sm:items-center">
                         <span className="w-12 font-mono">{`{{${v}}}`}</span>
                         <select
                           value={metaVariableMappings[v] ?? "name"}
@@ -809,7 +810,7 @@ function NovaCampanhaPage() {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">Horário inicial</span>
                 <input
@@ -838,7 +839,7 @@ function NovaCampanhaPage() {
         {step === 5 && (
           <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-sm">
             <h2 className="font-semibold">Revisão</h2>
-            <dl className="space-y-1 text-xs">
+            <dl className="space-y-1 text-xs [&_dd]:min-w-0 [&_dd]:[overflow-wrap:anywhere]">
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Campanha</dt>
                 <dd className="font-medium">{name}</dd>
@@ -864,7 +865,7 @@ function NovaCampanhaPage() {
           </div>
         )}
 
-        <div className="flex justify-between gap-2 pt-4">
+        <div className="flex flex-wrap justify-between gap-2 pt-4">
           <button
             type="button"
             disabled={step === 1 || saving}
@@ -873,7 +874,7 @@ function NovaCampanhaPage() {
           >
             <ChevronLeft className="h-4 w-4" /> Voltar
           </button>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
             {step < 5 ? (
               <button
                 type="button"

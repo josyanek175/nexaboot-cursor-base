@@ -140,18 +140,18 @@ function CampanhasPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center gap-3">
+    <div className="campaign-page flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           <Megaphone className="h-5 w-5 text-whatsapp" />
           <div>
-            <h1 className="text-lg font-semibold">Campanhas</h1>
+            <h1 className="text-lg font-semibold [overflow-wrap:anywhere]">Campanhas</h1>
             <p className="text-xs text-muted-foreground">
-              Envio em massa via WhatsApp (Evolution) — rascunhos e público
+              Campanhas de WhatsApp — modelos, público e acompanhamento
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>a]:min-h-11 [&>a]:justify-center">
           {canCosts && (
             <Link
               to="/campanhas/templates-atendimento"
@@ -179,7 +179,7 @@ function CampanhasPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-6">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando campanhas…
@@ -189,7 +189,7 @@ function CampanhasPage() {
             {error}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="campaign-table overflow-x-auto rounded-lg border border-border bg-card">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -216,14 +216,14 @@ function CampanhasPage() {
                 ) : (
                   items.map((c) => (
                     <tr key={c.id} className="border-t border-border hover:bg-muted/30">
-                      <td className="px-4 py-3 font-medium">{c.name}</td>
-                      <td className="px-4 py-3">
+                      <td data-label="Campanha" className="px-4 py-3 font-medium">{c.name}</td>
+                      <td data-label="Status" className="px-4 py-3">
                         <span className="rounded-md bg-accent px-2 py-1 text-xs">
                           {STATUS_LABEL[c.status] ?? c.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.channel_name ?? "—"}</td>
-                      <td className="px-4 py-3">
+                      <td data-label="Canal" className="px-4 py-3 text-muted-foreground">{c.channel_name ?? "—"}</td>
+                      <td data-label="Público total" className="px-4 py-3">
                         {c.total_contacts}
                         {c.skipped_count > 0 && (
                           <span className="ml-1 text-xs text-muted-foreground">
@@ -231,10 +231,10 @@ function CampanhasPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <td data-label="Criada em" className="px-4 py-3 text-xs text-muted-foreground">
                         {new Date(c.created_at).toLocaleString("pt-BR")}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Ações" className="px-4 py-3">
                         <div className="flex justify-end gap-2">
                           {canManage && (
                             <Link

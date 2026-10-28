@@ -182,12 +182,12 @@ function TemplatesAtendimentoPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-4">
+    <div className="campaign-page flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <FileStack className="h-5 w-5 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold">Templates atendimento</h1>
+            <h1 className="text-lg font-semibold [overflow-wrap:anywhere]">Templates atendimento</h1>
             <p className="text-xs text-muted-foreground">
               Vincule templates Meta APPROVED a nomes amigáveis e variáveis para o chat
             </p>
@@ -201,7 +201,7 @@ function TemplatesAtendimentoPage() {
         </Link>
       </header>
 
-      <div className="flex-1 space-y-6 overflow-auto p-6">
+      <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-auto p-3 sm:p-6">
         {canEdit && (
           <section className="space-y-3 rounded-lg border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -290,7 +290,7 @@ function TemplatesAtendimentoPage() {
             {error}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="campaign-table overflow-x-auto rounded-lg border border-border bg-card">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -310,15 +310,15 @@ function TemplatesAtendimentoPage() {
                 ) : (
                   presets.map((p) => (
                     <tr key={p.id} className="border-t border-border">
-                      <td className="px-4 py-3">
+                      <td data-label="Nome" className="px-4 py-3">
                         <div className="font-medium">{p.name}</div>
                         <div className="text-xs text-muted-foreground">{p.description}</div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs">
+                      <td data-label="Modelo Meta" className="px-4 py-3 font-mono text-xs">
                         {p.meta_template_name} · {p.language_code}
                       </td>
-                      <td className="px-4 py-3">{p.active ? "Sim" : "Não"}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td data-label="Ativo" className="px-4 py-3">{p.active ? "Sim" : "Não"}</td>
+                      <td data-label="Ações" className="px-4 py-3 text-right">
                         {canEdit && (
                           <button
                             type="button"
