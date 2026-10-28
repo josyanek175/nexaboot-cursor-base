@@ -87,7 +87,7 @@ export async function upsertInboundContact(params: {
   }
 }
 
-/** Meta opts into independent attendance cycles; other callers retain legacy behaviour. */
+/** Meta starts a new automation cycle by reopening the existing conversation. */
 export async function upsertInboundConversation(params: {
   sql?: CrmSql;
   companyId: string;
@@ -95,7 +95,7 @@ export async function upsertInboundConversation(params: {
   contactId: string;
   initialUnread?: number;
   newCycle?: boolean;
-  onLegacyCycleReused?: () => void;
+  onCycleReopened?: () => void;
   echo?: boolean;
 }): Promise<string> {
   if (!params.sql) {
@@ -113,11 +113,23 @@ export async function upsertInboundConversation(params: {
     WHERE company_id = ${companyId}::uuid AND whatsapp_channel_id = ${channelId}::uuid
       AND contact_id = ${contactId}::uuid
       AND status IS DISTINCT FROM 'merged' AND status IS DISTINCT FROM 'archived'
-      AND (${!params.newCycle || !!params.echo} OR status IN ('open', 'waiting'))
+      AND (${!params.newCycle || !!params.echo} OR status IN ('open', 'waiting', 'finished', 'closed', 'resolved'))
     ORDER BY (status IN ('open', 'waiting')) DESC, last_message_at DESC NULLS LAST, created_at DESC
     LIMIT 1 FOR UPDATE
   `;
   if (existing[0]) {
+    if (params.newCycle && !params.echo && ["finished", "closed", "resolved"].includes(existing[0].status ?? "")) {
+      await s`UPDATE public.conversations SET status='open',updated_at=now()
+        WHERE id=${existing[0].id}::uuid AND company_id=${companyId}::uuid`;
+      const tables = await s<{ present: string | null }[]>`SELECT to_regclass('public.automation_sessions')::text AS present`;
+      if (tables[0]?.present)
+        await s`UPDATE public.automation_sessions
+          SET status='ready',step_id=NULL,collected='{}'::jsonb,source='inbound',updated_at=now()
+          WHERE conversation_id=${existing[0].id}::uuid AND company_id=${companyId}::uuid
+            AND NOT EXISTS (SELECT 1 FROM public.conversation_assignments a
+              WHERE a.conversation_id=${existing[0].id}::uuid AND a.active=true AND a.unassigned_at IS NULL)`;
+      params.onCycleReopened?.();
+    }
     if (!params.newCycle && !params.echo && existing[0].status !== "open") {
       await s`UPDATE public.conversations SET status = 'open', updated_at = now() WHERE id = ${existing[0].id}::uuid`;
     }
@@ -133,26 +145,6 @@ export async function upsertInboundConversation(params: {
   const winner = await s<{ id: string }[]>`SELECT id FROM public.conversations
     WHERE company_id = ${companyId}::uuid AND whatsapp_channel_id = ${channelId}::uuid
       AND contact_id = ${contactId}::uuid AND status IN ('open', 'waiting') LIMIT 1`;
-  if (!winner[0] && params.newCycle && !params.echo) {
-    // Compatibility with a legacy full-tuple unique index: never lose inbound.
-    const closed = await s<{ id: string }[]>`SELECT id FROM public.conversations
-      WHERE company_id=${companyId}::uuid AND whatsapp_channel_id=${channelId}::uuid
-        AND contact_id=${contactId}::uuid AND status IN ('finished','closed','resolved')
-      ORDER BY last_message_at DESC NULLS LAST,created_at DESC LIMIT 1 FOR UPDATE`;
-    if (closed[0]) {
-      await s`UPDATE public.conversations SET status='open',updated_at=now() WHERE id=${closed[0].id}::uuid`;
-      const tables = await s<
-        { present: string | null }[]
-      >`SELECT to_regclass('public.automation_sessions')::text AS present`;
-      if (tables[0]?.present)
-        await s`UPDATE public.automation_sessions
-        SET status='ready',step_id=NULL,collected='{}'::jsonb,source='inbound',updated_at=now()
-        WHERE conversation_id=${closed[0].id}::uuid AND company_id=${companyId}::uuid`;
-      params.onLegacyCycleReused?.();
-      console.warn("[ATTENDANCE_LEGACY_CYCLE_REUSED]", { conversationId: closed[0].id });
-      return closed[0].id;
-    }
-  }
   if (!winner[0]) throw new Error("conversation_upsert_failed");
   return winner[0].id;
 }

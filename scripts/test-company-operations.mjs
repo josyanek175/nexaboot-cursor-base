@@ -63,7 +63,7 @@ try {
     (await db`SELECT status FROM conversations WHERE id=${campaign}::uuid`)[0].status,
     "finished",
   );
-  // Real lifecycle path: inbound after finished starts a new conversation and keeps the old history.
+  // Real lifecycle path: inbound after finished reopens the same conversation.
   const crm = load("src/lib/crm-inbound.server.ts");
   const [old] = await db`SELECT contact_id FROM conversations WHERE id=${campaign}::uuid`;
   const reopened = await crm.upsertInboundConversation({
@@ -73,13 +73,13 @@ try {
     contactId: old.contact_id,
     newCycle: true,
   });
-  assert.notEqual(reopened, campaign);
+  assert.equal(reopened, campaign);
   assert.equal(
     (await db`SELECT status FROM conversations WHERE id=${campaign}::uuid`)[0].status,
-    "finished",
+    "open",
   );
-  // Legacy uniqueness fallback resets the automation session for a new greeting.
-  await db`DELETE FROM conversations WHERE id=${reopened}::uuid`;
+  // Reopening also works with legacy uniqueness and resets the automation session.
+  await db`UPDATE conversations SET status='finished' WHERE id=${reopened}::uuid`;
   await pg.exec(
     "CREATE UNIQUE INDEX legacy_tuple ON conversations(company_id,contact_id,whatsapp_channel_id)",
   );
@@ -92,7 +92,7 @@ try {
       channelId: channel,
       contactId: old.contact_id,
       newCycle: true,
-      onLegacyCycleReused: () => {
+      onCycleReopened: () => {
         restarted = true;
       },
     }),
@@ -105,7 +105,7 @@ try {
   assert.deepEqual(session.collected, {});
   assert.equal(session.step_id, null);
   console.log(
-    "PASS: isolated PostgreSQL — alert clocks/company scope; unanswered campaign expiry, human/reply protections, idempotence and new/legacy attendance cycles.",
+    "PASS: isolated PostgreSQL — alert clocks/company scope; unanswered campaign expiry, human/reply protections, idempotence and conversation reopening with modern/legacy indexes.",
   );
 } finally {
   await pg.close();

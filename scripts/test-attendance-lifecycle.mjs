@@ -317,12 +317,12 @@ try {
       "Nome confirmado",
     );
   });
-  await scenario("novo ciclo preserva ID e mensagens do atendimento finalizado", async () => {
-    assert.notEqual(first.conversationId, second.conversationId);
-    assert.equal(await count(first.conversationId), 1);
+  await scenario("retorno reabre o mesmo ID e preserva todas as mensagens", async () => {
+    assert.equal(first.conversationId, second.conversationId);
+    assert.equal(await count(first.conversationId), 2);
     assert.equal(
       (await db`SELECT status FROM conversations WHERE id=${first.conversationId}`)[0].status,
-      "finished",
+      "open",
     );
   });
   await scenario("waiting permanece waiting sem repetir saudação", async () => {
@@ -341,7 +341,7 @@ try {
       (
         await db`SELECT count(*)::int AS n FROM messages WHERE conversation_id=${row.conversationId} AND direction='out' AND message_text LIKE 'Olá%'`
       )[0].n,
-      1,
+      2,
     );
   });
   await scenario(
@@ -401,6 +401,110 @@ try {
       );
     },
   );
+  await scenario("100 mensagens no retorno reabrem uma conversa e enviam uma única nova saudação", async () => {
+    const p = input();
+    const first = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+    const rows = await Promise.all(Array.from({ length: 100 }, () =>
+      api.commitMetaAttendanceMessage({ ...p, externalMessageId: randomUUID() })));
+    assert.ok(rows.every(r => r.conversationId === first.conversationId));
+    await Promise.all(Array.from({ length: 8 }, () => api.drainAttendanceJobs(first.conversationId)));
+    assert.equal((await db`SELECT count(*)::int AS n FROM conversations
+      WHERE company_id=${company} AND contact_id=${first.contactId} AND whatsapp_channel_id=${channel}`)[0].n, 1);
+    assert.equal((await db`SELECT count(*)::int AS n FROM messages
+      WHERE conversation_id=${first.conversationId} AND direction='out' AND message_text LIKE 'Olá%'`)[0].n, 2);
+    assert.equal(await count(first.conversationId, "in"), 101);
+    assert.equal(rows.filter(r => r.messageId).length, 100);
+  });
+  await scenario("reentregas simultâneas na reabertura não duplicam mensagem ou saudação", async () => {
+    const p = input();
+    const first = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+    const returning = { ...p, externalMessageId: randomUUID() };
+    const rows = await Promise.all(Array.from({ length: 20 }, () => api.commitMetaAttendanceMessage(returning)));
+    assert.ok(rows.every(r => r.conversationId === first.conversationId));
+    assert.equal(rows.filter(r => r.messageId).length, 1);
+    await Promise.all(rows.map(r => api.drainAttendanceJobs(r.conversationId)));
+    assert.equal(await count(first.conversationId, "in"), 2);
+    assert.equal(await count(first.conversationId), 2);
+  });
+  await scenario("retornos sucessivos preservam histórico e limpam as respostas antigas do fluxo", async () => {
+    const p = input();
+    const first = await emit(p);
+    for (let i = 0; i < 3; i++) {
+      await db`UPDATE automation_sessions SET collected='{"endereco":"antigo"}'::jsonb WHERE conversation_id=${first.conversationId}`;
+      await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+      const next = await emit({ ...p, externalMessageId: randomUUID() });
+      assert.equal(next.conversationId, first.conversationId);
+      assert.equal((await session(first.conversationId)).collected.endereco, undefined);
+      assert.equal(await count(first.conversationId), i + 2);
+    }
+  });
+  await scenario("conversa aberta tem prioridade sobre finalizadas anteriores", async () => {
+    const p = input();
+    const first = await emit(p);
+    const [old] = await db`INSERT INTO conversations(company_id,contact_id,whatsapp_channel_id,status,last_message_at)
+      VALUES(${company},${first.contactId},${channel},'finished',now()+interval '1 day') RETURNING id`;
+    const next = await api.commitMetaAttendanceMessage({ ...p, externalMessageId: randomUUID() });
+    assert.equal(next.conversationId, first.conversationId);
+    assert.equal((await db`SELECT status FROM conversations WHERE id=${old.id}`)[0].status, 'finished');
+  });
+  await scenario("histórico já separado não é apagado e o último atendimento finalizado é reaberto", async () => {
+    const p = input();
+    const first = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+    const [latest] = await db`INSERT INTO conversations(company_id,contact_id,whatsapp_channel_id,status,last_message_at)
+      VALUES(${company},${first.contactId},${channel},'finished',now()+interval '1 day') RETURNING id`;
+    const next = await emit({ ...p, externalMessageId: randomUUID() });
+    assert.equal(next.conversationId, latest.id);
+    assert.equal(await count(first.conversationId), 1);
+    assert.equal((await db`SELECT count(*)::int AS n FROM conversations WHERE contact_id=${first.contactId}`)[0].n, 2);
+  });
+  await scenario("retorno em conversa sem sessão reinicia boas-vindas mesmo com saudação antiga", async () => {
+    const p = input();
+    const first = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+    await db`DELETE FROM automation_sessions WHERE conversation_id=${first.conversationId}`;
+    const next = await emit({ ...p, externalMessageId: randomUUID() });
+    assert.equal(next.conversationId, first.conversationId);
+    assert.equal(await count(next.conversationId), 2);
+    assert.equal((await session(next.conversationId)).status, 'waiting');
+  });
+  await scenario("echo após encerramento não limpa sessão nem reinicia boas-vindas", async () => {
+    const p = input();
+    const first = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+    const echo = await api.commitMetaAttendanceMessage({ ...p, externalMessageId: randomUUID(), echo: true });
+    assert.equal(echo.conversationId, first.conversationId);
+    assert.equal((await session(first.conversationId)).status, 'ended');
+    assert.equal((await db`SELECT status FROM conversations WHERE id=${first.conversationId}`)[0].status, 'finished');
+    assert.equal(await count(first.conversationId), 2);
+    const next = await emit({ ...p, externalMessageId: randomUUID() });
+    assert.equal(next.conversationId, first.conversationId);
+    assert.equal(await count(first.conversationId), 3);
+  });
+  await scenario("atribuição humana ativa é preservada mesmo em registro finalizado inconsistente", async () => {
+    const p = input();
+    const first = await emit(p);
+    await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+    await db`INSERT INTO conversation_assignments(conversation_id,user_id,active) VALUES(${first.conversationId},${randomUUID()},true)`;
+    const next = await emit({ ...p, externalMessageId: randomUUID() });
+    assert.equal(next.conversationId, first.conversationId);
+    assert.equal(await count(first.conversationId), 1);
+    assert.equal((await session(first.conversationId)).status, 'ended');
+    assert.equal((await db`SELECT count(*)::int AS n FROM conversation_assignments WHERE conversation_id=${first.conversationId} AND active=true`)[0].n, 1);
+  });
+  await scenario("status legados closed e resolved reabrem sem criar registro", async () => {
+    for (const status of ['closed', 'resolved']) {
+      const p = input();
+      const first = await emit(p);
+      await api.onCampaignFinish({ companyId: company, conversationId: first.conversationId });
+      await db`UPDATE conversations SET status=${status} WHERE id=${first.conversationId}`;
+      const next = await emit({ ...p, externalMessageId: randomUUID() });
+      assert.equal(next.conversationId, first.conversationId);
+      assert.equal(await count(first.conversationId), 2);
+    }
+  });
   await scenario("20 entregas do mesmo wamid gravam somente uma mensagem", async () => {
     const p = input();
     const rows = await Promise.all(
@@ -607,7 +711,7 @@ try {
     assert.equal((await session(row.conversationId)).status, "ended");
   });
   await scenario(
-    "encerrar atendimento libera atribuição e transfere retorno para outro ciclo",
+    "encerrar atendimento libera atribuição e reabre a mesma conversa no retorno",
     async () => {
       const p = input();
       const row = await emit(p);
@@ -615,8 +719,8 @@ try {
       await api.stopAutomationForConversation(row.conversationId, company);
       await api.onCampaignFinish({ companyId: company, conversationId: row.conversationId });
       const next = await emit(input({ phone: p.phone }));
-      assert.notEqual(next.conversationId, row.conversationId);
-      assert.equal(await count(next.conversationId), 1);
+      assert.equal(next.conversationId, row.conversationId);
+      assert.equal(await count(next.conversationId), 2);
       assert.equal(
         (
           await db`SELECT active FROM conversation_assignments WHERE conversation_id=${row.conversationId}`
@@ -703,7 +807,7 @@ try {
     );
   });
   await scenario(
-    "echo desconhecido tem zero não lidas e cliente posterior cria ciclo",
+    "echo desconhecido tem zero não lidas e cliente posterior reabre a mesma conversa",
     async () => {
       const p = input();
       const echo = await api.commitMetaAttendanceMessage({ ...p, echo: true });
@@ -713,7 +817,7 @@ try {
         0,
       );
       const next = await emit({ ...p, externalMessageId: "after-echo-" + randomUUID() });
-      assert.notEqual(next.conversationId, echo.conversationId);
+      assert.equal(next.conversationId, echo.conversationId);
     },
   );
   await scenario("envio manual continua funcionando e não é deduplicado pelo bot", async () => {

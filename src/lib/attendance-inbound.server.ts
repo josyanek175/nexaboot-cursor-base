@@ -59,7 +59,7 @@ export async function persistMetaAttendanceMessage(tx: CrmSql, input: MessageInp
     channelId: input.channelId,
     contactId,
     newCycle: true,
-    onLegacyCycleReused: () => {
+    onCycleReopened: () => {
       restartCycle = true;
     },
     echo: input.echo,
