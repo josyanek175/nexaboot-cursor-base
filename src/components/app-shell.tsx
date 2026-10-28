@@ -19,6 +19,7 @@ import {
   Megaphone,
   Clock3,
   ChartColumn,
+  CalendarDays,
 } from "lucide-react";
 import { canManageInternalGroups } from "@/lib/current-user";
 import {
@@ -61,6 +62,7 @@ const OPERATIONAL_PREFIXES = [
   "/comunicacao-interna",
   "/fluxos",
   "/lembretes",
+  "/agenda",
   "/horarios-acesso",
   "/atendimento",
   "/contatos",
@@ -109,6 +111,7 @@ const nav: NavItem[] = [
   { to: "/gerencial", label: "Gerencial", icon: ChartColumn, gerencialOnly: true },
   { to: "/fluxos", label: "Fluxos", icon: Waypoints, flows: true },
   { to: "/lembretes", label: "Lembretes", icon: Bell, reminders: true },
+  { to: "/agenda", label: "Agenda da clínica", icon: CalendarDays, reminders: true },
   { to: "/empresas", label: "Empresas", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/equipes-numeros", label: "Equipes e números", icon: UsersRound },
