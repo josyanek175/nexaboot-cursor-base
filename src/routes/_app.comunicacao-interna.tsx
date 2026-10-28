@@ -1,7 +1,7 @@
 // Comunicação Interna — integrada às APIs reais (/api/auth/* + /api/internal-chat/*).
 // Não usa Supabase, não usa localStorage como banco. Mantém layout split (lista + chat).
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   MessageSquare, Send, Loader2, Users, AlertTriangle, Plus, X,
   Paperclip, FileText, Download, Volume2, VolumeX, ArrowLeft,
@@ -94,7 +94,9 @@ function ComunicacaoInternaPage() {
   const [chatsLoading, setChatsLoading] = useState(true);
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  const active = useMemo(() => chats.find((c) => c.id === activeId) ?? null, [chats, activeId]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [loadedChatId, setLoadedChatId] = useState<string | null>(null);
   const [msgsLoading, setMsgsLoading] = useState(false);
   const [msgsError, setMsgsError] = useState<string | null>(null);
 
@@ -115,6 +117,7 @@ function ComunicacaoInternaPage() {
   const [soundEnabled, setSoundEnabled] = useState(() => getNotificationSoundsEnabled());
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const nearBottomRef = useRef(true);
   const lastScrollRef = useRef({ chatId: activeId, messageId: "" });
 
@@ -212,6 +215,7 @@ function ComunicacaoInternaPage() {
             (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
           );
         });
+        setLoadedChatId(activeId);
         setMsgsError(null);
       } catch (e) {
         if (!cancel) setMsgsError((e as Error).message);
@@ -245,15 +249,33 @@ function ComunicacaoInternaPage() {
   }, [activeId]);
 
   // Polling must not pull the reader away from an older message.
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!activeId) {
+      lastScrollRef.current = { chatId: null, messageId: "" };
+      nearBottomRef.current = true;
+      return;
+    }
     const el = scrollRef.current;
+    if (!el || loadedChatId !== activeId) return;
     const messageId = messages.at(-1)?.id ?? "";
     const changedChat = lastScrollRef.current.chatId !== activeId;
     if (el && (changedChat || (nearBottomRef.current && messageId !== lastScrollRef.current.messageId)))
       el.scrollTop = el.scrollHeight;
     if (changedChat) nearBottomRef.current = true;
     lastScrollRef.current = { chatId: activeId, messageId };
-  }, [messages, activeId]);
+  }, [messages, activeId, loadedChatId, active?.id]);
+
+  // Images can increase the history height after the initial render.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || loadedChatId !== activeId || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const el = scrollRef.current;
+      if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [activeId, loadedChatId, active?.id]);
 
   // Limpa anexo selecionado ao trocar de conversa
   useEffect(() => {
@@ -272,8 +294,6 @@ function ComunicacaoInternaPage() {
       if (filePreview) URL.revokeObjectURL(filePreview);
     };
   }, [filePreview]);
-
-  const active = useMemo(() => chats.find((c) => c.id === activeId) ?? null, [chats, activeId]);
 
   async function onSend(e: FormEvent) {
     e.preventDefault();
@@ -449,6 +469,7 @@ function ComunicacaoInternaPage() {
               const el = scrollRef.current;
               if (el) nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
             }} className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3 sm:p-4">
+              <div ref={contentRef} className="space-y-2">
               {msgsLoading && messages.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Carregando mensagens…</div>
               ) : msgsError ? (
@@ -500,6 +521,7 @@ function ComunicacaoInternaPage() {
                   );
                 })
               )}
+              </div>
             </div>
 
             <div className="shrink-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">

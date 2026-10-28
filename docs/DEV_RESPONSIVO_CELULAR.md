@@ -11,7 +11,15 @@
 - Janelas compartilhadas e edição de usuários/grupos têm limite de altura e rolagem. Importação de contatos distribui os indicadores em duas colunas no celular.
 - Páginas comuns permitem rolagem dentro da aplicação; formulários móveis têm campos com fonte de 16 px. Cabeçalho/tabela de usuários se ajustam a larguras pequenas.
 
-Nenhuma alteração de API, banco, regras de permissão ou envio de WhatsApp. Publicação somente na dev, junto do conteúdo que já estava nessa branch. Compilar o serviço web da dev; não executar SQL.
+Sem migração de banco, mudança de regras de permissão ou envio de WhatsApp. O complemento abaixo ajusta a seleção de mensagens na API interna existente, mantendo seu contrato. Publicação somente na dev, junto do conteúdo que já estava nessa branch. Compilar o serviço web da dev; não executar SQL.
+
+### Complemento: abrir o chat no final
+
+A consulta de mensagens internas passa a selecionar as 500 mais recentes e retornar esse conjunto em ordem cronológica. Antes, o limite era aplicado às mais antigas. Nenhuma mensagem é apagada e o limite de 500 por resposta permanece; este ajuste não implementa paginação do histórico anterior.
+
+A rolagem inicial aguarda as mensagens da conversa correta e se posiciona no final antes da pintura. Um observador acompanha mudanças de altura, como imagens carregadas depois. A atualização periódica preserva a posição quando a pessoa sobe para ler mensagens antigas; voltar a abrir a conversa posiciona novamente no final.
+
+Verificações adicionais: teste isolado com 650 mensagens, leitura registrada e bloqueio entre empresas; prévia local em 320 e 390 px com atraso de carregamento de mensagens e imagem. O teste de mensagens recentes integra a suíte de operações.
 
 ## Verificação
 

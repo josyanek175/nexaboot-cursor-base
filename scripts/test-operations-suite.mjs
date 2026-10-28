@@ -12,6 +12,7 @@ const cases = [
   "test-meta-flow-buttons.mjs",
   "test-channel-permissions.mjs",
   "test-internal-groups.mjs",
+  "test-internal-chat-recent-messages.mjs",
   "test-password-recovery.mjs",
   "test-session-expiry.mjs",
   "test-session-revocation.mjs",
