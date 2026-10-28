@@ -27,6 +27,7 @@ export const Route = createFileRoute("/api/internal-chat/messages")({
         if (!member.length) return Response.json({ error: "forbidden" }, { status: 403 });
 
         const messages = await s`
+          SELECT * FROM (
           SELECT m.id, m.chat_id, m.sender_id, m.body, m.created_at,
                  m.attachment_mime_type, m.attachment_original_name,
                  m.attachment_size, m.attachment_type,
@@ -34,8 +35,10 @@ export const Route = createFileRoute("/api/internal-chat/messages")({
           FROM internal_messages m
           JOIN users u ON u.id = m.sender_id
           WHERE m.chat_id = ${chatId}
-          ORDER BY m.created_at ASC
+          ORDER BY m.created_at DESC, m.id DESC
           LIMIT 500
+          ) recent
+          ORDER BY created_at ASC, id ASC
         `;
         // marca notificações como lidas
         await s`
