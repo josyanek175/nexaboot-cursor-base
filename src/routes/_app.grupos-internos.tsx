@@ -32,8 +32,8 @@ function Page() {
     return <div className="p-6">Apenas administradores podem gerenciar grupos internos.</div>;
   if (!companyValid) return <div className="p-6">Selecione uma empresa.</div>;
   return (
-    <div className="h-full overflow-auto p-6">
-      <header className="flex justify-between gap-3">
+    <div className="h-full min-w-0 overflow-auto p-3 sm:p-6">
+      <header className="flex flex-wrap justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Grupos internos</h1>
           <p>{companyName}</p>
@@ -52,7 +52,7 @@ function Page() {
       </p>
       <div className="grid gap-4 md:grid-cols-2">
         {groups.map((g) => (
-          <div key={g.id} className="rounded border p-4">
+          <div key={g.id} className="min-w-0 rounded border p-4 [overflow-wrap:anywhere]">
             <h2 className="font-semibold">{g.name}</h2>
             <p className="my-2">
               {g.member_ids.length} membros · {g.active ? "Ativo" : "Inativo"}
@@ -66,7 +66,7 @@ function Page() {
       {draft && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
           <form
-            className="max-h-[85vh] w-full max-w-lg space-y-4 overflow-auto rounded-xl bg-card p-6"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-auto rounded-xl bg-card p-4 sm:p-6"
             onSubmit={async (e) => {
               e.preventDefault();
               setBusy(true);

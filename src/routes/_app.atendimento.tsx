@@ -10,6 +10,7 @@ import {
   Megaphone, FileStack,
 } from "lucide-react";
 import { ForwardMessageDialog } from "@/components/forward-message-dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { parseSharedLocation, locationMapUrl, type SharedLocation } from "@/lib/whatsapp-location";
 import { SendTemplateModal } from "@/components/send-template-modal";
 import { subscribeToConversation } from "@/lib/realtime";
@@ -682,6 +683,8 @@ function AtendimentoPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showDetails, setShowDetails] = useState(true);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  useEffect(() => { setMobileDetailsOpen(false); }, [selectedId]);
   const [mobileView, setMobileView] = useState<"list" | "chat">(
     initialConversationId ? "chat" : "list",
   );
@@ -1620,14 +1623,21 @@ function AtendimentoPage() {
     log(selected.id, `Tag removida: ${tag}`);
   }
 
+  const detailsPanel = selected ? (
+    <DetailsPanel conversation={selected} logs={convLogs} attendants={tenantUsers}
+      onAssume={assumeSelf} onAssign={assignTo} onTransfer={transferTo}
+      onFinish={finish} onReopen={reopen} onAddTag={addTag} onRemoveTag={removeTag}
+      onAddNote={() => { setMobileDetailsOpen(false); setNoteOpen(true); }} />
+  ) : null;
+
   return (
-    <div className="flex h-full w-full">
+    <div className="flex h-full min-h-0 min-w-0 w-full overflow-hidden">
       {forwardingMessage && <ForwardMessageDialog message={forwardingMessage} onClose={() => setForwardingMessage(null)} />}
       {/* Coluna esquerda — lista de conversas */}
       <section
-        className={`${mobileView === "chat" ? "hidden" : "flex"} w-full shrink-0 flex-col border-r border-border bg-card lg:flex lg:w-80`}
+        className={`${mobileView === "chat" ? "hidden" : "flex"} min-h-0 w-full shrink-0 flex-col border-r border-border bg-card lg:flex lg:w-80`}
       >
-        <header className="border-b border-border p-3 pl-12 lg:pl-3">
+        <header className="shrink-0 border-b border-border p-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -1846,7 +1856,7 @@ function AtendimentoPage() {
 
       {/* Coluna central — chat */}
       <section
-        className={`${mobileView === "list" ? "hidden" : "flex"} flex-1 flex-col lg:flex`}
+        className={`${mobileView === "list" ? "hidden" : "flex"} min-h-0 min-w-0 flex-1 flex-col lg:flex`}
         style={{ backgroundColor: "var(--chat-bg)" }}
       >
         {selected ? (
@@ -1855,6 +1865,7 @@ function AtendimentoPage() {
               conversation={selected}
               showDetails={showDetails}
               onToggleDetails={() => setShowDetails((v) => !v)}
+              onMobileDetails={() => setMobileDetailsOpen(true)}
               onBack={() => setMobileView("list")}
               onAssume={assumeSelf}
             />
@@ -1898,7 +1909,7 @@ function AtendimentoPage() {
                 )}
               </div>
             )}
-            <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-4 py-4 md:px-6">
+            <div ref={messagesScrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 md:px-6">
               <div className="mx-auto max-w-3xl space-y-2">
                 {loadingMsgs && (
                   <div className="py-10 text-center text-xs text-muted-foreground">Carregando mensagens…</div>
@@ -1985,22 +1996,16 @@ function AtendimentoPage() {
 
       {/* Coluna direita — só desktop */}
       {showDetails && selected && (
-        <div className="hidden md:flex">
-          <DetailsPanel
-            conversation={selected}
-            logs={convLogs}
-            attendants={tenantUsers}
-            onAssume={assumeSelf}
-            onAssign={assignTo}
-            onTransfer={transferTo}
-            onFinish={finish}
-            onReopen={reopen}
-            onAddTag={addTag}
-            onRemoveTag={removeTag}
-            onAddNote={() => setNoteOpen(true)}
-          />
+        <div className="hidden lg:flex">
+          {detailsPanel}
         </div>
       )}
+      <Sheet open={mobileDetailsOpen && !!selected} onOpenChange={setMobileDetailsOpen}>
+        <SheetContent side="right" className="flex max-h-dvh w-full flex-col gap-0 p-0 sm:max-w-sm" aria-describedby={undefined}>
+          <SheetTitle className="shrink-0 border-b px-4 py-4 pr-12 text-base">Detalhes e ações</SheetTitle>
+          <div className="min-h-0 min-w-0 flex-1">{detailsPanel}</div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -2269,10 +2274,11 @@ function FilterSelect({
 
 // ───────── Header do chat ─────────
 function ChatHeader({
-  conversation, showDetails, onToggleDetails, onBack, onAssume,
+  conversation, showDetails, onToggleDetails, onMobileDetails, onBack, onAssume,
 }: {
   conversation: Conversation;
   showDetails: boolean;
+  onMobileDetails: () => void;
   onToggleDetails: () => void;
   onBack?: () => void;
   onAssume?: () => void;
@@ -2282,7 +2288,7 @@ function ChatHeader({
   const isGroup = groupContactIds.has(conversation.contactId);
   const showAssume = !conversation.assignedTo && !!onAssume;
   return (
-    <header className="flex items-center justify-between border-b border-border bg-card px-4 py-2.5">
+    <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-3 py-2.5 sm:flex-nowrap sm:px-4">
       <div className="flex min-w-0 items-center gap-3">
         {onBack && (
           <button
@@ -2330,6 +2336,9 @@ function ChatHeader({
           </button>
         )}
         <ChannelModeBadge channel={ch} />
+        <button type="button" onClick={onMobileDetails} className="grid h-11 w-11 place-items-center rounded-md hover:bg-muted lg:hidden" aria-label="Ações do atendimento">
+          <PanelRightOpen className="h-5 w-5" />
+        </button>
         <button className="hidden rounded-md p-2 hover:bg-muted sm:inline-flex" title="Ligar"><Phone className="h-4 w-4" /></button>
         <button className="hidden rounded-md p-2 hover:bg-muted sm:inline-flex" title="Vídeo"><Video className="h-4 w-4" /></button>
         <button onClick={onToggleDetails} className="hidden rounded-md p-2 hover:bg-muted lg:inline-flex" title={showDetails ? "Ocultar painel" : "Exibir painel"}>
@@ -2906,8 +2915,8 @@ function ChatComposer({
   }
 
   return (
-    <div className="border-t border-border bg-card px-4 py-3">
-      <div className="flex items-center gap-2">
+    <div className="shrink-0 border-t border-border bg-card px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
         <button onClick={onInternalNote} className="rounded-md p-2 text-internal hover:bg-internal/10" title="Nota interna">
           <StickyNote className="h-5 w-5" />
         </button>
@@ -2956,18 +2965,19 @@ function ChatComposer({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
           placeholder="Digite uma mensagem"
-          className="flex-1 rounded-full border border-input bg-background px-4 py-2 text-sm outline-none focus:ring-2 ring-ring"
+          aria-label="Mensagem para o cliente"
+          className="order-first min-h-11 min-w-0 basis-full flex-1 rounded-full border border-input bg-background px-4 py-2 text-base outline-none focus:ring-2 ring-ring sm:order-none sm:basis-auto sm:text-sm"
         />
         {value.trim() ? (
           <button
             onClick={onSend}
-            className="grid h-10 w-10 place-items-center rounded-full bg-whatsapp text-whatsapp-foreground hover:opacity-90"
+            className="ml-auto grid h-11 w-11 shrink-0 place-items-center rounded-full bg-whatsapp text-whatsapp-foreground hover:opacity-90"
             title="Enviar"
           >
             <Send className="h-4 w-4" />
           </button>
         ) : (
-          <button className="grid h-10 w-10 place-items-center rounded-full bg-muted text-muted-foreground hover:bg-accent" title="Gravar áudio">
+          <button className="ml-auto grid h-11 w-11 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground hover:bg-accent" title="Gravar áudio">
             <Mic className="h-4 w-4" />
           </button>
         )}
@@ -3028,7 +3038,7 @@ function DetailsPanel({
   const [picker, setPicker] = useState<"assign" | "transfer" | null>(null);
 
   return (
-    <aside className="hidden w-80 shrink-0 flex-col border-l border-border bg-card lg:flex">
+    <aside className="flex h-full min-h-0 min-w-0 w-full shrink-0 flex-col border-l border-border bg-card lg:w-80">
       <div className="flex flex-col items-center border-b border-border p-6">
         <div
           className="grid h-20 w-20 place-items-center rounded-full text-2xl font-semibold text-white"

@@ -14,6 +14,7 @@ import {
   ScrollText,
   LogOut,
   Menu,
+  X,
   UsersRound,
   Megaphone,
   Clock3,
@@ -25,7 +26,7 @@ import {
   canViewCampaignCosts,
   actingUserFromAuth,
 } from "@/lib/permissions";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Role } from "@/lib/mocks";
 import { subscribeUnread, setUnread as setUnreadStore, type UnreadKey } from "@/lib/unread-store";
 import {
@@ -37,6 +38,7 @@ import { SessionProvider, useSession } from "@/lib/session";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { AttendanceAlertBanner } from "@/components/attendance-alert-banner";
+import { useMobileViewportHeight } from "@/hooks/use-mobile-viewport-height";
 
 const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin · Plataforma",
@@ -140,6 +142,8 @@ function Shell() {
   } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const viewportHeight = useMobileViewportHeight();
+  const sidebarRef = useRef<HTMLElement>(null);
   const [unread, setUnread] = useState({ atendimento: 0, internal: 0 });
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
 
@@ -214,6 +218,32 @@ function Shell() {
     setSidebarOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const panel = sidebarRef.current;
+    const focusable = () => Array.from(panel?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), select:not([disabled])') ?? [])
+      .filter(el => el.getClientRects().length > 0);
+    focusable()[0]?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+      if (event.key === "Tab") {
+        const items = focusable();
+        const first = items[0], last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first?.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [sidebarOpen]);
+
   async function onOperationalCompanyChange(nextId: string) {
     if (!nextId) return;
     try {
@@ -231,14 +261,7 @@ function Shell() {
   };
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className={`fixed top-2 left-2 z-30 grid h-9 w-9 place-items-center rounded-md border border-border bg-card/90 backdrop-blur shadow-sm text-foreground lg:hidden ${sidebarOpen ? "hidden" : ""}`}
-        aria-label="Abrir menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+    <div data-app-shell className="relative flex h-dvh min-h-0 w-full overflow-hidden bg-background text-foreground" style={{ height: viewportHeight }}>
 
       {sidebarOpen && (
         <div
@@ -249,6 +272,11 @@ function Shell() {
       )}
 
       <aside
+        ref={sidebarRef}
+        aria-label="Menu principal"
+        role={sidebarOpen && viewportHeight !== undefined ? "dialog" : undefined}
+        aria-modal={sidebarOpen && viewportHeight !== undefined ? true : undefined}
+        inert={!sidebarOpen && viewportHeight !== undefined}
         className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 lg:relative lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
@@ -263,6 +291,9 @@ function Shell() {
               {headerCompanyLabel}
             </div>
           </div>
+          <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu" className="ml-auto grid h-11 w-11 shrink-0 place-items-center rounded-md hover:bg-accent lg:hidden">
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2">
@@ -375,9 +406,18 @@ function Shell() {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex min-h-12 shrink-0 items-center gap-3 border-b border-border bg-card px-2 pt-[env(safe-area-inset-top)] lg:hidden">
+          <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu" aria-expanded={sidebarOpen} className="grid h-11 w-11 shrink-0 place-items-center rounded-md hover:bg-accent">
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{nav.find(item => pathname === item.to || pathname.startsWith(item.to + "/"))?.label ?? "NexaBoot"}</p>
+            <p className="truncate text-xs text-muted-foreground">{headerCompanyLabel}</p>
+          </div>
+        </header>
         {companyValid && !switchingCompany && <AttendanceAlertBanner companyId={companyId}/>}
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className={`min-h-0 min-w-0 flex-1 ${pathname === "/atendimento" || pathname === "/comunicacao-interna" ? "overflow-hidden" : "overflow-auto"}`}>
         {switchingCompany ? (
           <div role="status" className="grid h-full place-items-center p-6 text-sm">
             Alterando empresa…
