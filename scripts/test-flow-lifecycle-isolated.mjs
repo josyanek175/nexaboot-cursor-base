@@ -84,13 +84,13 @@ try {
     contactId: contact,
     newCycle: true,
   });
-  assert.notEqual(conversation, closed);
+  assert.equal(conversation, closed, "Customer return must reopen the same conversation");
   await inbound("Voltei");
   assert.equal(sends, 6);
   assert.equal(sent[4].text, "Olá");
   assert.equal(
     (await db`SELECT count(*) AS n FROM messages WHERE conversation_id=${closed}::uuid`)[0].n,
-    4,
+    6,
   );
   await db`INSERT INTO conversation_assignments(conversation_id,user_id) VALUES(${conversation}::uuid,gen_random_uuid())`;
   await inbound("support");
