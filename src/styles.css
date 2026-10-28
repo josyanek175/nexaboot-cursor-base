@@ -169,3 +169,13 @@
     color: var(--color-foreground);
   }
 }
+
+@media (max-width: 63.999rem) {
+  [data-app-shell] :is(input, textarea, select) {
+    min-width: 0;
+    max-width: 100%;
+  }
+  [data-app-shell] :is(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="tel"], input[type="password"], input[type="number"], textarea, select) {
+    font-size: 1rem;
+  }
+}

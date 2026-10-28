@@ -4,7 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   MessageSquare, Send, Loader2, Users, AlertTriangle, Plus, X,
-  Paperclip, FileText, Download, Volume2, VolumeX,
+  Paperclip, FileText, Download, Volume2, VolumeX, ArrowLeft,
 } from "lucide-react";
 import { setUnread as setUnreadStore } from "@/lib/unread-store";
 import {
@@ -98,7 +98,10 @@ function ComunicacaoInternaPage() {
   const [msgsLoading, setMsgsLoading] = useState(false);
   const [msgsError, setMsgsError] = useState<string | null>(null);
 
-  const [draft, setDraft] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draft = activeId ? drafts[activeId] ?? "" : "";
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   const [sending, setSending] = useState(false);
 
   // Anexo selecionado (ainda não enviado)
@@ -112,6 +115,8 @@ function ComunicacaoInternaPage() {
   const [soundEnabled, setSoundEnabled] = useState(() => getNotificationSoundsEnabled());
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const nearBottomRef = useRef(true);
+  const lastScrollRef = useRef({ chatId: activeId, messageId: "" });
 
   useEffect(() => subscribeNotificationSoundsEnabled(setSoundEnabled), []);
 
@@ -239,10 +244,15 @@ function ComunicacaoInternaPage() {
     return () => { cancel = true; };
   }, [activeId]);
 
-  // auto scroll
+  // Polling must not pull the reader away from an older message.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    const messageId = messages.at(-1)?.id ?? "";
+    const changedChat = lastScrollRef.current.chatId !== activeId;
+    if (el && (changedChat || (nearBottomRef.current && messageId !== lastScrollRef.current.messageId)))
+      el.scrollTop = el.scrollHeight;
+    if (changedChat) nearBottomRef.current = true;
+    lastScrollRef.current = { chatId: activeId, messageId };
   }, [messages, activeId]);
 
   // Limpa anexo selecionado ao trocar de conversa
@@ -269,6 +279,7 @@ function ComunicacaoInternaPage() {
     e.preventDefault();
     const text = draft.trim();
     if ((!text && !file) || !activeId || sending) return;
+    const sentChatId = activeId;
     setSending(true);
     try {
       let message: MessageRow;
@@ -293,15 +304,17 @@ function ComunicacaoInternaPage() {
         });
         message = r.message;
       }
-      setDraft("");
+      setDrafts(prev => ({ ...prev, [sentChatId]: "" }));
+      if (activeIdRef.current !== sentChatId) return;
       clearFile();
+      nearBottomRef.current = true;
       // injeta otimista
       setMessages((prev) => {
         if (prev.some((m) => m.id === message.id)) return prev;
         return [...prev, { ...message, sender_name: me?.name ?? "Eu" }];
       });
     } catch (e) {
-      setMsgsError((e as Error).message);
+      if (activeIdRef.current === sentChatId) setMsgsError((e as Error).message);
     } finally {
       setSending(false);
     }
@@ -335,10 +348,10 @@ function ComunicacaoInternaPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col lg:flex-row">
+    <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
       {/* Lista de conversas */}
-      <aside className="flex w-full flex-col border-b border-border bg-card lg:w-80 lg:border-b-0 lg:border-r">
-        <div className="flex items-center justify-between gap-2 border-b border-border p-4">
+      <aside aria-label="Conversas internas" className={`${activeId ? "hidden" : "flex"} h-full min-h-0 w-full shrink-0 flex-col border-r border-border bg-card lg:flex lg:w-80`}>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border p-3 sm:p-4">
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-base font-semibold">
               <MessageSquare className="h-4 w-4" /> Comunicação Interna
@@ -415,19 +428,27 @@ function ComunicacaoInternaPage() {
       </aside>
 
       {/* Painel da conversa */}
-      <section className="flex min-h-0 flex-1 flex-col bg-background">
+      <section aria-label="Conversa interna" className={`${activeId ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 flex-col bg-background lg:flex`}>
         {!active ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             Selecione uma conversa para começar.
           </div>
         ) : (
           <>
-            <header className="border-b border-border bg-card px-4 py-3">
-              <h3 className="text-sm font-semibold">{active.name}</h3>
-              <p className="text-[11px] text-muted-foreground">{active.type === "direct" ? "Conversa direta" : "Grupo"}</p>
+            <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-2 py-2 sm:px-4 sm:py-3">
+              <button type="button" onClick={() => setActiveId(null)} aria-label="Voltar para conversas internas" className="grid h-11 w-11 shrink-0 place-items-center rounded-md hover:bg-accent lg:hidden">
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold">{active.name}</h3>
+                <p className="text-[11px] text-muted-foreground">{active.type === "direct" ? "Conversa direta" : "Grupo"}</p>
+              </div>
             </header>
 
-            <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+            <div ref={scrollRef} onScroll={() => {
+              const el = scrollRef.current;
+              if (el) nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+            }} className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3 sm:p-4">
               {msgsLoading && messages.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Carregando mensagens…</div>
               ) : msgsError ? (
@@ -440,7 +461,7 @@ function ComunicacaoInternaPage() {
                   const attUrl = m.attachment_type ? `/api/internal-chat/messages/${m.id}/attachment` : null;
                   return (
                     <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                      <div className={`min-w-0 max-w-[90%] rounded-lg px-3 py-2 text-sm [overflow-wrap:anywhere] sm:max-w-[80%] ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                         {!mine && <div className="mb-0.5 text-[10px] font-medium opacity-80">{m.sender_name}</div>}
 
                         {attUrl && m.attachment_type === "image" && (
@@ -481,14 +502,14 @@ function ComunicacaoInternaPage() {
               )}
             </div>
 
-            <div className="border-t border-border bg-card">
+            <div className="shrink-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">
               {/* Preview do anexo selecionado */}
               {(file || fileError) && (
                 <div className="flex items-center gap-3 px-3 pt-3">
                   {fileError ? (
                     <div className="flex-1 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{fileError}</div>
                   ) : file ? (
-                    <div className="flex flex-1 items-center gap-3 rounded-md border border-border bg-background p-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-3 rounded-md border border-border bg-background p-2">
                       {filePreview ? (
                         <img src={filePreview} alt="preview" className="h-12 w-12 rounded object-cover" />
                       ) : (
@@ -525,26 +546,29 @@ function ComunicacaoInternaPage() {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent disabled:opacity-50"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent disabled:opacity-50"
                   title="Anexar arquivo"
+                  aria-label="Anexar arquivo"
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
                 <input
                   type="text"
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => { if (activeId) setDrafts(prev => ({ ...prev, [activeId]: e.target.value })); }}
                   placeholder="Digite uma mensagem…"
-                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                  aria-label="Mensagem interna"
+                  className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-base outline-none focus:ring-2 focus:ring-primary sm:text-sm"
                   disabled={sending}
                 />
                 <button
                   type="submit"
                   disabled={sending || (!draft.trim() && !file)}
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                  aria-label="Enviar mensagem interna"
+                  className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 sm:px-4"
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Enviar
+                  <span className="hidden sm:inline">Enviar</span>
                 </button>
               </form>
             </div>
@@ -651,7 +675,8 @@ function NewChatModal({
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={onSubmit}
-        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl"
+        role="dialog" aria-modal="true" aria-label="Nova conversa"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold">Nova conversa</h3>
@@ -660,7 +685,7 @@ function NewChatModal({
           </button>
         </div>
 
-        <div className="space-y-3 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           <div className="flex gap-2">
             <button type="button" onClick={() => changeType("direct")}
               className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium ${type === "direct" ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"}`}>

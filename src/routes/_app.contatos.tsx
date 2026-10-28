@@ -673,7 +673,7 @@ function ImportModal({
           {/* Totais */}
           {rows.length > 0 && (
             <>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Stat label="Total" value={totals.total} />
                 <Stat label="Novos" value={totals.created} tone="ok" />
                 <Stat label="Duplicados" value={totals.duplicates} tone="warn" />
