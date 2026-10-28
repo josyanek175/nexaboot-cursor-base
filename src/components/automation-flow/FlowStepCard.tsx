@@ -19,7 +19,7 @@ export function FlowStepCard({
   const index = definition.steps.findIndex((item) => item.id === step.id);
   const name = displayStepName(step, index);
   return (
-    <article className={`w-72 rounded-2xl border bg-card p-3 shadow-sm ${active ? "border-whatsapp ring-2 ring-whatsapp/30" : "border-border"}`}>
+    <article className={`min-w-0 w-full rounded-2xl border bg-card p-3 [overflow-wrap:anywhere] xl:w-72 ${active ? "border-whatsapp ring-2 ring-whatsapp/30" : "border-border"}`}>
       <button type="button" className="w-full text-left" onClick={onSelect}>
         <div className="text-[11px] text-muted-foreground">{index + 1}. {typeLabel(step.type)}</div>
         <div className="font-semibold">{name}</div>
@@ -36,7 +36,7 @@ export function FlowStepCard({
           })}
         </ul>
       </button>
-      <div className="mt-2 flex gap-2 text-[11px]">
+      <div className="mt-2 flex flex-wrap gap-3 text-xs [&>button]:min-h-11 xl:[&>button]:min-h-0">
         <button className="text-whatsapp" onClick={onSelect}>Editar</button>
         <button onClick={onDuplicate}>Duplicar</button>
         <button className="text-destructive" onClick={onDelete}>Excluir</button>

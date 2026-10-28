@@ -27,12 +27,12 @@ export function FlowSimulator({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="flex h-[640px] w-[360px] flex-col overflow-hidden rounded-3xl bg-[#ece5dd] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Testar fluxo" className="flex h-[640px] max-h-[calc(100dvh-2rem)] w-full max-w-[360px] flex-col overflow-hidden rounded-3xl bg-[#ece5dd] shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between bg-[#075e54] px-4 py-3 text-white">
           <span className="text-sm font-semibold">Testar fluxo</span>
           <button onClick={onClose}>Fechar</button>
         </div>
-        <div className="flex-1 space-y-2 overflow-y-auto p-3">
+        <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto p-3 [overflow-wrap:anywhere]">
           {log.map((line, index) => (
             <div key={index} className="ml-auto max-w-[80%] rounded-lg bg-[#dcf8c6] px-3 py-2 text-sm">{line}</div>
           ))}
@@ -71,7 +71,7 @@ export function FlowSimulator({
             }}
           >
             {step.type !== "message" && (
-              <input value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva como o cliente" className="flex-1 rounded-full border px-3 py-2 text-sm" />
+              <input value={text} onChange={(event) => setText(event.target.value)} placeholder="Escreva como o cliente" className="min-w-0 flex-1 rounded-full border px-3 py-2 text-base sm:text-sm" />
             )}
             <button className="rounded-full bg-[#075e54] px-3 text-sm text-white">{step.type === "message" ? "Continuar" : "Enviar"}</button>
           </form>

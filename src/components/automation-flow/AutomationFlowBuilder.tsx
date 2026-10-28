@@ -6,6 +6,8 @@ import { FlowSettings, type FlowChannel } from "@/components/automation-flow/Flo
 import { FlowSimulator } from "@/components/automation-flow/FlowSimulator";
 import { FlowStepEditor } from "@/components/automation-flow/FlowStepEditor";
 import { FlowToolbar } from "@/components/automation-flow/FlowToolbar";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useMobileViewportHeight } from "@/hooks/use-mobile-viewport-height";
 import {
   clearReferences,
   createStep,
@@ -44,6 +46,10 @@ export function AutomationFlowBuilder({
   const [testing, setTesting] = useState(false);
   const [simulatingId, setSimulatingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const viewportHeight = useMobileViewportHeight(1280);
+  const compact = viewportHeight !== undefined;
   const selected = stepById(draft.definition, selectedId);
 
   function add(type: BlockType) {
@@ -57,6 +63,8 @@ export function AutomationFlowBuilder({
     }));
     setSelectedId(step.id);
     setPanel("step");
+    setLibraryOpen(false);
+    setMobilePanelOpen(true);
   }
 
   function replaceStep(step: FlowStep) {
@@ -73,6 +81,7 @@ export function AutomationFlowBuilder({
     setDraft((current) => ({ ...current, definition: { ...current.definition, steps: [...current.definition.steps, copy] } }));
     setSelectedId(copy.id);
     setPanel("step");
+    setMobilePanelOpen(true);
   }
 
   function remove(id: string) {
@@ -93,6 +102,7 @@ export function AutomationFlowBuilder({
     if (selectedId === id) {
       setSelectedId(null);
       setPanel(null);
+      setMobilePanelOpen(false);
     }
   }
 
@@ -159,7 +169,7 @@ export function AutomationFlowBuilder({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background">
       <FlowToolbar
         name={draft.name}
         status={draft.status}
@@ -173,26 +183,27 @@ export function AutomationFlowBuilder({
           setSimulatingId(draft.definition.entryStepId);
           setTesting(true);
         }}
-        onSettings={() => setPanel("settings")}
+        onSettings={() => { setPanel("settings"); setMobilePanelOpen(true); }}
       />
-      <div className="flex min-h-0 flex-1">
-        <FlowBlockLibrary onAdd={add} />
+      <button type="button" onClick={() => setLibraryOpen(true)} className="m-2 min-h-11 shrink-0 rounded-xl border border-whatsapp bg-card px-3 text-sm font-medium text-whatsapp xl:hidden">+ Adicionar etapa</button>
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="hidden xl:flex"><FlowBlockLibrary onAdd={add} /></div>
         <FlowCanvas
           definition={draft.definition}
           selectedId={selectedId}
           simulatingId={testing ? simulatingId : null}
-          onSelect={(id) => { setSelectedId(id); setPanel("step"); }}
+          onSelect={(id) => { setSelectedId(id); setPanel("step"); setMobilePanelOpen(true); }}
           onAdd={add}
           onDuplicate={duplicate}
           onDelete={remove}
           onEntry={(id) => setDraft({ ...draft, definition: { ...draft.definition, entryStepId: id || null } })}
         />
-        {panel === "step" && selected && (
+        {!compact && <div className="hidden min-h-0 xl:flex">{panel === "step" && selected && (
           <FlowStepEditor
             step={selected}
             definition={draft.definition}
             onChange={replaceStep}
-            onClose={() => setPanel(null)}
+            onClose={() => { setPanel(null); setMobilePanelOpen(false); }}
             onDuplicate={() => duplicate(selected.id)}
             onDelete={() => remove(selected.id)}
           />
@@ -209,10 +220,29 @@ export function AutomationFlowBuilder({
             onChannels={(channel_ids) => setDraft({ ...draft, channel_ids })}
             onDispatch={(dispatch_channel_id) => setDraft({ ...draft, dispatch_channel_id, meta_template_name: null, meta_template_language: null })}
             onTemplate={(meta_template_name, meta_template_language) => setDraft({ ...draft, meta_template_name, meta_template_language })}
-            onClose={() => setPanel(null)}
+            onClose={() => { setPanel(null); setMobilePanelOpen(false); }}
           />
-        )}
+        )}</div>}
       </div>
+      <Sheet open={compact && libraryOpen} onOpenChange={setLibraryOpen}>
+        <SheetContent data-app-shell className="flex w-full flex-col gap-0 p-0 sm:max-w-sm" style={{ height: viewportHeight }} aria-describedby={undefined}>
+          <SheetTitle className="shrink-0 border-b px-4 py-4 pr-12 text-base">Adicionar etapa</SheetTitle>
+          <FlowBlockLibrary onAdd={add} />
+        </SheetContent>
+      </Sheet>
+      <Sheet open={compact && mobilePanelOpen && !!panel} onOpenChange={open => { setMobilePanelOpen(open); if (!open) setPanel(null); }}>
+        <SheetContent data-app-shell className="flex w-full flex-col gap-0 p-0 sm:max-w-sm" style={{ height: viewportHeight }} aria-describedby={undefined}>
+          <SheetTitle className="shrink-0 border-b px-4 py-4 pr-12 text-base">{panel === "settings" ? "Configurações do fluxo" : "Editar etapa"}</SheetTitle>
+          {panel === "step" && selected && <FlowStepEditor step={selected} definition={draft.definition} onChange={replaceStep}
+            onClose={() => { setPanel(null); setMobilePanelOpen(false); }} onDuplicate={() => duplicate(selected.id)} onDelete={() => remove(selected.id)} />}
+          {panel === "settings" && <FlowSettings kind={draft.kind} channelIds={draft.channel_ids} dispatchChannelId={draft.dispatch_channel_id}
+            templateName={draft.meta_template_name} templateLanguage={draft.meta_template_language} channels={channels}
+            onKind={kind => setDraft({ ...draft, kind })} onChannels={channel_ids => setDraft({ ...draft, channel_ids })}
+            onDispatch={dispatch_channel_id => setDraft({ ...draft, dispatch_channel_id, meta_template_name: null, meta_template_language: null })}
+            onTemplate={(meta_template_name, meta_template_language) => setDraft({ ...draft, meta_template_name, meta_template_language })}
+            onClose={() => { setPanel(null); setMobilePanelOpen(false); }} />}
+        </SheetContent>
+      </Sheet>
       {testing && (
         <FlowSimulator
           definition={draft.definition}

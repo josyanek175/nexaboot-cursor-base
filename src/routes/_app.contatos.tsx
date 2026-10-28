@@ -278,8 +278,8 @@ function ContatosPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-4">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <Contact2 className="h-5 w-5 text-whatsapp" />
           <div>
@@ -289,32 +289,33 @@ function ContatosPage() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+        <div className="flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="relative w-full sm:w-auto">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome, telefone, e-mail…"
-              className="w-72 rounded-md border border-input bg-background py-2 pl-8 pr-3 text-sm outline-none ring-ring focus:ring-2"
+              aria-label="Buscar contatos"
+              className="min-h-11 w-full rounded-md border border-input bg-background py-2 pl-8 pr-3 text-sm outline-none ring-ring focus:ring-2 sm:w-72"
             />
           </div>
           <button
             onClick={() => setImportOpen(true)}
-            className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+            className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-xs font-medium hover:bg-accent sm:flex-none sm:text-sm"
           >
-            <Upload className="h-4 w-4" /> Importar CSV/Excel
+            <Upload className="h-4 w-4" /> Importar<span className="hidden sm:inline"> CSV/Excel</span>
           </button>
           <button
             onClick={openNew}
-            className="inline-flex items-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-sm font-medium text-whatsapp-foreground hover:opacity-90"
+            className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md bg-whatsapp px-3 py-2 text-xs font-medium text-whatsapp-foreground hover:opacity-90 sm:flex-none sm:text-sm"
           >
             <Plus className="h-4 w-4" /> Novo contato
           </button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-6">
+      <main className="min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-6">
         {loading ? (
           <div className="grid place-items-center py-20 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -332,7 +333,29 @@ function ContatosPage() {
             </button>
           </div>
         ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <>
+        <ul aria-label="Lista de contatos" className="space-y-3 md:hidden">
+          {visible.map(c => (
+            <li key={c.id} className="min-w-0 space-y-3 rounded-lg border border-border bg-card p-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold text-white" style={{ backgroundColor: c.avatarColor }}>{(c.name || c.phone || "C").slice(0, 2).toUpperCase()}</div>
+                <div className="min-w-0 flex-1"><h2 className="mb-1 text-sm font-semibold [overflow-wrap:anywhere]">{c.name || c.phone}</h2><StatusBadge status={c.status} /></div>
+              </div>
+              <dl className="space-y-2 text-sm [overflow-wrap:anywhere]">
+                <div><dt className="text-xs text-muted-foreground">Telefone</dt><dd className="font-mono text-xs">{formatPhoneDisplayLoose(c.phone) || c.phone}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">E-mail</dt><dd>{c.email || "—"}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Referência</dt><dd>{c.reference || "—"}</dd></div>
+              </dl>
+              {c.tags.length > 0 && <ul aria-label="Tags" className="flex flex-wrap gap-1">{c.tags.map(tag => <li key={tag} className="max-w-full rounded-full bg-muted px-2 py-1 text-xs [overflow-wrap:anywhere]">{tag}</li>)}</ul>}
+              <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                <button type="button" onClick={() => setEditing({ ...c })} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm"><Pencil className="h-4 w-4" />Editar</button>
+                <button type="button" onClick={() => inactivateContact(c)} disabled={c.status === "inativo"} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground disabled:opacity-40"><Ban className="h-4 w-4" />{c.status === "inativo" ? "Inativo" : "Inativar"}</button>
+              </div>
+            </li>
+          ))}
+          {visible.length === 0 && <li className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">Nenhum contato encontrado.</li>}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-lg border border-border bg-card md:block">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
               <tr>
@@ -406,6 +429,7 @@ function ContatosPage() {
             </tbody>
           </table>
         </div>
+        </>
         )}
       </main>
 
@@ -459,15 +483,15 @@ function EditModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label={value.id ? "Editar contato" : "Novo contato"} className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-xl sm:p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <h3 className="text-base font-semibold">{value.id ? "Editar contato" : "Novo contato"}</h3>
           <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-accent">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <Field label="Nome" className="col-span-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Nome" className="sm:col-span-2">
             <input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} className="input" />
           </Field>
           <Field label="Telefone">
@@ -490,7 +514,7 @@ function EditModal({
               <option value="lead">Lead</option>
             </select>
           </Field>
-          <Field label="Tags (separadas por vírgula)" className="col-span-2">
+          <Field label="Tags (separadas por vírgula)" className="sm:col-span-2">
             <input
               value={value.tags.join(", ")}
               onChange={(e) => onChange({ ...value, tags: parseTags(e.target.value) })}
@@ -516,7 +540,7 @@ function EditModal({
 
 function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
-    <label className={`block ${className ?? ""}`}>
+    <label className={`block min-w-0 ${className ?? ""}`}>
       <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
@@ -631,8 +655,8 @@ function ImportModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onClose}>
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg border border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between border-b border-border p-5">
+      <div role="dialog" aria-modal="true" aria-label="Importar contatos" className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col rounded-lg border border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-start justify-between border-b border-border p-4 sm:p-5">
           <div>
             <h3 className="text-base font-semibold">Importar contatos</h3>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -645,7 +669,7 @@ function ImportModal({
           </button>
         </div>
 
-        <div className="space-y-4 overflow-auto p-5">
+        <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-auto p-4 sm:p-5">
           {/* Seletor de arquivo */}
           <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
             <FileSpreadsheet className="mx-auto h-8 w-8 text-muted-foreground" />

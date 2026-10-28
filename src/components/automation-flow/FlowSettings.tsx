@@ -46,7 +46,7 @@ export function FlowSettings({
   }, [kind, selected?.channelType, dispatchChannelId]);
 
   return (
-    <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-4">
+    <aside className="min-h-0 min-w-0 w-full flex-1 overflow-y-auto border-l border-border bg-card p-4 [overflow-wrap:anywhere] xl:w-80 xl:shrink-0 xl:flex-none">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Configurações do fluxo</h2>
         <button className="text-xs text-muted-foreground" onClick={onClose}>Fechar</button>
