@@ -1,6 +1,6 @@
 # Menu organizado — dev
 
-O menu lateral agora reúne os mesmos destinos em cinco áreas: Visão geral, Atendimento, Agenda, Marketing e automação e Equipe. Somente uma área fica expandida por vez. Ao navegar, a área da página atual abre automaticamente; páginas filhas, como modelos de campanha, mantêm o destaque correto.
+Atendimento, Campanhas e Chat interno ficam como acessos diretos e sempre visíveis no topo, conforme o perfil. Os demais destinos ficam nos grupos Visão geral, Clientes, Agenda, Automação e Equipe. Agenda abre o acesso Agendamentos; seu nome continua Agenda no menu principal. Somente uma área fica expandida por vez. Ao navegar, a área da página atual abre automaticamente; páginas filhas, como modelos de campanha, mantêm o destaque correto.
 
 Configurações fica no rodapé, com usuários, equipes e números, canais, horários, preferências, integrações N8N e logs. Empresas aparece separadamente apenas para perfis da plataforma. Os filtros de permissão existentes continuam sendo aplicados antes de renderizar os destinos. Os serviços e regras de autorização no servidor não foram alterados.
 

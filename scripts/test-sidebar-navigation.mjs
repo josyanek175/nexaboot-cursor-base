@@ -6,7 +6,7 @@ const { navigationAreas, navigationAreaForPath } = tsLoader()("src/lib/navigatio
 const paths = navigationAreas.flatMap((a) => a.paths);
 assert.equal(paths.length, new Set(paths).size);
 assert.equal(paths.length, 19);
-assert.equal(navigationAreaForPath("/campanhas/modelos"), "marketing");
+assert.equal(navigationAreaForPath("/campanhas/modelos"), "campaigns");
 assert.equal(navigationAreaForPath("/campanhas-falsa"), undefined);
 assert.equal(navigationAreaForPath("/agenda"), "agenda");
 let role = "ADMIN_EMPRESA",
@@ -50,7 +50,7 @@ const html = () => renderToStaticMarkup(createElement(AppShell));
 let page = html();
 assert(page.includes('href="/agenda"'));
 assert(!page.includes("Agenda da clínica"));
-assert(page.includes("Marketing e automação"));
+assert(page.includes("Automação"));
 assert(page.includes('aria-label="Administração e configurações"'));
 assert(page.includes('aria-current="page"'));
 assert(!page.includes('href="/empresas"'));
@@ -95,7 +95,13 @@ role = "ADMIN_EMPRESA";
 companyValid = true;
 pathname = "/campanhas/modelos";
 page = html();
-assert.match(page, /aria-expanded="true"[^>]*>[\s\S]*?Marketing e automação/);
+const direct = page.split('aria-label="Áreas de trabalho"')[1].split("mt-3 space-y-1")[0];
+for (const path of ["/atendimento", "/campanhas", "/comunicacao-interna"])
+  assert(direct.includes('href="' + path + '"'));
+assert(!direct.includes("aria-expanded="));
+assert(direct.indexOf('href="/atendimento"') < direct.indexOf('href="/campanhas"'));
+assert(direct.indexOf('href="/campanhas"') < direct.indexOf('href="/comunicacao-interna"'));
+assert.equal((page.match(/href="\/campanhas"/g) || []).length, 1);
 assert(
   page.includes('href="/campanhas" aria-current="page"') ||
     /href="\/campanhas"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/campanhas"/.test(

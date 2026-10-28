@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import {
   LayoutDashboard,
   MessagesSquare,
+  MessageCircleMore,
   CalendarDays,
   Megaphone,
   UsersRound,
@@ -22,6 +23,9 @@ type Props = {
   onNavigate: () => void;
 };
 const icons = {
+  inbox: MessagesSquare,
+  campaigns: Megaphone,
+  chat: MessageCircleMore,
   overview: LayoutDashboard,
   attendance: MessagesSquare,
   agenda: CalendarDays,
@@ -30,6 +34,7 @@ const icons = {
   settings: Settings,
   platform: Building2,
 };
+const shortcuts = new Set(["inbox", "campaigns", "chat"]);
 export function SidebarNavigation({ items, pathname, unread, onNavigate }: Props) {
   const [open, setOpen] = useState<string | null>(() => navigationAreaForPath(pathname) ?? null);
   const id = useId();
@@ -56,7 +61,7 @@ export function SidebarNavigation({ items, pathname, unread, onNavigate }: Props
     );
     const expanded = open === area.id;
     const classes = `flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${selected ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground hover:bg-sidebar-accent/60"}`;
-    if (area.id === "agenda" || area.id === "platform")
+    if (shortcuts.has(area.id) || area.id === "platform")
       return (
         <Link
           key={area.id}
@@ -67,6 +72,7 @@ export function SidebarNavigation({ items, pathname, unread, onNavigate }: Props
         >
           <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
           <span className="flex-1">{area.id === "platform" ? "Empresas" : area.label}</span>
+          {badge(count)}
         </Link>
       );
     return (
@@ -103,7 +109,11 @@ export function SidebarNavigation({ items, pathname, unread, onNavigate }: Props
                   >
                     <ChildIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
                     <span className="min-w-0 flex-1 break-words">
-                      {item.to === "/configuracoes" ? "Preferências da empresa" : item.label}
+                      {item.to === "/configuracoes"
+                        ? "Preferências da empresa"
+                        : item.to === "/agenda"
+                          ? "Agendamentos"
+                          : item.label}
                     </span>
                     {item.badgeKey && badge(unread[item.badgeKey])}
                   </Link>
@@ -118,7 +128,14 @@ export function SidebarNavigation({ items, pathname, unread, onNavigate }: Props
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <nav aria-label="Áreas de trabalho" className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-        {navigationAreas.filter((a) => a.id !== "settings" && a.id !== "platform").map(renderArea)}
+        <div className="space-y-1">
+          {navigationAreas.filter((a) => shortcuts.has(a.id)).map(renderArea)}
+        </div>
+        <div className="mt-3 space-y-1 border-t border-sidebar-border pt-3">
+          {navigationAreas
+            .filter((a) => !shortcuts.has(a.id) && a.id !== "settings" && a.id !== "platform")
+            .map(renderArea)}
+        </div>
       </nav>
       <nav
         aria-label="Administração e configurações"

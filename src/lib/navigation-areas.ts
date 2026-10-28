@@ -1,13 +1,16 @@
 export const navigationAreas = [
+  { id: "inbox", label: "Atendimento", paths: ["/atendimento"] },
+  { id: "campaigns", label: "Campanhas", paths: ["/campanhas"] },
+  { id: "chat", label: "Chat interno", paths: ["/comunicacao-interna"] },
   { id: "overview", label: "Visão geral", paths: ["/dashboard", "/gerencial"] },
-  { id: "attendance", label: "Atendimento", paths: ["/atendimento", "/espera", "/contatos"] },
+  { id: "attendance", label: "Clientes", paths: ["/espera", "/contatos"] },
   { id: "agenda", label: "Agenda", paths: ["/agenda"] },
   {
     id: "marketing",
-    label: "Marketing e automação",
-    paths: ["/campanhas", "/fluxos", "/lembretes"],
+    label: "Automação",
+    paths: ["/fluxos", "/lembretes"],
   },
-  { id: "team", label: "Equipe", paths: ["/comunicacao-interna", "/grupos-internos"] },
+  { id: "team", label: "Equipe", paths: ["/grupos-internos"] },
   {
     id: "settings",
     label: "Configurações",

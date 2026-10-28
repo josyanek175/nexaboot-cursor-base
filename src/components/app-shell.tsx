@@ -102,7 +102,7 @@ const nav: NavItem[] = [
   },
   {
     to: "/comunicacao-interna",
-    label: "Comunicação Interna",
+    label: "Chat interno",
     icon: MessageCircleMore,
     badgeKey: "internal" as UnreadKey,
   },
