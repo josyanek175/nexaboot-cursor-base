@@ -28,19 +28,28 @@ export function FlowCanvas({
   const placed = new Set<string>();
 
   return (
-    <div className="min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,_rgba(37,211,102,0.08),_transparent_40%)] p-6">
-      <div className="mx-auto flex w-fit flex-col items-center gap-2">
+    <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-muted/20 p-3 xl:p-6">
+      <div className="mx-auto flex w-full flex-col items-center gap-2 xl:w-fit">
         <div className="rounded-full bg-whatsapp px-4 py-1 text-xs font-semibold text-whatsapp-foreground">INÍCIO</div>
         <select
+          aria-label="Primeira etapa"
           value={definition.entryStepId ?? ""}
           onChange={(event) => onEntry(event.target.value)}
-          className="rounded-xl border border-input bg-card px-3 py-1.5 text-xs"
+          className="min-h-11 w-full max-w-full rounded-xl border border-input bg-card px-3 py-1.5 text-xs xl:w-auto"
         >
           <option value="">Escolha a primeira etapa</option>
           {definition.steps.map((step, index) => (
             <option key={step.id} value={step.id}>{index + 1}. {step.name || step.type}</option>
           ))}
         </select>
+        <div className="w-full space-y-3 xl:hidden">
+          <p className="py-2 text-xs text-muted-foreground">Toque em uma etapa para editar. Os destinos de cada opção aparecem no cartão.</p>
+          {definition.steps.map(step => <FlowStepCard key={step.id} step={step} definition={definition}
+            active={step.id === selectedId || step.id === simulatingId} onSelect={() => onSelect(step.id)}
+            onDuplicate={() => onDuplicate(step.id)} onDelete={() => onDelete(step.id)} />)}
+          {definition.steps.length === 0 && <p className="text-sm text-muted-foreground">Adicione a primeira etapa para começar.</p>}
+        </div>
+        <div className="hidden flex-col items-center gap-2 xl:flex">
         <div className="h-6 w-px bg-whatsapp/60" />
         {entry ? (
           <Branch step={entry} definition={definition} seen={placed} selectedId={selectedId} simulatingId={simulatingId} onSelect={onSelect} onDuplicate={onDuplicate} onDelete={onDelete} />
@@ -60,6 +69,7 @@ export function FlowCanvas({
           </div>
         )}
         <LooseSteps definition={definition} placed={placed} selectedId={selectedId} simulatingId={simulatingId} onSelect={onSelect} onDuplicate={onDuplicate} onDelete={onDelete} />
+        </div>
       </div>
     </div>
   );

@@ -62,8 +62,8 @@ function FluxosPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-6">
-      <div className="flex items-end justify-between gap-3">
+    <div className="mx-auto flex min-w-0 w-full max-w-5xl flex-col gap-5 p-3 sm:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Fluxos</h1>
           <p className="text-sm text-muted-foreground">Desenhe a conversa. Os ramais ficam nas configurações do fluxo.</p>
@@ -93,7 +93,7 @@ function FluxosPage() {
       )}
       <ul className="grid gap-3 md:grid-cols-2">
         {flows.map((flow) => (
-          <li key={flow.id} className="rounded-2xl border border-border bg-card p-4">
+          <li key={flow.id} className="min-w-0 rounded-2xl border border-border bg-card p-4 [overflow-wrap:anywhere]">
             <div className="font-semibold">{flow.name}</div>
             <div className="mt-1 text-xs text-muted-foreground">
               {flow.kind === "attendance" ? "Atendimento" : "Vendas"} · {statusLabel(flow.status)} · {flow.definition?.steps?.length ?? 0} etapas

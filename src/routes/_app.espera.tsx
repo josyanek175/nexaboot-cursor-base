@@ -162,9 +162,9 @@ function TempoEsperaContent() {
   ];
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center gap-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           <Clock className="h-5 w-5 text-whatsapp" />
           <div>
             <h1 className="text-lg font-semibold">Tempo de espera</h1>
@@ -181,7 +181,7 @@ function TempoEsperaContent() {
         </Link>
       </header>
 
-      <div className="flex-1 space-y-6 overflow-auto p-6">
+      <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-auto p-3 sm:p-6">
         <section className="space-y-3 rounded-lg border border-border bg-card p-4">
           <p className="text-sm font-medium">Período (atendimentos assumidos)</p>
           <div className="flex flex-wrap gap-2">
@@ -204,8 +204,8 @@ function TempoEsperaContent() {
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="text-xs">
+          <div className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
+            <label className="min-w-0 text-xs">
               <span className="mb-1 block text-muted-foreground">De</span>
               <input
                 type="date"
@@ -214,10 +214,10 @@ function TempoEsperaContent() {
                   setPreset("custom");
                   setFrom(e.target.value);
                 }}
-                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                className="min-h-11 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm sm:w-auto"
               />
             </label>
-            <label className="text-xs">
+            <label className="min-w-0 text-xs">
               <span className="mb-1 block text-muted-foreground">Até</span>
               <input
                 type="date"
@@ -226,13 +226,13 @@ function TempoEsperaContent() {
                   setPreset("custom");
                   setTo(e.target.value);
                 }}
-                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                className="min-h-11 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm sm:w-auto"
               />
             </label>
             <button
               type="button"
               onClick={() => reload({ preset: "custom", from, to })}
-              className="rounded-md bg-muted px-3 py-2 text-sm font-medium hover:bg-muted/80"
+              className="col-span-2 min-h-11 rounded-md bg-muted px-3 py-2 text-sm font-medium hover:bg-muted/80"
             >
               Aplicar
             </button>
@@ -269,7 +269,30 @@ function TempoEsperaContent() {
 
             <section>
               <h2 className="mb-2 text-sm font-medium">Fila atual</h2>
-              <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <ul aria-label="Fila atual" className="space-y-3 md:hidden">
+                {queue.length === 0 ? (
+                  <li className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">Ninguém esperando atendente agora.</li>
+                ) : queue.map(row => (
+                  <li key={row.conversationId} className="min-w-0 space-y-3 rounded-lg border border-border bg-card p-4">
+                    <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">{row.contactName ?? "Contato sem nome"}</h3>
+                    <dl className="space-y-2 text-sm">
+                      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <dt className="text-xs text-muted-foreground">Telefone</dt>
+                        <dd className="min-w-0 font-mono text-xs [overflow-wrap:anywhere]">{row.phone ?? "—"}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <dt className="text-xs text-muted-foreground">Esperando há</dt>
+                        <dd className="font-semibold tabular-nums text-whatsapp">{formatDurationSeconds(row.waitingSeconds)}</dd>
+                      </div>
+                      <div className="space-y-1 border-t border-border pt-2">
+                        <dt className="text-xs text-muted-foreground">Última mensagem do cliente</dt>
+                        <dd className="text-xs [overflow-wrap:anywhere]">{formatDt(row.lastInboundAt)}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto rounded-lg border border-border bg-card md:block">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                     <tr>
@@ -310,7 +333,20 @@ function TempoEsperaContent() {
 
             <section>
               <h2 className="mb-2 text-sm font-medium">Por atendente (período)</h2>
-              <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <ul aria-label="Espera por atendente" className="space-y-3 md:hidden">
+                {agents.length === 0 ? (
+                  <li className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">Nenhuma conversa assumida no período.</li>
+                ) : agents.map(row => (
+                  <li key={row.userId} className="min-w-0 rounded-lg border border-border bg-card p-4">
+                    <h3 className="mb-3 text-sm font-semibold [overflow-wrap:anywhere]">{row.userName ?? "—"}</h3>
+                    <dl className="grid grid-cols-2 gap-3 text-sm">
+                      <div><dt className="text-xs text-muted-foreground">Assumidas</dt><dd className="mt-1 font-medium tabular-nums">{row.assumedCount}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Espera média</dt><dd className="mt-1 font-medium tabular-nums [overflow-wrap:anywhere]">{formatDurationSeconds(row.avgWaitSeconds)}</dd></div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto rounded-lg border border-border bg-card md:block">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                     <tr>
@@ -363,10 +399,10 @@ function StatCard({
   emphasize?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3">
+    <div className="min-w-0 rounded-lg border border-border bg-card px-3 py-3 sm:px-4">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
-        className={`mt-1 text-xl font-semibold tabular-nums ${
+        className={`mt-1 break-words text-lg font-semibold tabular-nums sm:text-xl ${
           emphasize ? "text-whatsapp" : ""
         }`}
       >

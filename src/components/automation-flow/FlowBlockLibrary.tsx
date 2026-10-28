@@ -2,7 +2,7 @@ import { BLOCKS, type BlockType } from "@/components/automation-flow/flow-model"
 
 export function FlowBlockLibrary({ onAdd }: { onAdd: (type: BlockType) => void }) {
   return (
-    <aside className="w-56 shrink-0 overflow-y-auto border-r border-border bg-card p-3">
+    <aside className="min-h-0 w-full flex-1 overflow-y-auto border-r border-border bg-card p-3 xl:w-56 xl:shrink-0 xl:flex-none">
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Etapas</p>
       <div className="flex flex-col gap-2">
         {BLOCKS.map((block) => (
