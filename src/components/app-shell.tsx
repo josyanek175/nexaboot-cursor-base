@@ -1,4 +1,4 @@
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   MessagesSquare,
@@ -39,6 +39,7 @@ import { SessionProvider, useSession } from "@/lib/session";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { AttendanceAlertBanner } from "@/components/attendance-alert-banner";
+import { SidebarNavigation } from "@/components/sidebar-navigation";
 import { useMobileViewportHeight } from "@/hooks/use-mobile-viewport-height";
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -111,7 +112,7 @@ const nav: NavItem[] = [
   { to: "/gerencial", label: "Gerencial", icon: ChartColumn, gerencialOnly: true },
   { to: "/fluxos", label: "Fluxos", icon: Waypoints, flows: true },
   { to: "/lembretes", label: "Lembretes", icon: Bell, reminders: true },
-  { to: "/agenda", label: "Agenda da clínica", icon: CalendarDays, reminders: true },
+  { to: "/agenda", label: "Agenda", icon: CalendarDays, reminders: true },
   { to: "/empresas", label: "Empresas", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/equipes-numeros", label: "Equipes e números", icon: UsersRound },
@@ -299,8 +300,11 @@ function Shell() {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-2">
-          {nav
+        <SidebarNavigation
+          pathname={pathname}
+          unread={unread}
+          onNavigate={() => setSidebarOpen(false)}
+          items={nav
             .filter((item) => !item.adminOnly || canManageInternalGroups(user.role))
             .filter((item) => item.to !== "/equipes-numeros" || ["SUPER_ADMIN","TI","ADMIN_GERAL","ADMIN_EMPRESA","GERENTE"].includes(user.role))
             .filter((item) => {
@@ -333,31 +337,9 @@ function Shell() {
               if (!actor) return false;
               return companyValid && canViewCampaignCosts(actor);
             })
-            .map((item) => {
-              const { to, label, icon: Icon, badgeKey } = item;
-              const count = badgeKey ? unread[badgeKey] : 0;
-              const active = pathname === to || pathname.startsWith(to + "/");
-              return (
-                <Link
-                  key={to}
-                  to={to}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                    active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/60"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1 truncate">{label}</span>
-                  {count > 0 && (
-                    <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground">
-                      {count > 99 ? "99+" : count}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-        </nav>
+            .filter(item => item.to !== "/empresas" || platformAccess)
+          }
+        />
 
         <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center gap-3">

@@ -38,7 +38,7 @@ import {
 
 export const Route = createFileRoute("/_app/agenda")({
   component: AgendaPage,
-  head: () => ({ meta: [{ title: "Agenda da clínica — NexaBoot" }] }),
+  head: () => ({ meta: [{ title: "Agenda — NexaBoot" }] }),
 });
 const field = "h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 text-sm";
 const button =
@@ -392,7 +392,7 @@ function AgendaPage() {
           <div>
             <div className="flex items-center gap-2">
               <CalendarDays className="text-primary" size={24} />
-              <h1 className="text-xl font-semibold">Agenda da clínica</h1>
+              <h1 className="text-xl font-semibold">Agenda</h1>
               <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
                 Piloto
               </span>
