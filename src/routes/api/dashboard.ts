@@ -1,11 +1,9 @@
 // GET /api/dashboard — indicadores operacionais de atendimento (por company_id).
-// Managers veem a empresa inteira; atendentes veem principalmente os seus + sem responsável.
+// Visão operacional sempre limitada aos canais liberados para o usuário.
 import { createFileRoute } from "@tanstack/react-router";
-import { sql } from "@/lib/pg.server";
-import {
-  requireAttendanceActor,
-  canTransferAny,
-} from "@/lib/attendance.server";
+import { getSql } from "@/lib/pg.server";
+import { allowedChannelIds } from "@/lib/channel-permissions.server";
+import { requireAttendanceActor, canTransferAny } from "@/lib/attendance.server";
 
 export const Route = createFileRoute("/api/dashboard")({
   server: {
@@ -17,7 +15,19 @@ export const Route = createFileRoute("/api/dashboard")({
         const companyId = actor.companyId;
         const userId = actor.userId;
         const isManager = canTransferAny(actor.role);
-        const s = sql();
+        let allowed: string[] | null;
+        try {
+          allowed = await allowedChannelIds(companyId, userId);
+        } catch {
+          return Response.json(
+            {
+              error: "dashboard_unavailable",
+              message: "Não foi possível validar seu acesso ao dashboard. Tente novamente.",
+            },
+            { status: 503, headers: { "Cache-Control": "private, no-store" } },
+          );
+        }
+        const s = getSql();
 
         const toIso = (v: unknown): string | null => {
           if (v == null) return null;
@@ -49,8 +59,8 @@ export const Route = createFileRoute("/api/dashboard")({
             lm.direction AS last_dir,
             lm.from_me AS last_from_me
           FROM public.conversations c
-          JOIN public.contacts ct ON ct.id = c.contact_id
-          JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id
+          JOIN public.contacts ct ON ct.id = c.contact_id AND ct.company_id = c.company_id
+          JOIN public.whatsapp_channels ch ON ch.id = c.whatsapp_channel_id AND ch.company_id = c.company_id
           LEFT JOIN public.conversation_assignments a
             ON a.conversation_id = c.id
             AND a.active = true
@@ -66,6 +76,7 @@ export const Route = createFileRoute("/api/dashboard")({
             LIMIT 1
           ) lm ON true
           WHERE c.company_id = ${companyId}::uuid
+            AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
             AND c.status IS DISTINCT FROM 'merged'
             AND c.status IS DISTINCT FROM 'archived'
             AND ct.status IS DISTINCT FROM 'merged'
@@ -114,8 +125,7 @@ export const Route = createFileRoute("/api/dashboard")({
           last_from_me: typeof r.last_from_me === "boolean" ? r.last_from_me : null,
         }));
 
-        const isActive = (st: string) =>
-          st !== "finished" && st !== "closed" && st !== "resolved";
+        const isActive = (st: string) => st !== "finished" && st !== "closed" && st !== "resolved";
 
         const isMine = (row: (typeof base)[0]) => row.assigned_user_id === userId;
         const isUnassigned = (row: (typeof base)[0]) => !row.assigned_user_id;
@@ -181,14 +191,17 @@ export const Route = createFileRoute("/api/dashboard")({
           SELECT id, name, evolution_instance_name, status, phone_number, active
           FROM public.whatsapp_channels
           WHERE company_id = ${companyId}::uuid
+            AND (${allowed === null} OR id = ANY(${allowed ?? []}::uuid[]))
             AND deleted_at IS NULL
           ORDER BY name ASC NULLS LAST
         `;
 
         const channels = {
           total: channelRows.length,
-          connected: channelRows.filter((c) => String(c.status).toLowerCase() === "connected").length,
-          disconnected: channelRows.filter((c) => String(c.status).toLowerCase() !== "connected").length,
+          connected: channelRows.filter((c) => String(c.status).toLowerCase() === "connected")
+            .length,
+          disconnected: channelRows.filter((c) => String(c.status).toLowerCase() !== "connected")
+            .length,
           items: channelRows.map((c) => ({
             id: c.id,
             name: c.name || c.evolution_instance_name || "Canal",
@@ -199,16 +212,24 @@ export const Route = createFileRoute("/api/dashboard")({
         };
 
         // Por atendente (managers: todos; atendente: só ele).
-        const attendantUsers = await s<
-          { id: string; name: string | null; email: string | null }[]
-        >`
-          SELECT id, name, email FROM public.users
-          WHERE company_id = ${companyId}::uuid
-            AND COALESCE(active, true) = true
-          ORDER BY name ASC NULLS LAST
+        const attendantUsers = await s<{ id: string; name: string | null; email: string | null }[]>`
+          SELECT u.id, u.name, u.email FROM public.users u
+          WHERE u.company_id = ${companyId}::uuid
+            AND COALESCE(u.active, true) = true
+            AND (${allowed === null} OR u.id = ${userId}::uuid OR EXISTS (
+              SELECT 1 FROM public.conversation_assignments visible_assignment
+              JOIN public.conversations visible_conversation ON visible_conversation.id = visible_assignment.conversation_id
+              WHERE visible_conversation.company_id = ${companyId}::uuid
+                AND visible_conversation.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[])
+                AND visible_assignment.user_id = u.id AND visible_assignment.active = true
+                AND visible_assignment.unassigned_at IS NULL
+            ))
+          ORDER BY u.name ASC NULLS LAST
         `;
 
-        const byAttendant = (isManager ? attendantUsers : attendantUsers.filter((u) => u.id === userId))
+        const byAttendant = (
+          isManager ? attendantUsers : attendantUsers.filter((u) => u.id === userId)
+        )
           .map((u) => {
             const mineActive = allActive.filter((r) => r.assigned_user_id === u.id);
             const waitingReply = mineActive.filter(waitingAgent);
@@ -267,13 +288,17 @@ export const Route = createFileRoute("/api/dashboard")({
 
         const criticalUnassigned = allActive
           .filter(isUnassigned)
-          .sort((a, b) => String(b.last_message_at ?? "").localeCompare(String(a.last_message_at ?? "")))
+          .sort((a, b) =>
+            String(b.last_message_at ?? "").localeCompare(String(a.last_message_at ?? "")),
+          )
           .slice(0, 10)
           .map(toCriticalItem);
 
         const criticalNoReply = activeForCards
           .filter((r) => waitingAgent(r) && r.last_message_at && r.last_message_at < fifteenMinAgo)
-          .sort((a, b) => String(a.last_message_at ?? "").localeCompare(String(b.last_message_at ?? "")))
+          .sort((a, b) =>
+            String(a.last_message_at ?? "").localeCompare(String(b.last_message_at ?? "")),
+          )
           .slice(0, 10)
           .map(toCriticalItem);
 
@@ -297,9 +322,11 @@ export const Route = createFileRoute("/api/dashboard")({
             n.id, n.conversation_id, n.title, n.body, n.created_at,
             u.name AS from_user_name
           FROM public.attendance_notifications n
+          JOIN public.conversations c ON c.id = n.conversation_id AND c.company_id = n.company_id
           LEFT JOIN public.users u ON u.id = n.from_user_id
           WHERE n.user_id = ${userId}::uuid
             AND n.company_id = ${companyId}::uuid
+            AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
             AND n.read_at IS NULL
             AND n.type = 'transfer'
           ORDER BY n.created_at DESC
@@ -344,22 +371,26 @@ export const Route = createFileRoute("/api/dashboard")({
             status: r.status,
           }));
 
-        return Response.json({
-          scope: isManager ? "company" : "attendant",
-          role: actor.role,
-          cards,
-          channels,
-          by_attendant: byAttendant,
-          by_channel: byChannel,
-          critical: {
-            unassigned: criticalUnassigned,
-            no_reply_15m: criticalNoReply,
-            received_today: receivedToday,
-            transferred_to_me: transferredToMe,
+        return Response.json(
+          {
+            scope: isManager ? "company" : "attendant",
+            channel_scope: allowed === null ? "all" : "restricted",
+            role: actor.role,
+            cards,
+            channels,
+            by_attendant: byAttendant,
+            by_channel: byChannel,
+            critical: {
+              unassigned: criticalUnassigned,
+              no_reply_15m: criticalNoReply,
+              received_today: receivedToday,
+              transferred_to_me: transferredToMe,
+            },
+            recent,
+            generated_at: new Date().toISOString(),
           },
-          recent,
-          generated_at: new Date().toISOString(),
-        });
+          { headers: { "Cache-Control": "private, no-store" } },
+        );
       },
     },
   },

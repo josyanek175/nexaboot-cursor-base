@@ -1,5 +1,6 @@
 // Indicadores consolidados de campanhas para o dashboard (últimos 30 dias).
-import { sql } from "@/lib/pg.server";
+import { getSql } from "@/lib/pg.server";
+import { allowedChannelIds } from "@/lib/channel-permissions.server";
 
 export const DASHBOARD_CAMPAIGNS_DAYS = 30;
 
@@ -47,22 +48,28 @@ function toInt(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function getDashboardCampaigns(companyId: string): Promise<DashboardCampaignsPayload> {
-  const db = sql();
+export async function getDashboardCampaigns(
+  companyId: string,
+  userId?: string | null,
+): Promise<DashboardCampaignsPayload> {
+  const allowed = await allowedChannelIds(companyId, userId);
+  const db = getSql();
 
   const since = new Date();
   since.setDate(since.getDate() - DASHBOARD_CAMPAIGNS_DAYS);
 
   try {
-    const metricRows = await db<{
-      messages_sent: number;
-      responses_received: number;
-      no_response: number;
-      interested: number;
-      not_interested: number;
-      opt_out: number;
-      send_errors: number;
-    }[]>`
+    const metricRows = await db<
+      {
+        messages_sent: number;
+        responses_received: number;
+        no_response: number;
+        interested: number;
+        not_interested: number;
+        opt_out: number;
+        send_errors: number;
+      }[]
+    >`
       SELECT
         COUNT(*) FILTER (
           WHERE cc.sent_at IS NOT NULL AND cc.sent_at >= ${since}
@@ -96,6 +103,11 @@ export async function getDashboardCampaigns(companyId: string): Promise<Dashboar
         )::int AS send_errors
       FROM public.campaign_contacts cc
       WHERE cc.company_id = ${companyId}::uuid
+        AND (${allowed === null} OR EXISTS (
+          SELECT 1 FROM public.campaigns visible_campaign
+          WHERE visible_campaign.id = cc.campaign_id AND visible_campaign.company_id = cc.company_id
+            AND visible_campaign.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[])
+        ))
     `;
 
     const row = metricRows[0];
@@ -110,17 +122,19 @@ export async function getDashboardCampaigns(companyId: string): Promise<Dashboar
       sendErrors: toInt(row?.send_errors),
     };
 
-    const recentRows = await db<{
-      id: string;
-      name: string;
-      status: string;
-      created_at: string;
-      total_sent: number;
-      total_responded: number;
-      total_interested: number;
-      total_no_response: number;
-      total_opt_out: number;
-    }[]>`
+    const recentRows = await db<
+      {
+        id: string;
+        name: string;
+        status: string;
+        created_at: string;
+        total_sent: number;
+        total_responded: number;
+        total_interested: number;
+        total_no_response: number;
+        total_opt_out: number;
+      }[]
+    >`
       SELECT
         c.id,
         c.name,
@@ -138,6 +152,7 @@ export async function getDashboardCampaigns(companyId: string): Promise<Dashboar
         ON cc.campaign_id = c.id
         AND cc.company_id = c.company_id
       WHERE c.company_id = ${companyId}::uuid
+        AND (${allowed === null} OR c.whatsapp_channel_id = ANY(${allowed ?? []}::uuid[]))
         AND c.deleted_at IS NULL
       GROUP BY c.id, c.name, c.status, c.created_at
       ORDER BY c.created_at DESC

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Clock, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { actingUserFromAuth, canViewCampaignCosts } from "@/lib/permissions";
@@ -43,6 +43,11 @@ function formatDt(iso: string): string {
 }
 
 function TempoEsperaPage() {
+  const { user, companyId } = useAuth();
+  return <TempoEsperaContent key={`${user?.id ?? ""}:${user?.role ?? ""}:${companyId ?? ""}`} />;
+}
+function TempoEsperaContent() {
+  const latestRequest = useRef(0);
   const { user, companyValid, companyId, companyMessage } = useAuth();
   const actor = user
     ? actingUserFromAuth({ id: user.id, role: user.role as string, tenantId: user.tenantId })
@@ -74,6 +79,7 @@ function TempoEsperaPage() {
   }
 
   async function reload(opts?: { from?: string; to?: string; preset?: Preset }) {
+    const request = ++latestRequest.current;
     setLoading(true);
     setError(null);
     const qFrom = opts?.from ?? from;
@@ -87,6 +93,7 @@ function TempoEsperaPage() {
       });
       const res = await fetch(`/api/dashboard/wait?${params}`, {
         credentials: "include",
+        cache: "no-store",
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as {
@@ -103,6 +110,7 @@ function TempoEsperaPage() {
         agents: AgentRow[];
         period: { from: string; to: string; preset: Preset };
       };
+      if (request !== latestRequest.current) return;
       setSummary(data.summary);
       setQueue(data.queue ?? []);
       setAgents(data.agents ?? []);
@@ -111,9 +119,13 @@ function TempoEsperaPage() {
         setTo(data.period.to);
       }
     } catch (e) {
+      if (request !== latestRequest.current) return;
+      setSummary({ assumedCount: 0, avgWaitSeconds: null, medianWaitSeconds: null, waitingNowCount: 0 });
+      setQueue([]);
+      setAgents([]);
       setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (request === latestRequest.current) setLoading(false);
     }
   }
 

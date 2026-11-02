@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   MessageSquare,
   UserX,
@@ -22,6 +22,7 @@ import {
   Ban,
   XCircle,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { apiGet, apiPost } from "@/lib/api";
 
 export const Route = createFileRoute("/_app/dashboard")({
@@ -94,6 +95,7 @@ type RecentItem = CriticalItem & {
 
 type DashboardData = {
   scope: "company" | "attendant";
+  channel_scope?: "all" | "restricted";
   role: string;
   cards: DashCards;
   channels: {
@@ -210,6 +212,12 @@ const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
 };
 
 function DashboardPage() {
+  const { user, companyId } = useAuth();
+  return <DashboardContent key={`${user?.id ?? ""}:${user?.role ?? ""}:${companyId ?? ""}`} />;
+}
+function DashboardContent() {
+  const dashboardRequest = useRef(0);
+  const campaignRequest = useRef(0);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -220,30 +228,38 @@ function DashboardPage() {
   const [campaignsLoading, setCampaignsLoading] = useState(true);
 
   const load = useCallback(async (silent = false) => {
+    const request = ++dashboardRequest.current;
     if (!silent) setLoading(true);
     else setRefreshing(true);
     setError(null);
     try {
       const res = (await apiGet("/dashboard")) as DashboardData;
-      setData(res);
+      if (request === dashboardRequest.current) setData(res);
     } catch (e) {
+      if (request !== dashboardRequest.current) return;
+      setData(null);
       setError(e instanceof Error ? e.message : "Falha ao carregar dashboard");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (request === dashboardRequest.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   const loadCampaigns = useCallback(async (silent = false) => {
+    const request = ++campaignRequest.current;
     if (!silent) setCampaignsLoading(true);
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15_000);
       const res = await fetch("/api/dashboard/campaigns", {
         credentials: "include",
+        cache: "no-store",
         signal: controller.signal,
       });
       clearTimeout(timer);
+      if (request !== campaignRequest.current) return;
 
       if (!res.ok) {
         setCampaignMetrics(EMPTY_CAMPAIGN_METRICS);
@@ -256,13 +272,15 @@ function DashboardPage() {
         recentCampaigns?: RecentCampaign[];
       };
 
+      if (request !== campaignRequest.current) return;
       setCampaignMetrics(json.metrics ?? EMPTY_CAMPAIGN_METRICS);
       setRecentCampaigns(json.recentCampaigns ?? []);
     } catch {
+      if (request !== campaignRequest.current) return;
       setCampaignMetrics(EMPTY_CAMPAIGN_METRICS);
       setRecentCampaigns([]);
     } finally {
-      if (!silent) setCampaignsLoading(false);
+      if (request === campaignRequest.current) setCampaignsLoading(false);
     }
   }, []);
 
@@ -328,7 +346,7 @@ function DashboardPage() {
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             Visão operacional do atendimento WhatsApp
-            {data.scope === "attendant" ? " · foco nos seus atendimentos e fila sem responsável" : " · empresa inteira"}
+            {data.channel_scope === "restricted" ? " · apenas números liberados para seu usuário ou equipe" : data.scope === "attendant" ? " · foco nos seus atendimentos e fila sem responsável" : " · empresa inteira"}
           </p>
         </div>
         <div className="flex items-center gap-2">

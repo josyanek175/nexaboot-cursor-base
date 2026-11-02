@@ -182,7 +182,10 @@ async function attendantAccessHoursResponse(request: Request): Promise<Response 
     console.error("[ACCESS_HOURS_GATE_FAIL]", {
       message: error instanceof Error ? error.message : String(error),
     });
-    return null;
+    return Response.json(
+      { error: "authorization_unavailable", message: "Não foi possível validar o acesso. Tente novamente." },
+      { status: 503, headers: { "Cache-Control": "private, no-store", "Retry-After": "5" } },
+    );
   }
 }
 

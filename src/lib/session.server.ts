@@ -128,3 +128,7 @@ export function getSessionUserId(): string | null {
   if (!t) return null;
   return verifySessionToken(t);
 }
+
+export function getSessionToken(): string | null {
+  return getCookie(COOKIE_NAME) ?? null;
+}

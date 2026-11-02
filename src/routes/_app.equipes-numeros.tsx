@@ -1,6 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { OperationsProblemPanel } from "@/components/operations-problem-panel";
+import {
+  useOperationsData,
+  readOperationsResponse,
+  asOperationsProblem,
+  type OperationsProblem,
+} from "@/lib/operations-client";
 import { isPlatformRole } from "@/lib/platform-roles";
 type Named = { id: string; name: string | null };
 type Access = {
@@ -12,16 +19,16 @@ type Access = {
 };
 export const Route = createFileRoute("/_app/equipes-numeros")({ component: Page });
 function Page() {
-  const { user, companyValid } = useAuth();
+  const { user, companyValid, companyId } = useAuth();
   const allowed =
     isPlatformRole(user?.role) || ["ADMIN_EMPRESA", "GERENTE"].includes(user?.role ?? "");
-  const [data, setData] = useState<Access>({
-    users: [],
-    channels: [],
-    teams: [],
-    members: [],
-    grants: [],
-  });
+  const resource = useOperationsData<Access>(
+    "/api/team-access",
+    companyId,
+    allowed && companyValid,
+  );
+  const data = resource.data ?? { users: [], channels: [], teams: [], members: [], grants: [] };
+  const [mutationProblem, setMutationProblem] = useState<OperationsProblem | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -29,29 +36,22 @@ function Page() {
   const [member, setMember] = useState("");
   const [target, setTarget] = useState("");
   const [channel, setChannel] = useState("");
-  async function load() {
-    const r = await fetch("/api/team-access");
-    if (!r.ok)
-      throw Error("Não foi possível carregar. Confirme a migração de operações da empresa.");
-    setData(await r.json());
-  }
-  useEffect(() => {
-    if (allowed && companyValid) void load().catch((e) => setMessage(e.message));
-  }, [allowed, companyValid]);
   async function action(body: object) {
+    if (!resource.data || busy) return;
     setBusy(true);
     setMessage("");
+    setMutationProblem(null);
     try {
       const r = await fetch("/api/team-access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!r.ok) throw Error("Não foi possível salvar. Confira os dados e as permissões.");
-      await load();
+      await readOperationsResponse(r);
+      resource.reload();
       setMessage("Alteração salva.");
-    } catch (e) {
-      setMessage((e as Error).message);
+    } catch (error) {
+      setMutationProblem(asOperationsProblem(error));
     } finally {
       setBusy(false);
     }
@@ -87,10 +87,23 @@ function Page() {
         As liberações individuais se somam às liberações de todas as equipes do usuário. Ative a
         restrição em Configurações após cadastrar os acessos.
       </p>
+      <OperationsProblemPanel
+        problem={mutationProblem ?? resource.problem}
+        disabled={busy || resource.loading}
+        onRetry={() => {
+          setMutationProblem(null);
+          resource.reload();
+        }}
+      />
+      {resource.loading && (
+        <p role="status" className="my-3 text-sm">
+          Carregando equipes e números…
+        </p>
+      )}
       <p role="status" className="my-3">
         {message}
       </p>
-      <fieldset disabled={busy} className="space-y-8 disabled:opacity-50">
+      <fieldset disabled={busy || !resource.data} className="space-y-8 disabled:opacity-50">
         <section>
           <h2 className="font-semibold">Nova equipe</h2>
           <form

@@ -7,11 +7,16 @@ process.env.SESSION_SECRET = "test-only-revocation-secret";
 try {
   const [{ id: user }] =
     await db`INSERT INTO users(name,role,password_hash) VALUES('User','TI','old') RETURNING id`;
+  let unavailable = false;
+  let handlerCalls = 0;
   const load = tsLoader({
     "@tanstack/react-start/server": {},
     "./lib/pg.server": {
       sql: db,
-      getSql: () => db,
+      getSql: () => {
+        if (unavailable) throw new Error("offline");
+        return db;
+      },
       PG_POOL_MAX: 2,
       isDatabaseSchemaBootstrapEnabled: () => false,
     },
@@ -20,7 +25,12 @@ try {
     "./lib/error-page": { renderErrorPage: () => "" },
     "@tanstack/react-start/server-entry": {
       __esModule: true,
-      default: { fetch: async () => Response.json({ ok: true }) },
+      default: {
+        fetch: async () => {
+          handlerCalls++;
+          return Response.json({ ok: true });
+        },
+      },
     },
   });
   const sessions = load("src/lib/session.server.ts");
@@ -42,6 +52,15 @@ try {
   Date.now = () => oldNow() + 1000;
   const fresh = sessions.createSessionToken(user);
   Date.now = oldNow;
+  assert.equal((await server.fetch(request(fresh), {}, {})).status, 200);
+  unavailable = true;
+  const previousCalls = handlerCalls;
+  const offline = await server.fetch(request(fresh), {}, {});
+  assert.equal(offline.status, 503);
+  assert.equal(handlerCalls, previousCalls);
+  assert.equal(offline.headers.get("set-cookie"), null);
+  assert.equal(offline.headers.get("cache-control"), "private, no-store");
+  unavailable = false;
   assert.equal((await server.fetch(request(fresh), {}, {})).status, 200);
   await db`UPDATE users SET active=false WHERE id=${user}::uuid`;
   assert.equal((await server.fetch(request(fresh), {}, {})).status, 401);

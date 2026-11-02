@@ -29,6 +29,7 @@ import { Route as ApiConversationsRouteImport } from './routes/api/conversations
 import { Route as ApiContactsRouteImport } from './routes/api/contacts'
 import { Route as ApiCompanyOperationsRouteImport } from './routes/api/company-operations'
 import { Route as ApiCompaniesRouteImport } from './routes/api/companies'
+import { Route as ApiClinicAgendaRouteImport } from './routes/api/clinic-agenda'
 import { Route as ApiCampaignsRouteImport } from './routes/api/campaigns'
 import { Route as ApiAutomationFlowsRouteImport } from './routes/api/automation-flows'
 import { Route as ApiAttendantsRouteImport } from './routes/api/attendants'
@@ -52,6 +53,7 @@ import { Route as AppCanaisRouteImport } from './routes/_app.canais'
 import { Route as AppCampanhasRouteImport } from './routes/_app.campanhas'
 import { Route as AppAutomacoesRouteImport } from './routes/_app.automacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app.atendimento'
+import { Route as AppAgendaRouteImport } from './routes/_app.agenda'
 import { Route as AppGerencialIndexRouteImport } from './routes/_app.gerencial.index'
 import { Route as AppCampanhasIndexRouteImport } from './routes/_app.campanhas.index'
 import { Route as ApiWebhooksMetaRouteImport } from './routes/api/webhooks/meta'
@@ -254,6 +256,11 @@ const ApiCompaniesRoute = ApiCompaniesRouteImport.update({
   path: '/api/companies',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiClinicAgendaRoute = ApiClinicAgendaRouteImport.update({
+  id: '/api/clinic-agenda',
+  path: '/api/clinic-agenda',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCampaignsRoute = ApiCampaignsRouteImport.update({
   id: '/api/campaigns',
   path: '/api/campaigns',
@@ -367,6 +374,11 @@ const AppAutomacoesRoute = AppAutomacoesRouteImport.update({
 const AppAtendimentoRoute = AppAtendimentoRouteImport.update({
   id: '/atendimento',
   path: '/atendimento',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgendaRoute = AppAgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
   getParentRoute: () => AppRoute,
 } as any)
 const AppGerencialIndexRoute = AppGerencialIndexRouteImport.update({
@@ -923,6 +935,7 @@ export interface FileRoutesByFullPath {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/register': typeof RegisterRoute
   '/termos-de-uso': typeof TermosDeUsoRoute
+  '/agenda': typeof AppAgendaRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
   '/campanhas': typeof AppCampanhasRouteWithChildren
@@ -946,6 +959,7 @@ export interface FileRoutesByFullPath {
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
+  '/api/clinic-agenda': typeof ApiClinicAgendaRoute
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/company-operations': typeof ApiCompanyOperationsRoute
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -1069,6 +1083,7 @@ export interface FileRoutesByTo {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/register': typeof RegisterRoute
   '/termos-de-uso': typeof TermosDeUsoRoute
+  '/agenda': typeof AppAgendaRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/automacoes': typeof AppAutomacoesRoute
   '/canais': typeof AppCanaisRoute
@@ -1090,6 +1105,7 @@ export interface FileRoutesByTo {
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
+  '/api/clinic-agenda': typeof ApiClinicAgendaRoute
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/company-operations': typeof ApiCompanyOperationsRoute
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -1215,6 +1231,7 @@ export interface FileRoutesById {
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/register': typeof RegisterRoute
   '/termos-de-uso': typeof TermosDeUsoRoute
+  '/_app/agenda': typeof AppAgendaRoute
   '/_app/atendimento': typeof AppAtendimentoRoute
   '/_app/automacoes': typeof AppAutomacoesRoute
   '/_app/campanhas': typeof AppCampanhasRouteWithChildren
@@ -1238,6 +1255,7 @@ export interface FileRoutesById {
   '/api/attendants': typeof ApiAttendantsRoute
   '/api/automation-flows': typeof ApiAutomationFlowsRoute
   '/api/campaigns': typeof ApiCampaignsRouteWithChildren
+  '/api/clinic-agenda': typeof ApiClinicAgendaRoute
   '/api/companies': typeof ApiCompaniesRouteWithChildren
   '/api/company-operations': typeof ApiCompanyOperationsRoute
   '/api/contacts': typeof ApiContactsRouteWithChildren
@@ -1363,6 +1381,7 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/register'
     | '/termos-de-uso'
+    | '/agenda'
     | '/atendimento'
     | '/automacoes'
     | '/campanhas'
@@ -1386,6 +1405,7 @@ export interface FileRouteTypes {
     | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
+    | '/api/clinic-agenda'
     | '/api/companies'
     | '/api/company-operations'
     | '/api/contacts'
@@ -1509,6 +1529,7 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/register'
     | '/termos-de-uso'
+    | '/agenda'
     | '/atendimento'
     | '/automacoes'
     | '/canais'
@@ -1530,6 +1551,7 @@ export interface FileRouteTypes {
     | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
+    | '/api/clinic-agenda'
     | '/api/companies'
     | '/api/company-operations'
     | '/api/contacts'
@@ -1654,6 +1676,7 @@ export interface FileRouteTypes {
     | '/redefinir-senha'
     | '/register'
     | '/termos-de-uso'
+    | '/_app/agenda'
     | '/_app/atendimento'
     | '/_app/automacoes'
     | '/_app/campanhas'
@@ -1677,6 +1700,7 @@ export interface FileRouteTypes {
     | '/api/attendants'
     | '/api/automation-flows'
     | '/api/campaigns'
+    | '/api/clinic-agenda'
     | '/api/companies'
     | '/api/company-operations'
     | '/api/contacts'
@@ -1807,6 +1831,7 @@ export interface RootRouteChildren {
   ApiAttendantsRoute: typeof ApiAttendantsRoute
   ApiAutomationFlowsRoute: typeof ApiAutomationFlowsRoute
   ApiCampaignsRoute: typeof ApiCampaignsRouteWithChildren
+  ApiClinicAgendaRoute: typeof ApiClinicAgendaRoute
   ApiCompaniesRoute: typeof ApiCompaniesRouteWithChildren
   ApiCompanyOperationsRoute: typeof ApiCompanyOperationsRoute
   ApiContactsRoute: typeof ApiContactsRouteWithChildren
@@ -2001,6 +2026,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompaniesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/clinic-agenda': {
+      id: '/api/clinic-agenda'
+      path: '/api/clinic-agenda'
+      fullPath: '/api/clinic-agenda'
+      preLoaderRoute: typeof ApiClinicAgendaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/campaigns': {
       id: '/api/campaigns'
       path: '/api/campaigns'
@@ -2160,6 +2192,13 @@ declare module '@tanstack/react-router' {
       path: '/atendimento'
       fullPath: '/atendimento'
       preLoaderRoute: typeof AppAtendimentoRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/agenda': {
+      id: '/_app/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AppAgendaRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/gerencial/': {
@@ -2924,6 +2963,7 @@ const AppGerencialRouteWithChildren = AppGerencialRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAgendaRoute: typeof AppAgendaRoute
   AppAtendimentoRoute: typeof AppAtendimentoRoute
   AppAutomacoesRoute: typeof AppAutomacoesRoute
   AppCampanhasRoute: typeof AppCampanhasRouteWithChildren
@@ -2945,6 +2985,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAgendaRoute: AppAgendaRoute,
   AppAtendimentoRoute: AppAtendimentoRoute,
   AppAutomacoesRoute: AppAutomacoesRoute,
   AppCampanhasRoute: AppCampanhasRouteWithChildren,
@@ -3285,6 +3326,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAttendantsRoute: ApiAttendantsRoute,
   ApiAutomationFlowsRoute: ApiAutomationFlowsRoute,
   ApiCampaignsRoute: ApiCampaignsRouteWithChildren,
+  ApiClinicAgendaRoute: ApiClinicAgendaRoute,
   ApiCompaniesRoute: ApiCompaniesRouteWithChildren,
   ApiCompanyOperationsRoute: ApiCompanyOperationsRoute,
   ApiContactsRoute: ApiContactsRouteWithChildren,

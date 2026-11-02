@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 const cases = [
+  "test-clinic-agenda.mjs",
   "test-operations-migration.mjs",
   "test-public-admin-guards.mjs",
   "test-demo-seed-disabled.mjs",
@@ -11,6 +12,7 @@ const cases = [
   "test-flow-lifecycle-isolated.mjs",
   "test-meta-flow-buttons.mjs",
   "test-channel-permissions.mjs",
+  "test-dashboard-channel-permissions.mjs",
   "test-internal-groups.mjs",
   "test-internal-chat-recent-messages.mjs",
   "test-password-recovery.mjs",
