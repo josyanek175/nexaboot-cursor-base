@@ -1491,19 +1491,25 @@ function AtendimentoPage() {
     const guard = guardSend(selected);
     if (!guard.ok || !guard.channel) return;
 
+    const isMetaImage = kind === "image" && guard.channel.provider === "META";
     const mime = (file.type || "").toLowerCase();
-    const allowed = kind === "image" ? IMAGE_MIMES : AUDIO_MIMES;
-    if (!allowed.includes(mime)) {
+    const allowed = isMetaImage ? ["image/jpeg", "image/png"] : kind === "image" ? IMAGE_MIMES : AUDIO_MIMES;
+    if (!allowed.includes(mime) && !(isMetaImage && !mime)) {
+      if (isMetaImage) {
+        toast.error("Selecione uma imagem JPEG ou PNG.");
+        return;
+      }
       toast.error("Tipo de arquivo não suportado.");
       return;
     }
-    const limit = kind === "image" ? 10 * 1024 * 1024 : 16 * 1024 * 1024;
+    const limitMb = isMetaImage ? 5 : kind === "image" ? 10 : 16;
+    const limit = limitMb * 1024 * 1024;
     if (file.size <= 0) {
       toast.error("Arquivo vazio.");
       return;
     }
     if (file.size > limit) {
-      toast.error(`Arquivo excede o limite (${kind === "image" ? "10" : "16"} MB).`);
+      toast.error(`Arquivo excede o limite (${limitMb} MB).`);
       return;
     }
 
@@ -1513,17 +1519,19 @@ function AtendimentoPage() {
       const fd = new FormData();
       fd.append("conversationId", selected.id);
       fd.append("file", file);
-      await apiPostForm("/messages/send/media/evolution", fd);
+      if (isMetaImage) fd.append("media_type", "image");
+      await apiPostForm(isMetaImage ? "/messages/send-media" : "/messages/send/media/evolution", fd);
       toast.success(kind === "image" ? "Imagem enviada." : "Áudio enviado.", { id: tId });
       reloadMessages(selected.id, { silent: true });
       reloadConversations({ silent: true });
     } catch (e) {
       toast.error(
-        e instanceof Error && /too_large/.test(e.message)
+        isMetaImage ? getApiErrorMessage(e) : e instanceof Error && /too_large/.test(e.message)
           ? "Arquivo grande demais para o canal."
           : "Falha ao enviar mídia. Tente novamente.",
         { id: tId },
       );
+      if (isMetaImage) reloadMessages(selected.id, { silent: true });
     } finally {
       setSendingMedia(false);
     }
